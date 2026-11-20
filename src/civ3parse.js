@@ -458,6 +458,46 @@ const Civ3Parse = (() => {
 			c.growthBlocked = c.atSizeLimit && c.grow === 'max';
 		}
 		result.sizeCaps = { maxTown, maxCity, size2, size3 };
+
+		// Other players (LEAD records: C3X Civ3Conquests.h Leader struct, save offset = memory offset - 20, and OpenCiv3
+		// Lead.cs). Checked: every player's city count matches its CITY records; your culture last turn equals the sum of
+		// your cities' culture. Each LEAD is followed by its CULT record (total culture, culture last turn).
+		// The AI's attitude toward you isn't stored: the game works it out when you open diplomacy.
+		result.players = [];
+		const leads = findAll (b, 'LEAD', gameOff).filter ((o) => i32 (o + 4) > 4300 && o + 4500 <= b.length);
+		const culs = findAll (b, 'CULT', gameOff);
+		const mine = leads.find ((o) => i32 (o + 8) === player);
+		if (mine && rules) {
+			const remaining = i32 (gameOff + 84) >>> 0;
+			let cityOk = 0;
+			const owners = {};
+			for (const off of findAll (b, 'CITY', gameOff)) if (i32 (off + 4) === 136) owners[u8 (off + 16)] = (owners[u8 (off + 16)] || 0) + 1;
+			leads.forEach ((o, k) => {
+				const id = i32 (o + 8), race = i32 (o + 12);
+				if (id <= 0 || id === player || id >= 32 || race < 0 || ! rules.civs[race]) return;
+				const contact = i32 (mine + 3740 + 4 * id);
+				if (! contact) return; // never met
+				const cult = culs.find ((c) => c > o && (k + 1 >= leads.length || c < leads[k + 1]));
+				const alliedAgainstYou = [];
+				const bits = i32 (o + 3996 + 4 * player) >>> 0;
+				for (let j = 0; j < 32; j++) if ((bits >>> j) & 1) alliedAgainstYou.push (j);
+				const cities = i32 (o + 384);
+				if (cities === (owners[id] || 0)) cityOk++;
+				result.players.push ({
+					id, race, name: rules.civs[race].noun, alive: ((remaining >>> id) & 1) === 1,
+					government: (rules.governments[i32 (o + 140)] || {}).name || '?', cities,
+					culture: cult ? i32 (cult + 12) : null,
+					atWar: b[mine + 3356 + id] !== 0, embassy: b[mine + 3388 + id] !== 0,
+					warDeclarations: i32 (mine + 412 + 76 * id), // times this player declared war on you
+					alliedAgainstYou
+				});
+			});
+			const myCult = culs.find ((c) => c > mine && (leads.indexOf (mine) + 1 >= leads.length || c < leads[leads.indexOf (mine) + 1]));
+			result.myCulture = myCult ? { total: i32 (myCult + 12), perTurn: i32 (myCult + 16) } : null;
+			const cityCulture = result.cities.reduce ((n, c) => n + c.culture, 0);
+			diag.push (`Players met: ${result.players.length}; city counts match ${cityOk}/${result.players.length}; ` +
+			           `your culture last turn ${result.myCulture ? result.myCulture.perTurn : '?'} (sum of your cities: ${cityCulture})`);
+		}
 		if (result.knownTechs) {
 			const building = result.cities.filter ((c) => c.buildType === 1 && rules.buildings[c.buildId]);
 			const ok = building.filter ((c) => { const a = rules.buildings[c.buildId].requiredAdvance; return a < 0 || result.knownTechs.has (a); });

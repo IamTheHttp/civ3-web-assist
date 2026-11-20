@@ -36,6 +36,12 @@ github.com/IamTheHttp/civ3-web-assist. Layouts and formulas: `docs/REVERSE_ENGIN
   +34 continent/water body (short), +57 low nibble terrain (TERR: 11 Coast, 12 Sea, 13 Ocean). City tiles match 42/42;
   all 7 cities with a Harbor / Coastal Fortress are coastal. All 9 cities past size 6 without an Aqueduct have fresh
   water: 8 a river on the city tile, 1 a one-tile lake (lake = water body of ≤ 20 tiles: the limit is assumed).
+- Players (LEAD, save offset = C3X `Leader` memory offset − 20): +140 government, +384 city count (matches CITY records
+  7/7), +412 reputation[32] × 76 bytes (first int: war declarations on this player), +3356 at war[32] (bytes),
+  +3388 embassy[32] (bytes), +3740 contact[32], +3868 treaties[32] (meaning of bits unknown), +3996 allies against
+  player k[32] (bitmask of players). Each LEAD is followed by its CULT record: +12 total culture, +16 culture last turn
+  (yours equals the sum of your cities' culture). GAME +84: remaining players bitmap. AI governments all read Republic
+  in the Maya save (not confirmed in-game). Attitude isn't stored: the game computes it (`Leader.get_attitude_toward`).
 - BLDG +216 spaceship part (−1 if not one), +220 required advance; flag byte +237 bit6 near water, bit7 near river;
   +240 bit0 coastal (OpenCiv3 `Bldg.cs`; spaceship flag matches the 10 SS parts in the default rules).
 - Current buildings = BITM bitmap, not BINF history (captured cities keep the history of destroyed Palaces etc.).

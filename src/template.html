@@ -113,6 +113,9 @@ summary { cursor: pointer; color: var(--muted); }
 .kv.three > span.h { color: var(--gold); font-size: 12px; text-align: right; }
 .kv > span.v, .kv.three > span:not(.k) { text-align: right; }
 #helpbtn { margin-left: auto; }
+.diplowrap { overflow-x: auto; margin-top: 8px; }
+table.diplo th { position: static; cursor: default; }
+table.diplo th:first-child, table.diplo td:first-child { position: static; }
 #filterrow th { top: var(--headh, 25px); padding: 2px 3px; cursor: default; background: var(--head); }
 #filterrow input, #filterrow select { width: 100%; min-width: 3.2em; font: inherit; font-size: 12px; font-weight: normal; color: var(--ink);
   background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 1px 4px; }
@@ -213,6 +216,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <dl>
         <dt>Summary cards</dt><dd>Your whole empire. Point at a line to see how it's worked out.</dd>
         <dt>History</dt><dd>Each save you open stores its turn. Pick a chart and a city; the dashed line is the turn you have loaded. <b>Add saves…</b> adds older saves at once.</dd>
+        <dt>Diplomacy</dt><dd>Civilizations you've met: government, cities, culture against yours, war, embassy, alliances against you.</dd>
         <dt>Diagnostics</dt><dd>What the page read from your files. <b>Download debug report</b> if something looks wrong.</dd>
       </dl>
 
@@ -284,6 +288,18 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <div id="histchartbox"></div>
   </details>
 
+
+  <details id="diplomacy" class="hist" hidden>
+    <summary>Diplomacy <span id="diplocount"></span></summary>
+    <div class="diplowrap"><table class="diplo"><thead><tr>
+      <th class="l">Civilization</th><th class="l">Government</th><th>Cities</th>
+      <th title="Their total culture">Culture</th>
+      <th title="Their total culture ÷ yours. 0.5× = half of yours; above 1×, they have more culture than you, which raises the culture-flip risk in your cities near them">Culture ratio</th>
+      <th class="l">Status</th><th title="Times they declared war on you">War declarations</th><th class="l" title="You have an embassy with them">Embassy</th>
+      <th class="l">Allied against you with</th>
+    </tr></thead><tbody id="diplorows"></tbody></table></div>
+    <p class="histnote">Attitude toward you isn't stored in the save: the game works it out when you open diplomacy. Only civilizations you have met are listed.</p>
+  </details>
 
   <div class="tablewrap" id="tablewrap" hidden>
     <table>
@@ -935,6 +951,8 @@ $('histclear').addEventListener ('click', async () => {
 });
 // Open or closed is remembered in this browser
 try { $('history').open = localStorage.getItem ('civ3viewer.historyOpen') === '1'; } catch (e) { /* ignore */ }
+try { $('diplomacy').open = localStorage.getItem ('civ3viewer.diplomacyOpen') === '1'; } catch (e) { /* ignore */ }
+$('diplomacy').addEventListener ('toggle', () => { try { localStorage.setItem ('civ3viewer.diplomacyOpen', $('diplomacy').open ? '1' : '0'); } catch (e) { /* ignore */ } });
 $('history').addEventListener ('toggle', () => {
   try { localStorage.setItem ('civ3viewer.historyOpen', $('history').open ? '1' : '0'); } catch (e) { /* ignore */ }
   if ($('history').open) drawHistory ();
@@ -1036,6 +1054,34 @@ function setFilter (key, value) {
   saveViews (); render ();
 }
 
+// Diplomacy: the other civilizations you have met
+function renderDiplomacy (res) {
+  const ps = res.players || [];
+  $('diplomacy').hidden = ! ps.length;
+  if (! ps.length) return;
+  const mine = res.myCulture ? res.myCulture.total : 0;
+  const byId = Object.fromEntries (ps.map ((p) => [p.id, p.name]));
+  const order = [...ps].sort ((a, b) => (b.alive - a.alive) || (b.culture || 0) - (a.culture || 0));
+  $('diplocount').textContent = `(${ps.filter ((p) => p.alive).length} civilizations, ${ps.filter ((p) => p.alive && p.atWar).length} at war with you)`;
+  const body = $('diplorows'); body.textContent = '';
+  for (const p of order) {
+    const tr = document.createElement ('tr');
+    const ratio = mine && p.culture !== null ? p.culture / mine : null;
+    const cells = [
+      [p.name, 'l'], [p.alive ? p.government : '–', 'l'], [p.cities],
+      [p.culture ?? '?'],
+      [ratio === null ? '?' : ratio.toFixed (2) + '×', ratio > 1 ? 'amber' : ''],
+      [! p.alive ? 'Destroyed' : (p.atWar ? 'At war' : 'Peace'), 'l ' + (! p.alive ? 'dim' : (p.atWar ? 'red' : ''))],
+      [p.warDeclarations || '', p.warDeclarations ? 'amber' : ''],
+      [p.embassy ? 'Yes' : '', 'l'],
+      [p.alliedAgainstYou.map ((k) => byId[k] || `player ${k}`).join (', '), 'l ' + (p.alliedAgainstYou.length ? 'red' : '')]
+    ];
+    for (const [text, cls] of cells) tr.appendChild (Object.assign (document.createElement ('td'), { textContent: text, className: cls || '' }));
+    if (! p.alive) tr.classList.add ('dim');
+    body.appendChild (tr);
+  }
+}
+
 // Empire summary: every city, the game's own figures (what-ifs not included)
 function renderSummary (res) {
   const cs = res.cities, sum = (f) => cs.reduce ((n, c) => n + f (c), 0);
@@ -1099,6 +1145,7 @@ function render () {
   $('title').textContent = `${state.fileName} · turn ${res.turn} · ${res.cities.length} ${res.cities.length === 1 ? 'city' : 'cities'}`;
 
   renderSummary (res);
+  renderDiplomacy (res);
   const COLS = visibleColumns ();
   renderViewPicker ();
   const nTicks = tickCount ();
