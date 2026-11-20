@@ -265,7 +265,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Sort</dt><dd>Click a column name. Click again to reverse.</dd>
         <dt>▾ Filter</dt><dd>On each column, as in a spreadsheet: sort, a condition (greater than, between, contains…) or tick the values to keep. A blue ▾ marks a filtered column. Filters use the real numbers, so what-if ticks don't hide a city; each view keeps its own.</dd>
         <dt>What-if ticks</dt><dd>Tick <b>CH</b>, <b>PS</b>, <b>Lib</b>, <b>Mkt</b>… to try a building. Changed numbers show <i>now → then</i>; an amber outline marks a tick that isn't real.</dd>
-        <dt>Effect columns</dt><dd>What one building would gain the city per turn, after upkeep. Sort them to find the best places.</dd>
+        <dt>Effect columns</dt><dd>What one building would gain the city per turn, after upkeep, and how many turns until it pays back its cost: <span class="green">green</span> fast, <span class="amber">amber</span> slow, grey never. They sort fastest payback first. Set the limits in Tiers.</dd>
         <dt>Tier</dt><dd>Pick a tier to fix it for that city; <i>(auto)</i> follows corruption.</dd>
         <dt>Attention</dt><dd><span class="amber">Amber</span>: missing. <span class="green">Green</span>: being built now.</dd>
         <dt>Colours</dt><dd><span class="red">Red</span>: serious (half or more lost, disorder). <span class="amber">Amber</span>: watch it. <b>~</b>: the corruption model doesn't match the game in that city.</dd>
@@ -1113,12 +1113,10 @@ const BASE_COLUMNS = [
     title: 'Share of the city\'s commerce lost to corruption. Over the cap, brackets show the uncapped parts: distance to the palace + city rank', ratio: ['corruption', 'commerce'] },
   { key: 'netCommerce', sec: 'commerce', label: 'Net Commerce', val: (c) => c.commerce - wi (c).corruption, show: (c) => arrow (c.commerce - c.corruption, c.commerce - wi (c).corruption),
     cls: (c) => wiCls (c, 'corruption') ? (wi (c).corruption < c.corruption ? 'better changed' : 'worse changed') : '', total: true, title: 'Commerce after corruption' },
-  { key: 'chEffect', sec: 'corr', label: 'CH Effect', model: true, val: (c) => effectOf (c, 'ch').value, show: (c) => effectOf (c, 'ch').text,
-    cls: (c) => effectOf (c, 'ch').value > 0 ? 'green' : 'dim', csv: (c) => effectOf (c, 'ch').text,
-    title: 'What building a Courthouse would gain this city per turn: science, gold and luxury from the commerce kept (after its Library, Marketplace etc.), shields kept, and its upkeep' },
-  { key: 'psEffect', sec: 'corr', label: 'PS Effect', model: true, val: (c) => effectOf (c, 'ps').value, show: (c) => effectOf (c, 'ps').text,
-    cls: (c) => effectOf (c, 'ps').value > 0 ? 'green' : 'dim', csv: (c) => effectOf (c, 'ps').text,
-    title: 'What building a Police Station would gain this city per turn: science, gold and luxury from the commerce kept (after its Library, Marketplace etc.), shields kept, and its upkeep' },
+  effectColumn ('ch', { key: 'chEffect', sec: 'corr', label: 'CH Effect', model: true,
+    title: 'What a Courthouse would gain this city per turn (science, gold and luxury from the commerce kept, after its Library, Marketplace etc.; shields kept; upkeep), and the turns until it pays back its cost. Sorts fastest payback first' }),
+  effectColumn ('ps', { key: 'psEffect', sec: 'corr', label: 'PS Effect', model: true,
+    title: 'What a Police Station would gain this city per turn, and the turns until it pays back its cost. Sorts fastest payback first' }),
   { key: 'gold', sec: 'output', label: 'Gold', title: 'Gold after Marketplace etc.', val: (c) => wi (c).gold, show: (c) => arrow (c.gold, wi (c).gold), cls: (c) => wiCls (c, 'gold', true), total: true },
   { key: 'luxury', sec: 'output', label: 'Lux', title: 'Luxury after Marketplace etc.', val: (c) => wi (c).luxury, show: (c) => arrow (c.luxury, wi (c).luxury), cls: (c) => wiCls (c, 'luxury', true), total: true },
   { key: 'science', sec: 'output', label: 'Sci', title: 'Science after Library etc.', val: (c) => wi (c).science, show: (c) => arrow (c.science, wi (c).science), cls: (c) => wiCls (c, 'science', true), total: true },
@@ -1269,7 +1267,27 @@ function effectOf (c, key) {
     if (bd.luxury50 || dl) parts.push (`${sign (dl)} lux`);
   }
   if (du) parts.push (`−${du} upk`);
-  return { value: e.value, text: parts.join (', ') };
+  // Payback: build cost ÷ net gain per turn (gain = science, gold, luxury and shields kept, minus upkeep; counted 1:1)
+  const cost = buildCost (id), payback = e.value > 0 && cost ? Math.ceil (cost / e.value) : null;
+  const tail = payback ? ` · ${payback} ${payback === 1 ? 'turn' : 'turns'}` : ' · never';
+  return { value: e.value, payback, sort: payback ? -payback : -1e6 + e.value, text: parts.join (', ') + tail,
+           tip: payback ? `Costs ${cost} shields and pays back in ${payback} turns (net +${e.value} per turn)` : `Costs ${cost} shields; the gain doesn't cover its upkeep, so it never pays back` };
+}
+// Shields to build it (accelerated production halves costs, as for the city's current build)
+function buildCost (id) {
+  const b = state.result.rules.buildings[id]; if (! b || ! b.cost) return null;
+  const cost = b.cost * 10;
+  return state.result.accelerated ? Math.ceil (cost / 2) : cost;
+}
+function paybackClass (e) {
+  const pb = state.attention.payback || { good: 20, ok: 40 };
+  if (! e.payback) return 'dim';
+  return e.payback <= pb.good ? 'green' : (e.payback <= pb.ok ? 'amber' : 'dim');
+}
+// An Effect column: sorts by payback (fastest first), coloured by the payback thresholds
+function effectColumn (key, extra) {
+  return { ...extra, val: (c) => effectOf (c, key).sort ?? effectOf (c, key).value, show: (c) => effectOf (c, key).text, csv: (c) => effectOf (c, key).text,
+           cls: (c) => paybackClass (effectOf (c, key)), tip: (c) => effectOf (c, key).tip || '', firstDir: -1 };
 }
 
 // Commerce buildings from the rules that can be ticked: non-wonders that boost science, gold or luxury
@@ -1286,9 +1304,8 @@ function rebuildColumns () {
   if (state.result && state.result.econ) {
     const bb = bonusBuildings ();
     for (const b of bb) extra.push ({ key: 'bt:' + b.name, sec: 'bonus', label: b.short, chk: 'b' + b.id, econ: true, title: `${b.name} (tick to try it)` });
-    for (const b of bb) extra.push ({ key: 'be:' + b.name, sec: 'bonusfx', label: b.short + ' Effect', econ: true,
-      val: (c) => effectOf (c, 'b' + b.id).value, show: (c) => effectOf (c, 'b' + b.id).text, csv: (c) => effectOf (c, 'b' + b.id).text,
-      cls: (c) => effectOf (c, 'b' + b.id).value > 0 ? 'green' : 'dim', title: `What building a ${b.name} would gain this city per turn` });
+    for (const b of bb) extra.push (effectColumn ('b' + b.id, { key: 'be:' + b.name, sec: 'bonusfx', label: b.short + ' Effect', econ: true,
+      title: `What a ${b.name} would gain this city per turn, and the turns until it pays back its cost. Sorts fastest payback first` }));
   }
   const at = BASE_COLUMNS.findIndex ((c) => c.key === 'upkeep');
   COLUMNS = [...BASE_COLUMNS.slice (0, at), ...extra, ...BASE_COLUMNS.slice (at)];
@@ -1322,13 +1339,15 @@ const DEFAULT_ATTENTION = {
   // Building name -> per tier, the city size from which it is expected (null: not expected in that tier)
   expect: { Temple: [1, 1, 1, null], Library: [6, 1, null, null], Marketplace: [6, 1, null, null], Courthouse: [null, 1, 1, null],
             Aqueduct: [6, 6, 6, null], Hospital: [12, null, null, null], Factory: [12, null, null, null] },
-  overrides: {} // game id -> { city key -> tier index }
+  overrides: {}, // game id -> { city key -> tier index }
+  payback: { good: 20, ok: 40 },          // Effect colours: green up to good turns, amber up to ok
+  reducerPayback: 40                       // expect a Courthouse / Police Station only where it pays back within this (null: always)
 };
 function loadAttention () {
   const d = JSON.parse (JSON.stringify (DEFAULT_ATTENTION));
   try {
     const v = JSON.parse (localStorage.getItem ('civ3viewer.attention') || 'null');
-    if (v && Array.isArray (v.tiers) && v.tiers.length >= 2) return { ...d, ...v };
+    if (v && Array.isArray (v.tiers) && v.tiers.length >= 2) return { ...d, ...v, payback: { ...d.payback, ...(v.payback || {}) } };
   } catch (e) { /* ignore */ }
   return d;
 }
@@ -1401,8 +1420,14 @@ function computeWarnings (c) {
   for (const [name, sizes] of Object.entries (A.expect)) {
     const from = sizes[t], id = byName[name];
     if (from == null || id === undefined || c.size < from || has (id) || ! canBuild (id) || pastCap (id) || ! placeable (id)) continue;
+    // A Courthouse / Police Station is only worth it where it pays back
+    let pays = '';
+    if (rules.buildings[id].reducesCorruption && res.model && A.reducerPayback) {
+      const key = id === res.model.courthouse ? 'ch' : (id === res.model.police ? 'ps' : null);
+      if (key) { const e = effectOf (c, key); if (! e.payback || e.payback > A.reducerPayback) continue; pays = ` (pays back in ${e.payback})`; }
+    }
     if (c.buildType === 1 && c.buildId === id) out.push ({ text: `Building ${name}${c.buildTurns ? ` (${c.buildTurns})` : ''}`, building: true });
-    else out.push ({ text: `No ${name}` });
+    else out.push ({ text: `No ${name}${pays}` });
   }
   return out;
 }
@@ -1464,6 +1489,16 @@ function renderAttentionEditor () {
     });
     tiers.appendChild (add);
   }
+  // Payback settings
+  const num = (value, onset) => { const n = el ('input', { type: 'number', min: 1, max: 999, value, className: 'num' }); n.addEventListener ('change', () => { onset (Math.max (1, Math.round (+n.value) || 1)); changed (); }); return n; };
+  tiers.appendChild (el ('h3', { textContent: 'Building payback', style: 'margin-top:12px' }));
+  tiers.appendChild (el ('div', { className: 'tierrow' }, ['Green up to ', num (A.payback.good, (v) => { A.payback.good = v; }), ' turns, amber up to ',
+    num (A.payback.ok, (v) => { A.payback.ok = v; }), ' turns']));
+  const rp = el ('input', { type: 'checkbox', checked: !! A.reducerPayback });
+  rp.addEventListener ('change', () => { A.reducerPayback = rp.checked ? (A.lastReducerPayback || 40) : null; changed (); renderAttentionEditor (); });
+  const rpRow = el ('label', { title: 'Without this, a tier that expects a Courthouse warns in every city of that tier' }, [rp, ' Expect a Courthouse / Police Station only where it pays back within ']);
+  if (A.reducerPayback) rpRow.append (num (A.reducerPayback, (v) => { A.reducerPayback = v; A.lastReducerPayback = v; }), ' turns');
+  tiers.appendChild (rpRow);
   box.appendChild (tiers);
 
   // Expected buildings
