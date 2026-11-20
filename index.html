@@ -92,10 +92,9 @@ summary { cursor: pointer; color: var(--muted); }
 .card { flex: 1 1 210px; max-width: 360px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; }
 .card h2 { font-size: 12px; font-weight: 600; color: var(--gold); margin: 0 0 4px; text-transform: uppercase; letter-spacing: .4px; }
 .kv { display: grid; grid-template-columns: 1fr auto; gap: 1px 14px; font-variant-numeric: tabular-nums; }
+.kv hr { grid-column: 1 / -1; width: 100%; border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
 .kv.three { grid-template-columns: 1fr auto auto; }
-.kv > span:nth-child(odd) { color: var(--muted); }
-.kv.three > span { color: var(--ink); }
-.kv.three > span.k { color: var(--muted); }
+.kv > span.k { color: var(--muted); }
 .kv.three > span.h { color: var(--gold); font-size: 12px; text-align: right; }
 .kv > span.v, .kv.three > span:not(.k) { text-align: right; }
 .legend { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
@@ -156,7 +155,7 @@ summary { cursor: pointer; color: var(--muted); }
 
   <p class="legend" id="legend" hidden>
     <b>Grow</b>: turns until the city grows (same rule as the city screen); <b>–</b> not growing, <b>max</b> food box full and waiting for an Aqueduct or Hospital.
-    <b>Food</b>: net food per turn. <b>Box</b>: food stored / needed. <b>Shields</b> and <b>Commerce</b>: raw totals from the city's tiles, before waste and corruption. <b>Waste</b> and <b>Corrupt</b>: shields and commerce lost, and as a share of the city's total (<b>%</b>; the totals row shows your whole empire).
+    <b>Food</b>: net food per turn. <b>Box</b>: food stored / needed. <b>Shields</b> and <b>Commerce</b>: raw totals from the city's tiles, before waste and corruption. <b>Net Shields</b> and <b>Net Commerce</b>: shields after waste and commerce after corruption. <b>Waste</b> and <b>Corrupt</b>: shields and commerce lost, and as a share of the city's total (<b>%</b>; the totals row shows your whole empire).
     <b>Resist</b>: resisting citizens. <b>Foreign</b>: citizens of another nationality (culture-flip risk). <b>Spec</b>: entertainers / scientists / taxmen.
     <b>CH</b> / <b>PS</b>: the city has a Courthouse / Police Station. Tick or untick to see what that would change: corruption, waste and their shares show <i>now → then</i>. A what-if tick (something the city doesn't really have, or a building you've unticked) is <b>outlined in amber</b>; plain ticks are what the city has.
     <b>CH Effect</b> / <b>PS Effect</b>: what building a Courthouse / Police Station would gain the city each turn: commerce kept, after its Library, Marketplace etc. (<b>com</b>), shields kept (<b>shd</b>) and the building's gold upkeep (<b>upk</b>). The two buildings reduce corruption the same way; the Police Station costs more upkeep. Sorting by them ranks the best places, upkeep included.
@@ -750,12 +749,16 @@ const BASE_COLUMNS = [
   { key: 'waste', sec: 'shields', label: 'Waste', val: (c) => wi (c).waste, show: (c) => arrow (c.waste, wi (c).waste), cls: (c) => wiCls (c, 'waste') || (c.waste ? 'amber' : 'dim'), total: true },
   { key: 'wastePct', sec: 'shields', label: 'Waste %', val: (c) => wi (c).wastePct, show: (c) => arrow (c.wastePct, wi (c).wastePct, '%'), cls: (c) => wiCls (c, 'wastePct') || pctClass (c.wastePct),
     title: 'Share of the city\'s shields lost to waste', ratio: ['waste', 'shieldsGross'] },
+  { key: 'netShields', sec: 'shields', label: 'Net Shields', val: (c) => c.shields - wi (c).waste, show: (c) => arrow (c.shields - c.waste, c.shields - wi (c).waste),
+    cls: (c) => wiCls (c, 'waste') ? (wi (c).waste < c.waste ? 'better changed' : 'worse changed') : '', total: true, title: 'Shields after waste' },
   { key: 'ch', sec: 'corr', label: 'CH', chk: 'ch', model: true, title: 'Courthouse (tick to try it)' },
   { key: 'ps', sec: 'corr', label: 'PS', chk: 'ps', model: true, title: 'Police Station (tick to try it)' },
   { key: 'commerce', sec: 'commerce', label: 'Commerce', val: (c) => c.commerce, total: true, title: 'Raw commerce from tiles, before corruption' },
   { key: 'corruption', sec: 'commerce', label: 'Corrupt', val: (c) => wi (c).corruption, show: (c) => (c.modelOff ? '~' : '') + arrow (c.corruption, wi (c).corruption), cls: (c) => wiCls (c, 'corruption') || (c.corruption ? 'amber' : 'dim'), total: true },
   { key: 'corruptionPct', sec: 'commerce', label: 'Corrupt %', val: (c) => wi (c).corruptionPct, show: (c) => arrow (c.corruptionPct, wi (c).corruptionPct, '%') + uncapped (c).text, tip: (c) => uncapped (c).tip, cls: (c) => wiCls (c, 'corruptionPct') || pctClass (c.corruptionPct),
     title: 'Share of the city\'s commerce lost to corruption', ratio: ['corruption', 'commerce'] },
+  { key: 'netCommerce', sec: 'commerce', label: 'Net Commerce', val: (c) => c.commerce - wi (c).corruption, show: (c) => arrow (c.commerce - c.corruption, c.commerce - wi (c).corruption),
+    cls: (c) => wiCls (c, 'corruption') ? (wi (c).corruption < c.corruption ? 'better changed' : 'worse changed') : '', total: true, title: 'Commerce after corruption' },
   { key: 'chEffect', sec: 'corr', label: 'CH Effect', model: true, val: (c) => effectOf (c, 'ch').value, show: (c) => effectOf (c, 'ch').text,
     cls: (c) => effectOf (c, 'ch').value > 0 ? 'green' : 'dim', csv: (c) => effectOf (c, 'ch').text,
     title: 'What building a Courthouse would gain this city per turn: commerce kept (after its Library, Marketplace etc.) and shields kept' },
@@ -778,7 +781,7 @@ let state = { result: null, sortKey: 'size', sortDir: -1, fileName: '', loadedAt
 const DEFAULT_VIEWS = [
   { name: 'Overview', columns: ['name', 'size', 'happy', 'content', 'unhappy', 'grow', 'foodNet', 'shields', 'commerce', 'corruptionPct', 'gold', 'luxury', 'science', 'status', 'build'] },
   { name: 'Growth & happiness', columns: ['name', 'size', 'happy', 'content', 'unhappy', 'resisters', 'spec', 'foreign', 'grow', 'foodNet', 'box', 'luxury', 'status', 'build'] },
-  { name: 'Corruption management', columns: ['name', 'size', 'shields', 'waste', 'wastePct', 'commerce', 'corruption', 'corruptionPct', 'ch', 'ps', 'chEffect', 'psEffect', 'upkeep', 'build'] },
+  { name: 'Corruption management', columns: ['name', 'size', 'shields', 'waste', 'wastePct', 'netShields', 'commerce', 'corruption', 'corruptionPct', 'netCommerce', 'ch', 'ps', 'chEffect', 'psEffect', 'upkeep', 'build'] },
   { name: 'Science & gold buildings', columns: ['name', 'size', 'commerce', 'corruptionPct', 'gold', 'science', 'bt:Library', 'bt:University', 'bt:Research Lab', 'bt:Marketplace', 'bt:Bank', 'bt:Stock Exchange',
     'be:Library', 'be:University', 'be:Research Lab', 'be:Marketplace', 'be:Bank', 'be:Stock Exchange', 'upkeep'] },
   { name: 'All columns', columns: null },
@@ -961,21 +964,26 @@ function renderSummary (res) {
   const usableSurplus = growing.reduce ((n, c) => n + c.foodNet, 0), wasted = blocked.reduce ((n, c) => n + c.foodNet, 0);
   const deficit = sum ((c) => Math.min (0, c.foodNet));
   const food = sum ((c) => c.foodTiles), foodUsable = food - wasted;
-  const afterBonus = sum ((c) => c.gold + c.science + c.luxury);
+  const afterBonus = sum ((c) => c.gold + c.science + c.luxury), netCommerce = commerce - corruption;
+  const slider = (k) => res.rates ? ` <span class="dim">${res.rates[k] * 10}%</span>` : '';
   const pct = (a, b) => b ? ` (${Math.round (100 * a / b)}%)` : '';
   const fmt = (v) => v.toLocaleString ();
-  const row = (k, v, tip) => `<span${tip ? ` title="${tip}"` : ''}>${k}</span><span class="v">${v}</span>`;
+  const row = (k, v, tip) => { const t = tip ? ` title="${tip}"` : ''; return `<span class="k"${t}>${k}</span><span class="v"${t}>${v}</span>`; };
   const card = (title, tip, body, three) => `<div class="card"><h2 title="${tip}">${title}</h2><div class="kv${three ? ' three' : ''}">${body}</div></div>`;
   const blockedNames = blocked.map ((c) => c.name).join (', ');
   $('summary').innerHTML =
     card ('Economy', 'All cities, as the game reports them. What-ifs are not included.',
       row ('Commerce', fmt (commerce), 'Raw commerce from tiles, before corruption') +
       row ('Corruption', fmt (corruption) + pct (corruption, commerce), 'Commerce lost to corruption') +
-      row ('Gold', fmt (gold), `Gold from cities after Marketplace etc.${spec ('gold') ? `, including ${spec ('gold')} from tax collectors` : ''}`) +
-      row ('Building upkeep', '−' + fmt (upkeep), 'Building maintenance per turn (unit support not included)') +
-      row ('Net gold', fmt (gold - upkeep), 'Gold minus building upkeep (unit support not included)') +
-      row ('Science', fmt (science), `Science from cities after Library etc.${spec ('science') ? `, including ${spec ('science')} from scientists` : ''}`) +
-      (luxury ? row ('Luxury', fmt (luxury), 'Luxury from cities and entertainers') : '')) +
+      row ('Net commerce', fmt (netCommerce), 'Commerce after corruption: what the slider splits') +
+      '<hr>' +
+      row ('Luxury' + slider ('luxury'), fmt (luxury), `Luxury after Marketplace etc.${spec ('luxury') ? `, including ${spec ('luxury')} from entertainers` : ''}`) +
+      row ('Science' + slider ('science'), fmt (science), `Science after Library etc.${spec ('science') ? `, including ${spec ('science')} from scientists` : ''}`) +
+      row ('Gold' + slider ('tax'), fmt (gold - upkeep),
+        `${gold} gold after Marketplace etc.${spec ('gold') ? ` (including ${spec ('gold')} from tax collectors)` : ''} − ${upkeep} building upkeep = ${gold - upkeep}. Unit support is not included.`) +
+      row ('Total', `${fmt (luxury + science + gold)} · ×${netCommerce ? (afterBonus / netCommerce).toFixed (2) : '–'}`,
+        `Luxury + science + gold, before upkeep. ×: commerce after Library, Marketplace etc. (${afterBonus}) ÷ net commerce (${netCommerce}): how much each coin of net commerce becomes.` +
+        (spec ('gold') + spec ('science') + spec ('luxury') ? ' Specialists\' output is left out of ×.' : ''))) +
     card ('Production', 'All cities, as the game reports them.',
       row ('Shields', fmt (shields), 'Raw shields from tiles, before waste') +
       row ('Waste', fmt (waste) + pct (waste, shields), 'Shields lost to waste') +
