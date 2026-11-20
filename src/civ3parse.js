@@ -49,7 +49,7 @@ const Civ3Parse = (() => {
 		const dv = new DataView (b.buffer, b.byteOffset, b.byteLength);
 		const i32 = (o) => dv.getInt32 (o, true);
 		const sec = (name) => readBiqSection (b, name, from, to, diag);
-		const bldg = sec ('BLDG'), tech = sec ('TECH'), prto = sec ('PRTO'), rule = sec ('RULE'), govt = sec ('GOVT'), diff = sec ('DIFF'),
+		const bldg = sec ('BLDG'), tech = sec ('TECH'), terr = sec ('TERR'), prto = sec ('PRTO'), rule = sec ('RULE'), govt = sec ('GOVT'), diff = sec ('DIFF'),
 		      wsiz = sec ('WSIZ'), race = sec ('RACE');
 		if (! bldg || ! govt || ! diff || ! wsiz) return null;
 		const r = {
@@ -64,6 +64,8 @@ const Civ3Parse = (() => {
 				spaceshipPart: i32 (e + 216) >= 0, requiredAdvance: i32 (e + 220),
 				nearWater: ((b[e + 237] >> 6) & 1) !== 0, nearRiver: ((b[e + 237] >> 7) & 1) !== 0, coastal: (b[e + 240] & 1) !== 0,
 				wonder: (b[e + 240] & 0b1100) !== 0 })),
+			// TERR: name after a bitmap of possible resources (one bit each, rounded up to bytes)
+			terrains: terr ? terr.map ((e) => readAscii (b, e + 8 + Math.ceil (i32 (e + 4) / 8), 32)) : [],
 			techs: tech ? tech.map ((e) => ({ name: readAscii (b, e + 4, 32) })) : [],
 			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84) })) : [],
 			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380) })),
@@ -408,17 +410,48 @@ const Civ3Parse = (() => {
 			} else diag.push ('Corruption model: missing capital, difficulty, government or world size');
 		}
 
+		// Map tiles (layout from OpenCiv3 QueryCiv3 Tile.cs): one 212-byte record per tile (four headers, the first with
+		// length 36), row by row, half the columns per row (x + y is even). Checked: each city's tile holds the city's id.
+		// Fresh water: a river on the city tile, or a lake next to it (a water body of at most 20 tiles; the size limit is
+		// an assumption, the save tested had only one-tile lakes). Coastal: any water next to the city.
+		result.tiles = false;
+		if (world && rules && rules.terrains.length) {
+			const water = new Set (rules.terrains.map ((n, k) => /coast|sea|ocean/i.test (n) ? k : -1).filter ((k) => k >= 0));
+			const first = findAll (b, 'TILE', gameOff).find ((o) => i32 (o + 4) === 36);
+			const W = world.width, H = world.height, count = W * H / 2;
+			if (first !== undefined && first + 212 * count <= b.length) {
+				const tile = (x, y) => { x = ((x % W) + W) % W; if (world.wrapY) y = ((y % H) + H) % H; return y < 0 || y >= H ? -1 : first + 212 * (y * (W / 2) + (x >> 1)); };
+				const terrain = (o) => b[o + 57] & 15, isWater = (o) => water.has (terrain (o)), bodyOf = (o) => i16 (o + 34);
+				const matched = result.cities.filter ((c) => { const o = tile (c.x, c.y); return o >= 0 && i16 (o + 30) === c.id; }).length;
+				if (matched === result.cities.length) {
+					const bodySize = {};
+					for (let k = 0; k < count; k++) { const o = first + 212 * k; if (isWater (o)) bodySize[bodyOf (o)] = (bodySize[bodyOf (o)] || 0) + 1; }
+					const around = [[2, 0], [-2, 0], [0, 2], [0, -2], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+					for (const c of result.cities) {
+						const near = around.map (([dx, dy]) => tile (c.x + dx, c.y + dy)).filter ((o) => o >= 0 && isWater (o));
+						c.coastal = near.length > 0;
+						c.river = b[tile (c.x, c.y) + 8] !== 0;
+						c.lake = near.some ((o) => bodySize[bodyOf (o)] <= 20);
+						c.freshWater = c.river || c.lake;
+					}
+					result.tiles = true;
+					diag.push (`Map tiles: city tiles match ${matched}/${result.cities.length}; ${result.cities.filter ((c) => c.coastal).length} coastal cities, ` +
+					           `fresh water: ${result.cities.filter ((c) => c.river).length} by a river, ${result.cities.filter ((c) => c.lake && ! c.river).length} by a lake`);
+				} else diag.push (`Map tiles: city tiles match only ${matched}/${result.cities.length}; not used`);
+			} else diag.push ('Map tiles: not found');
+		}
+
 		// Size limits: a town at the town limit needs an Aqueduct-type building, a city at the city limit a Hospital-type
 		// building. Cities above the town limit without an Aqueduct exist (fresh water, which the save doesn't show), so a
 		// missing building alone isn't proof: growth is blocked for certain only when the food box is full at the limit.
-		// atSizeLimit: at a limit without the building (blocked unless the city has fresh water).
+		// atSizeLimit: at a limit without the building (with map tiles: and, at the town limit, without fresh water).
 		const size2 = rules ? rules.buildings.map ((x, k) => x.allowsSize2 ? k : -1).filter ((k) => k >= 0) : [];
 		const size3 = rules ? rules.buildings.map ((x, k) => x.allowsSize3 ? k : -1).filter ((k) => k >= 0) : [];
 		if (rules) diag.push (`Size caps: towns grow past ${maxTown} with ${size2.map ((k) => rules.buildings[k].name).join (' / ') || '(none found)'}, ` +
 		                      `cities past ${maxCity} with ${size3.map ((k) => rules.buildings[k].name).join (' / ') || '(none found)'}`);
 		for (const c of result.cities) {
 			if (rules && c.buildings) {
-				if (c.size === maxTown) c.atSizeLimit = ! size2.some ((k) => c.buildings.has (k));
+				if (c.size === maxTown) c.atSizeLimit = ! size2.some ((k) => c.buildings.has (k)) && ! c.freshWater;
 				else if (c.size === maxCity) c.atSizeLimit = ! size3.some ((k) => c.buildings.has (k));
 				else c.atSizeLimit = false;
 			} else c.atSizeLimit = c.grow === 'max';

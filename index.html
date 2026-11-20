@@ -191,7 +191,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <b>CH</b> / <b>PS</b>: the city has a Courthouse / Police Station. Tick or untick to see what that would change: corruption, waste and their shares show <i>now → then</i>. A what-if tick (something the city doesn't really have, or a building you've unticked) is <b>outlined in amber</b>; plain ticks are what the city has.
     <b>CH Effect</b> / <b>PS Effect</b>: what building a Courthouse / Police Station would gain the city each turn: commerce kept, after its Library, Marketplace etc. (<b>com</b>), shields kept (<b>shd</b>) and the building's gold upkeep (<b>upk</b>). The two buildings reduce corruption the same way; the Police Station costs more upkeep. Sorting by them ranks the best places, upkeep included.
     <b>Lib, Univ, Lab, Mkt, Bank, SE</b> (and their <b>Effect</b> columns) work the same way for buildings that boost science or gold: the effect is what the building would add to this city, worked out the way the game does it (your slider split, then the building bonuses), minus upkeep. Ticking a building also ticks what it requires.
-    <b>Tier</b>: the city's tier by corruption; pick one to fix it for that city. <b>Attention</b>: what <i>Tiers…</i> finds missing or wrong.
+    <b>Tier</b>: the city's tier by corruption; pick one to fix it for that city. <b>Attention</b>: buildings the city's tier expects that it doesn't have (<i>Tiers…</i>); green: being built now. Coastal and river buildings count only where they can be built.
     Use <b>View</b> to switch between column sets and <b>Columns…</b> to choose what a view shows.
     <b>Corrupt %</b> over the cap shows the uncapped parts in brackets: distance to the palace + city rank (hover for details).
     Corruption figures come from the game's formula and are checked against your save (see Diagnostics); <b>~</b> marks a city where they didn't match.
@@ -382,7 +382,7 @@ const Civ3Parse = (() => {
 		const dv = new DataView (b.buffer, b.byteOffset, b.byteLength);
 		const i32 = (o) => dv.getInt32 (o, true);
 		const sec = (name) => readBiqSection (b, name, from, to, diag);
-		const bldg = sec ('BLDG'), tech = sec ('TECH'), prto = sec ('PRTO'), rule = sec ('RULE'), govt = sec ('GOVT'), diff = sec ('DIFF'),
+		const bldg = sec ('BLDG'), tech = sec ('TECH'), terr = sec ('TERR'), prto = sec ('PRTO'), rule = sec ('RULE'), govt = sec ('GOVT'), diff = sec ('DIFF'),
 		      wsiz = sec ('WSIZ'), race = sec ('RACE');
 		if (! bldg || ! govt || ! diff || ! wsiz) return null;
 		const r = {
@@ -397,6 +397,8 @@ const Civ3Parse = (() => {
 				spaceshipPart: i32 (e + 216) >= 0, requiredAdvance: i32 (e + 220),
 				nearWater: ((b[e + 237] >> 6) & 1) !== 0, nearRiver: ((b[e + 237] >> 7) & 1) !== 0, coastal: (b[e + 240] & 1) !== 0,
 				wonder: (b[e + 240] & 0b1100) !== 0 })),
+			// TERR: name after a bitmap of possible resources (one bit each, rounded up to bytes)
+			terrains: terr ? terr.map ((e) => readAscii (b, e + 8 + Math.ceil (i32 (e + 4) / 8), 32)) : [],
 			techs: tech ? tech.map ((e) => ({ name: readAscii (b, e + 4, 32) })) : [],
 			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84) })) : [],
 			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380) })),
@@ -741,17 +743,48 @@ const Civ3Parse = (() => {
 			} else diag.push ('Corruption model: missing capital, difficulty, government or world size');
 		}
 
+		// Map tiles (layout from OpenCiv3 QueryCiv3 Tile.cs): one 212-byte record per tile (four headers, the first with
+		// length 36), row by row, half the columns per row (x + y is even). Checked: each city's tile holds the city's id.
+		// Fresh water: a river on the city tile, or a lake next to it (a water body of at most 20 tiles; the size limit is
+		// an assumption, the save tested had only one-tile lakes). Coastal: any water next to the city.
+		result.tiles = false;
+		if (world && rules && rules.terrains.length) {
+			const water = new Set (rules.terrains.map ((n, k) => /coast|sea|ocean/i.test (n) ? k : -1).filter ((k) => k >= 0));
+			const first = findAll (b, 'TILE', gameOff).find ((o) => i32 (o + 4) === 36);
+			const W = world.width, H = world.height, count = W * H / 2;
+			if (first !== undefined && first + 212 * count <= b.length) {
+				const tile = (x, y) => { x = ((x % W) + W) % W; if (world.wrapY) y = ((y % H) + H) % H; return y < 0 || y >= H ? -1 : first + 212 * (y * (W / 2) + (x >> 1)); };
+				const terrain = (o) => b[o + 57] & 15, isWater = (o) => water.has (terrain (o)), bodyOf = (o) => i16 (o + 34);
+				const matched = result.cities.filter ((c) => { const o = tile (c.x, c.y); return o >= 0 && i16 (o + 30) === c.id; }).length;
+				if (matched === result.cities.length) {
+					const bodySize = {};
+					for (let k = 0; k < count; k++) { const o = first + 212 * k; if (isWater (o)) bodySize[bodyOf (o)] = (bodySize[bodyOf (o)] || 0) + 1; }
+					const around = [[2, 0], [-2, 0], [0, 2], [0, -2], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+					for (const c of result.cities) {
+						const near = around.map (([dx, dy]) => tile (c.x + dx, c.y + dy)).filter ((o) => o >= 0 && isWater (o));
+						c.coastal = near.length > 0;
+						c.river = b[tile (c.x, c.y) + 8] !== 0;
+						c.lake = near.some ((o) => bodySize[bodyOf (o)] <= 20);
+						c.freshWater = c.river || c.lake;
+					}
+					result.tiles = true;
+					diag.push (`Map tiles: city tiles match ${matched}/${result.cities.length}; ${result.cities.filter ((c) => c.coastal).length} coastal cities, ` +
+					           `fresh water: ${result.cities.filter ((c) => c.river).length} by a river, ${result.cities.filter ((c) => c.lake && ! c.river).length} by a lake`);
+				} else diag.push (`Map tiles: city tiles match only ${matched}/${result.cities.length}; not used`);
+			} else diag.push ('Map tiles: not found');
+		}
+
 		// Size limits: a town at the town limit needs an Aqueduct-type building, a city at the city limit a Hospital-type
 		// building. Cities above the town limit without an Aqueduct exist (fresh water, which the save doesn't show), so a
 		// missing building alone isn't proof: growth is blocked for certain only when the food box is full at the limit.
-		// atSizeLimit: at a limit without the building (blocked unless the city has fresh water).
+		// atSizeLimit: at a limit without the building (with map tiles: and, at the town limit, without fresh water).
 		const size2 = rules ? rules.buildings.map ((x, k) => x.allowsSize2 ? k : -1).filter ((k) => k >= 0) : [];
 		const size3 = rules ? rules.buildings.map ((x, k) => x.allowsSize3 ? k : -1).filter ((k) => k >= 0) : [];
 		if (rules) diag.push (`Size caps: towns grow past ${maxTown} with ${size2.map ((k) => rules.buildings[k].name).join (' / ') || '(none found)'}, ` +
 		                      `cities past ${maxCity} with ${size3.map ((k) => rules.buildings[k].name).join (' / ') || '(none found)'}`);
 		for (const c of result.cities) {
 			if (rules && c.buildings) {
-				if (c.size === maxTown) c.atSizeLimit = ! size2.some ((k) => c.buildings.has (k));
+				if (c.size === maxTown) c.atSizeLimit = ! size2.some ((k) => c.buildings.has (k)) && ! c.freshWater;
 				else if (c.size === maxCity) c.atSizeLimit = ! size3.some ((k) => c.buildings.has (k));
 				else c.atSizeLimit = false;
 			} else c.atSizeLimit = c.grow === 'max';
@@ -790,9 +823,9 @@ const BASE_COLUMNS = [
   { key: 'size', sec: 'city', label: 'Size', val: (c) => c.size },
   { key: 'tier', sec: 'attn', label: 'Tier', l: true, val: (c) => tierOf (c), show: (c) => tierName (tierOf (c)), csv: (c) => tierName (tierOf (c)), cell: tierCell,
     title: 'Tier by corruption (see Tiers…). Pick a tier to fix it for this city' },
-  { key: 'attention', sec: 'attn', label: 'Attention', l: true, val: (c) => warningsFor (c).length, show: (c) => warningsFor (c).map ((w) => w.text).join ('; '),
-    tip: (c) => warningsFor (c).map ((w) => w.text).join ('\n'), cls: (c) => 'attn' + (warningsFor (c).length ? ' amber' : ''), total: true, firstDir: -1,
-    title: 'Buildings missing for the city\'s tier (see Tiers…); sorts the cities with the most first' },
+  { key: 'attention', sec: 'attn', label: 'Attention', l: true, val: (c) => missingCount (c), show: (c) => warningsFor (c).map ((w) => w.text).join ('; '),
+    cell: attentionCell, total: true, firstDir: -1,
+    title: 'Buildings missing for the city\'s tier (see Tiers…); green: in production now. Sorts the cities with the most missing first' },
   { key: 'happy', sec: 'mood', label: 'Happy', val: (c) => c.happy },
   { key: 'content', sec: 'mood', label: 'Content', val: (c) => c.content },
   { key: 'unhappy', sec: 'mood', label: 'Unhappy', val: (c) => c.unhappy, cls: (c) => c.unhappy > c.happy ? 'red' : (c.unhappy ? 'amber' : '') },
@@ -1066,7 +1099,7 @@ function techNote (id) {
   return `Needs ${(res.rules.techs[b.requiredAdvance] || {}).name || 'a tech'} (not known yet)`;
 }
 
-// Warnings for one city: [{ text }]
+// Warnings for one city: [{ text, building }]; building: the missing building is the city's current build
 // Cached for one render: the columns and the filter ask for the same warnings
 const warnCache = new Map ();
 function warningsFor (c) {
@@ -1084,14 +1117,35 @@ function computeWarnings (c) {
   // water lets a city grow past the town limit without an Aqueduct).
   const caps = res.sizeCaps;
   const pastCap = (id) => caps && ((caps.size2.includes (id) && c.size > caps.maxTown) || (caps.size3.includes (id) && c.size > caps.maxCity));
+  // With map tiles: a coastal building only in coastal cities, a river one by a river, and no Aqueduct-type building
+  // for a city with fresh water (it grows past the town limit without one)
+  const placeable = (id) => {
+    if (! res.tiles) return true;
+    const b = rules.buildings[id];
+    if (b.coastal && ! c.coastal) return false;
+    if (b.nearRiver && ! c.river) return false;
+    if (b.nearWater && ! (c.coastal || c.freshWater)) return false;
+    return ! (caps && caps.size2.includes (id) && c.freshWater);
+  };
   for (const [name, sizes] of Object.entries (A.expect)) {
     const from = sizes[t], id = byName[name];
-    if (from == null || id === undefined || c.size < from || has (id) || ! canBuild (id) || pastCap (id)) continue;
-    out.push ({ text: `No ${name}` });
+    if (from == null || id === undefined || c.size < from || has (id) || ! canBuild (id) || pastCap (id) || ! placeable (id)) continue;
+    if (c.buildType === 1 && c.buildId === id) out.push ({ text: `Building ${name}${c.buildTurns ? ` (${c.buildTurns})` : ''}`, building: true });
+    else out.push ({ text: `No ${name}` });
   }
   return out;
 }
-function needsAttention (c) { return warningsFor (c).length > 0; }
+function missingCount (c) { return warningsFor (c).filter ((w) => ! w.building).length; }
+function needsAttention (c) { return missingCount (c) > 0; }
+function attentionCell (c, td) {
+  const ws = warningsFor (c);
+  ws.forEach ((w, i) => {
+    if (i) td.appendChild (document.createTextNode ('; '));
+    td.appendChild (Object.assign (document.createElement ('span'), { className: w.building ? 'green' : 'amber', textContent: w.text }));
+  });
+  if (ws.length) td.title = ws.map ((w) => w.text).join ('\n');
+  td.classList.add ('attn');
+}
 
 // Settings panel: tiers and expected buildings
 function renderAttentionEditor () {
@@ -1229,7 +1283,7 @@ function renderSummary (res) {
       row ('Surplus that grows cities', '+' + fmt (usableSurplus), 'Surplus in cities that can grow') +
       row ('Surplus wasted', '+' + fmt (wasted) + (blocked.length ? ` (${blocked.length})` : ''),
           'Surplus in cities whose food box is full at their size limit (no Aqueduct / Hospital): it is lost.' + (blockedNames ? ` Cities: ${blockedNames}.` : '') +
-          (filling.length ? ` Also at a limit without the building, box still filling (blocked unless fresh water): ${filling.map ((c) => c.name).join (', ')}.` : '')) +
+          (filling.length ? ` Also at a limit without the building, box still filling${res.tiles ? '' : ' (blocked unless fresh water)'}: ${filling.map ((c) => c.name).join (', ')}.` : '')) +
       (deficit ? row ('Deficit', fmt (deficit), 'Food missing in starving cities') : '')) +
     card ('Per citizen', `Averages over ${citizens} citizens (specialists included). Total: from tiles. Usable: after corruption, waste and wasted food.`,
       '<span class="h"></span><span class="h">Total</span><span class="h">Usable</span>' +
@@ -1308,7 +1362,8 @@ function render () {
       const td = document.createElement ('td');
       if (col.cell) {
         col.cell (c, td);
-        td.className = [col.l ? 'l' : '', col.group ? 'group' : ''].join (' ').trim ();
+        if (col.l) td.classList.add ('l');
+        if (col.group) td.classList.add ('group');
         tr.appendChild (td);
         continue;
       }

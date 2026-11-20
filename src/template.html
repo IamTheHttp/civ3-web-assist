@@ -191,7 +191,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <b>CH</b> / <b>PS</b>: the city has a Courthouse / Police Station. Tick or untick to see what that would change: corruption, waste and their shares show <i>now → then</i>. A what-if tick (something the city doesn't really have, or a building you've unticked) is <b>outlined in amber</b>; plain ticks are what the city has.
     <b>CH Effect</b> / <b>PS Effect</b>: what building a Courthouse / Police Station would gain the city each turn: commerce kept, after its Library, Marketplace etc. (<b>com</b>), shields kept (<b>shd</b>) and the building's gold upkeep (<b>upk</b>). The two buildings reduce corruption the same way; the Police Station costs more upkeep. Sorting by them ranks the best places, upkeep included.
     <b>Lib, Univ, Lab, Mkt, Bank, SE</b> (and their <b>Effect</b> columns) work the same way for buildings that boost science or gold: the effect is what the building would add to this city, worked out the way the game does it (your slider split, then the building bonuses), minus upkeep. Ticking a building also ticks what it requires.
-    <b>Tier</b>: the city's tier by corruption; pick one to fix it for that city. <b>Attention</b>: what <i>Tiers…</i> finds missing or wrong.
+    <b>Tier</b>: the city's tier by corruption; pick one to fix it for that city. <b>Attention</b>: buildings the city's tier expects that it doesn't have (<i>Tiers…</i>); green: being built now. Coastal and river buildings count only where they can be built.
     Use <b>View</b> to switch between column sets and <b>Columns…</b> to choose what a view shows.
     <b>Corrupt %</b> over the cap shows the uncapped parts in brackets: distance to the palace + city rank (hover for details).
     Corruption figures come from the game's formula and are checked against your save (see Diagnostics); <b>~</b> marks a city where they didn't match.
@@ -218,9 +218,9 @@ const BASE_COLUMNS = [
   { key: 'size', sec: 'city', label: 'Size', val: (c) => c.size },
   { key: 'tier', sec: 'attn', label: 'Tier', l: true, val: (c) => tierOf (c), show: (c) => tierName (tierOf (c)), csv: (c) => tierName (tierOf (c)), cell: tierCell,
     title: 'Tier by corruption (see Tiers…). Pick a tier to fix it for this city' },
-  { key: 'attention', sec: 'attn', label: 'Attention', l: true, val: (c) => warningsFor (c).length, show: (c) => warningsFor (c).map ((w) => w.text).join ('; '),
-    tip: (c) => warningsFor (c).map ((w) => w.text).join ('\n'), cls: (c) => 'attn' + (warningsFor (c).length ? ' amber' : ''), total: true, firstDir: -1,
-    title: 'Buildings missing for the city\'s tier (see Tiers…); sorts the cities with the most first' },
+  { key: 'attention', sec: 'attn', label: 'Attention', l: true, val: (c) => missingCount (c), show: (c) => warningsFor (c).map ((w) => w.text).join ('; '),
+    cell: attentionCell, total: true, firstDir: -1,
+    title: 'Buildings missing for the city\'s tier (see Tiers…); green: in production now. Sorts the cities with the most missing first' },
   { key: 'happy', sec: 'mood', label: 'Happy', val: (c) => c.happy },
   { key: 'content', sec: 'mood', label: 'Content', val: (c) => c.content },
   { key: 'unhappy', sec: 'mood', label: 'Unhappy', val: (c) => c.unhappy, cls: (c) => c.unhappy > c.happy ? 'red' : (c.unhappy ? 'amber' : '') },
@@ -494,7 +494,7 @@ function techNote (id) {
   return `Needs ${(res.rules.techs[b.requiredAdvance] || {}).name || 'a tech'} (not known yet)`;
 }
 
-// Warnings for one city: [{ text }]
+// Warnings for one city: [{ text, building }]; building: the missing building is the city's current build
 // Cached for one render: the columns and the filter ask for the same warnings
 const warnCache = new Map ();
 function warningsFor (c) {
@@ -512,14 +512,35 @@ function computeWarnings (c) {
   // water lets a city grow past the town limit without an Aqueduct).
   const caps = res.sizeCaps;
   const pastCap = (id) => caps && ((caps.size2.includes (id) && c.size > caps.maxTown) || (caps.size3.includes (id) && c.size > caps.maxCity));
+  // With map tiles: a coastal building only in coastal cities, a river one by a river, and no Aqueduct-type building
+  // for a city with fresh water (it grows past the town limit without one)
+  const placeable = (id) => {
+    if (! res.tiles) return true;
+    const b = rules.buildings[id];
+    if (b.coastal && ! c.coastal) return false;
+    if (b.nearRiver && ! c.river) return false;
+    if (b.nearWater && ! (c.coastal || c.freshWater)) return false;
+    return ! (caps && caps.size2.includes (id) && c.freshWater);
+  };
   for (const [name, sizes] of Object.entries (A.expect)) {
     const from = sizes[t], id = byName[name];
-    if (from == null || id === undefined || c.size < from || has (id) || ! canBuild (id) || pastCap (id)) continue;
-    out.push ({ text: `No ${name}` });
+    if (from == null || id === undefined || c.size < from || has (id) || ! canBuild (id) || pastCap (id) || ! placeable (id)) continue;
+    if (c.buildType === 1 && c.buildId === id) out.push ({ text: `Building ${name}${c.buildTurns ? ` (${c.buildTurns})` : ''}`, building: true });
+    else out.push ({ text: `No ${name}` });
   }
   return out;
 }
-function needsAttention (c) { return warningsFor (c).length > 0; }
+function missingCount (c) { return warningsFor (c).filter ((w) => ! w.building).length; }
+function needsAttention (c) { return missingCount (c) > 0; }
+function attentionCell (c, td) {
+  const ws = warningsFor (c);
+  ws.forEach ((w, i) => {
+    if (i) td.appendChild (document.createTextNode ('; '));
+    td.appendChild (Object.assign (document.createElement ('span'), { className: w.building ? 'green' : 'amber', textContent: w.text }));
+  });
+  if (ws.length) td.title = ws.map ((w) => w.text).join ('\n');
+  td.classList.add ('attn');
+}
 
 // Settings panel: tiers and expected buildings
 function renderAttentionEditor () {
@@ -657,7 +678,7 @@ function renderSummary (res) {
       row ('Surplus that grows cities', '+' + fmt (usableSurplus), 'Surplus in cities that can grow') +
       row ('Surplus wasted', '+' + fmt (wasted) + (blocked.length ? ` (${blocked.length})` : ''),
           'Surplus in cities whose food box is full at their size limit (no Aqueduct / Hospital): it is lost.' + (blockedNames ? ` Cities: ${blockedNames}.` : '') +
-          (filling.length ? ` Also at a limit without the building, box still filling (blocked unless fresh water): ${filling.map ((c) => c.name).join (', ')}.` : '')) +
+          (filling.length ? ` Also at a limit without the building, box still filling${res.tiles ? '' : ' (blocked unless fresh water)'}: ${filling.map ((c) => c.name).join (', ')}.` : '')) +
       (deficit ? row ('Deficit', fmt (deficit), 'Food missing in starving cities') : '')) +
     card ('Per citizen', `Averages over ${citizens} citizens (specialists included). Total: from tiles. Usable: after corruption, waste and wasted food.`,
       '<span class="h"></span><span class="h">Total</span><span class="h">Usable</span>' +
@@ -736,7 +757,8 @@ function render () {
       const td = document.createElement ('td');
       if (col.cell) {
         col.cell (c, td);
-        td.className = [col.l ? 'l' : '', col.group ? 'group' : ''].join (' ').trim ();
+        if (col.l) td.classList.add ('l');
+        if (col.group) td.classList.add ('group');
         tr.appendChild (td);
         continue;
       }

@@ -30,6 +30,12 @@ github.com/IamTheHttp/civ3-web-assist. Layouts and formulas: `docs/REVERSE_ENGIN
   Hospital and Shakespeare's Theater (level 3). Every city with a full food box at a size limit lacks the building (9/9).
   Cities above the town limit without an Aqueduct exist (Copán, size 12: fresh water, not in the save data), so growth
   counts as blocked only when the food box is full at the limit.
+- Known techs: after the 856-byte GAME block, one int per continent (GAME +300), then one int per tech; bit k = player k
+  knows it (OpenCiv3 `Sav.cs`). Maya: 37/83; every building in production needs a known tech (25/25).
+- Map tiles: 212-byte records (first header length 36), row by row, W/2 per row; +8 river edges, +30 city id (short),
+  +34 continent/water body (short), +57 low nibble terrain (TERR: 11 Coast, 12 Sea, 13 Ocean). City tiles match 42/42;
+  all 7 cities with a Harbor / Coastal Fortress are coastal. All 9 cities past size 6 without an Aqueduct have fresh
+  water: 8 a river on the city tile, 1 a one-tile lake (lake = water body of ≤ 20 tiles: the limit is assumed).
 - BLDG +216 spaceship part (−1 if not one), +220 required advance; flag byte +237 bit6 near water, bit7 near river;
   +240 bit0 coastal (OpenCiv3 `Bldg.cs`; spaceship flag matches the 10 SS parts in the default rules).
 - Current buildings = BITM bitmap, not BINF history (captured cities keep the history of destroyed Palaces etc.).
