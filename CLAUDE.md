@@ -28,6 +28,10 @@ github.com/IamTheHttp/civ3-web-assist. Layouts and formulas: `docs/REVERSE_ENGIN
 - Food: food from tiles (+360) − food eaten (+492) = net food (+504) in 42/42 cities.
 - Size caps: BLDG flag byte +237 bit3 allows size level 2, bit4 level 3 (OpenCiv3 `Bldg.cs`). Default rules: Aqueduct (level 2);
   Hospital and Shakespeare's Theater (level 3). Every city with a full food box at a size limit lacks the building (9/9).
+  Cities above the town limit without an Aqueduct exist (Copán, size 12: fresh water, not in the save data), so growth
+  counts as blocked only when the food box is full at the limit.
+- BLDG +216 spaceship part (−1 if not one), +220 required advance; flag byte +237 bit6 near water, bit7 near river;
+  +240 bit0 coastal (OpenCiv3 `Bldg.cs`; spaceship flag matches the 10 SS parts in the default rules).
 - Current buildings = BITM bitmap, not BINF history (captured cities keep the history of destroyed Palaces etc.).
 
 ## How to work here

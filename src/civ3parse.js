@@ -49,7 +49,7 @@ const Civ3Parse = (() => {
 		const dv = new DataView (b.buffer, b.byteOffset, b.byteLength);
 		const i32 = (o) => dv.getInt32 (o, true);
 		const sec = (name) => readBiqSection (b, name, from, to, diag);
-		const bldg = sec ('BLDG'), prto = sec ('PRTO'), rule = sec ('RULE'), govt = sec ('GOVT'), diff = sec ('DIFF'),
+		const bldg = sec ('BLDG'), tech = sec ('TECH'), prto = sec ('PRTO'), rule = sec ('RULE'), govt = sec ('GOVT'), diff = sec ('DIFF'),
 		      wsiz = sec ('WSIZ'), race = sec ('RACE');
 		if (! bldg || ! govt || ! diff || ! wsiz) return null;
 		const r = {
@@ -60,7 +60,11 @@ const Civ3Parse = (() => {
 				doublesScience: ((b[e + 248] >> 4) & 1) !== 0, capitalization: ((b[e + 238] >> 3) & 1) !== 0,
 				// Size caps (OpenCiv3 QueryCiv3 Bldg.cs): Aqueduct-type buildings allow size level 2, Hospital-type level 3
 				allowsSize2: ((b[e + 237] >> 3) & 1) !== 0, allowsSize3: ((b[e + 237] >> 4) & 1) !== 0,
+				// Placement (same source): must be near water / a river, or coastal
+				spaceshipPart: i32 (e + 216) >= 0, requiredAdvance: i32 (e + 220),
+				nearWater: ((b[e + 237] >> 6) & 1) !== 0, nearRiver: ((b[e + 237] >> 7) & 1) !== 0, coastal: (b[e + 240] & 1) !== 0,
 				wonder: (b[e + 240] & 0b1100) !== 0 })),
+			techs: tech ? tech.map ((e) => ({ name: readAscii (b, e + 4, 32) })) : [],
 			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84) })) : [],
 			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380) })),
 			difficulties: diff.map ((e) => ({ name: readAscii (b, e + 4, 64), optimalPercent: i32 (e + 108) })),
@@ -172,6 +176,15 @@ const Civ3Parse = (() => {
 		result.cultureFlips = cultureFlips;
 		diag.push (`GAME at byte ${gameOff}: turn ${result.turn}, ${result.numberOfCities} cities in the world, human player ${player}${accelerated ? ', accelerated production' : ''}`);
 		if (player < 0) { diag.push ('No human player found'); return result; }
+
+		// Known techs (layout from OpenCiv3 QueryCiv3 Sav.cs): after the 856-byte Conquests GAME block come one int per
+		// continent, then one int per tech whose bit k means player k knows it. Checked below against what cities build.
+		result.knownTechs = null;
+		const continents = i32 (gameOff + 300), techStart = gameOff + 856 + 4 * continents;
+		if (rules && rules.techs.length && continents >= 0 && continents < 1000 && techStart + 4 * rules.techs.length <= b.length) {
+			result.knownTechs = new Set ();
+			rules.techs.forEach ((t, k) => { if ((i32 (techStart + 4 * k) >>> player) & 1) result.knownTechs.add (k); });
+		}
 
 		// The player's civilization. Citizens' nationality is a civilization number (an index into the RACE list), not a
 		// player number, so this is what "foreign" is measured against. Each LEAD record holds player number and civ.
@@ -395,18 +408,28 @@ const Civ3Parse = (() => {
 			} else diag.push ('Corruption model: missing capital, difficulty, government or world size');
 		}
 
-		// Growth blocked by the size cap: a town at the town limit needs an Aqueduct-type building, a city at the city
-		// limit a Hospital-type building. Without rules, only a full food box at a size limit counts.
+		// Size limits: a town at the town limit needs an Aqueduct-type building, a city at the city limit a Hospital-type
+		// building. Cities above the town limit without an Aqueduct exist (fresh water, which the save doesn't show), so a
+		// missing building alone isn't proof: growth is blocked for certain only when the food box is full at the limit.
+		// atSizeLimit: at a limit without the building (blocked unless the city has fresh water).
 		const size2 = rules ? rules.buildings.map ((x, k) => x.allowsSize2 ? k : -1).filter ((k) => k >= 0) : [];
 		const size3 = rules ? rules.buildings.map ((x, k) => x.allowsSize3 ? k : -1).filter ((k) => k >= 0) : [];
 		if (rules) diag.push (`Size caps: towns grow past ${maxTown} with ${size2.map ((k) => rules.buildings[k].name).join (' / ') || '(none found)'}, ` +
 		                      `cities past ${maxCity} with ${size3.map ((k) => rules.buildings[k].name).join (' / ') || '(none found)'}`);
 		for (const c of result.cities) {
 			if (rules && c.buildings) {
-				if (c.size === maxTown) c.growthBlocked = ! size2.some ((k) => c.buildings.has (k));
-				else if (c.size === maxCity) c.growthBlocked = ! size3.some ((k) => c.buildings.has (k));
-				else c.growthBlocked = false;
-			} else c.growthBlocked = c.grow === 'max';
+				if (c.size === maxTown) c.atSizeLimit = ! size2.some ((k) => c.buildings.has (k));
+				else if (c.size === maxCity) c.atSizeLimit = ! size3.some ((k) => c.buildings.has (k));
+				else c.atSizeLimit = false;
+			} else c.atSizeLimit = c.grow === 'max';
+			c.growthBlocked = c.atSizeLimit && c.grow === 'max';
+		}
+		result.sizeCaps = { maxTown, maxCity, size2, size3 };
+		if (result.knownTechs) {
+			const building = result.cities.filter ((c) => c.buildType === 1 && rules.buildings[c.buildId]);
+			const ok = building.filter ((c) => { const a = rules.buildings[c.buildId].requiredAdvance; return a < 0 || result.knownTechs.has (a); });
+			diag.push (`Known techs: ${result.knownTechs.size} of ${rules.techs.length}; buildings in production need a known tech in ${ok.length}/${building.length} cities`);
+			if (ok.length !== building.length) { result.knownTechs = null; diag.push ('Known techs don\'t fit this save; not used'); }
 		}
 		const okFood = result.cities.filter ((c) => c.foodTiles - c.foodEaten === c.foodNet).length;
 		diag.push (`Field check: food from tiles - food eaten = net food in ${okFood}/${result.cities.length} cities`);
