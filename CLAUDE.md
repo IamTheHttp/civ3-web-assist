@@ -16,12 +16,16 @@ github.com/IamTheHttp/civ3-web-assist. Layouts and formulas: `docs/REVERSE_ENGIN
 
 ## Verified facts the viewer relies on
 - Save = PKWare DCL compressed (`blast`); the JS port is fuzz-tested against the C original (4000 random + 300 valid streams).
-- The corruption/waste model (community formula) matches the game **within 1 coin/shield in 42/42 cities**; waste needs the WLTKD rule.
+- Corruption/waste: the game's own rule, transcribed from the exe (`City_compute_corrupted_yield` 0x4B1190 and helpers), matches
+  **exactly in 42/42 cities** for both (the community formula: 27/42 each). Details and the differences: `docs/CORRUPTION.md`.
+- AI cost factor (DIFF +104; human = 10) from the **game** difficulty scales AI food boxes, unit and building costs
+  (`Leader_get_food_cost_factor` 0x5660E0, `Leader_get_unit_cost` 0x56A210, building cost 0x569FE0).
 - Corruption is applied to **raw** commerce; then the slider split (lux and gold rounded to nearest, science gets the rest);
   then building bonuses **add** (+50% each, +100% for research-doubling wonders), floored. Reproduces gold/sci/lux exactly
   in 40/42 cities; the other 2 are calibrated per city (the capital has +10 commerce not in its record; Memphis +1 gold from Wealth).
 - Specialist output is stored separately (fields 528/532/536) and is NOT in the city's gold/sci/lux.
-- Difficulty corruption %: Chieftain 100, Warlord 95, Regent 90, Monarch 85, Emperor 80, Demigod 70, Deity 60, Sid 50.
+- Difficulty optimal-cities % (DIFF +108): Chieftain 100, Warlord 95, Regent 90, Monarch 85, Emperor 80, Demigod 70,
+  Deity 60, Sid 50. Difficulty corruption % (DIFF +116): 100 at every level in the default rules.
 - Building costs in BIQ are in **tens of shields**; unit costs are plain shields.
 - Growth: box = 2 × factor × (sizeClass+1); factor 10 for humans (AI: difficulty), halved with accelerated production;
   sizeClass: >maxCity → 2, >maxTown → 1, else 0 (from the game exe's city screen code).
@@ -59,7 +63,8 @@ github.com/IamTheHttp/civ3-web-assist. Layouts and formulas: `docs/REVERSE_ENGIN
 ## Open items
 - Luxury multipliers are unverified (the player's lux slider is 0%).
 - Communism/Anarchy corruption is unverified.
-- The model assumes every city is connected to the capital (mismatches show "~").
+- The model assumes every city is connected to the capital by trade (not read from the save; otherwise distance × 5/4;
+  mismatches show "~").
 
 ## Ideas (not started)
 - **Unit targets for milestones.** Workers and military units need the save's UNIT records (or the LEAD unit counts),

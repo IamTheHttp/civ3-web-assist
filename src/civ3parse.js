@@ -69,7 +69,7 @@ const Civ3Parse = (() => {
 			techs: tech ? tech.map ((e) => ({ name: readAscii (b, e + 4, 32) })) : [],
 			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84) })) : [],
 			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380) })),
-			difficulties: diff.map ((e) => ({ name: readAscii (b, e + 4, 64), optimalPercent: i32 (e + 108) })),
+			difficulties: diff.map ((e) => ({ name: readAscii (b, e + 4, 64), costFactor: i32 (e + 104), optimalPercent: i32 (e + 108), corruptionPercent: i32 (e + 116) })),
 			worldSizes: wsiz.map ((e) => ({ optimalCities: i32 (e + 4) })),
 			civs: [], maxTown: 6, maxCity: 12
 		};
@@ -99,30 +99,38 @@ const Civ3Parse = (() => {
 		return { diag, rules };
 	}
 
-	// Corruption and waste, the community formula (Apolyton/CivFanatics). Verified against a real save: within one coin
-	// or shield of the game in every city. Returns the parts of the share lost: distance part, rank part, the cap, and
-	// share = min(distance + rank, cap), all 0..1.
-	function corruptionParts (m, city, ni, forWaste) {
-		if (city.isCapital) return { dist: 0, rank: 0, cap: 0, share: 0 };
-		const lvl = m.govLevel;
-		if (lvl === 4 || lvl > 5) return null; // Catastrophic (Anarchy) or unknown: not covered by the formula
-		const communal = lvl === 5;
-		const gd = lvl === 3 ? 1.5 : (lvl === 0 ? 0.75 : 1.0), gr = communal ? 2 : ((lvl === 0 || lvl === 1) ? 0.1 : 0), gp = communal ? 1 : 3 / 8;
-		const celebrating = forWaste && city.celebrating;
-		let d = communal ? Math.floor (m.maxD / 4) : city.palaceDistance;
-		let da = Math.min (gd * d, m.maxD) * Math.pow (0.5, ni);
-		if (celebrating) da /= 2;
-		const R = communal ? Math.floor (m.cityCount / 2) : city.rank;
-		let nopt = m.ocn * (m.difficulty * (1 + (m.commercial ? 0.25 : 0) + gr + gp * m.palaceWonders) + 0.25 * ni);
-		if (celebrating) nopt += m.ocn / 4;
-		const rankPart = R < nopt ? R / (2 * nopt) : (2 * R - nopt) / (2 * nopt);
-		const cap = Math.max (0.9 - 0.1 * ni - 0.7 * city.palaceWondersHere, 0);
-		const dist = da / m.maxD;
-		return { dist, rank: rankPart, cap, share: Math.min (dist + rankPart, cap) };
+	// Corruption and waste, transcribed from the game (GOG Civ3Conquests.exe): City_compute_corrupted_yield 0x4B1190,
+	// Leader_get_optimal_city_number 0x5676C0, the distance function 0x4378D0. Integer steps truncate toward zero as in
+	// the exe. Matches the game exactly in every city of the save it was checked on (corruption and waste).
+	// Not in the save, so assumed: the city is connected to the capital by trade (otherwise distance x 5/4), and no
+	// police-type specialists (they subtract their corruption value).
+	const tdiv = (a, b) => Math.trunc (a / b);
+	function corruptedYield (m, city, ni, Y, isWaste) {
+		const none = { lost: 0, D: 0, rankNum: 0, nopt: 1, NiTotal: ni, capLost: 0 };
+		if (Y <= 0) return none;
+		if (m.govLevel === 4 || (isWaste && city.disorder)) return { ...none, lost: Y, capLost: Y }; // Anarchy; disorder wastes all shields
+		let Ni = ni + (city.isCapital ? 10 : 0);                  // the capital counts as 10 Courthouses
+		let nopt = m.nopt + tdiv (m.ocn * Ni, 4);                  // each Courthouse / Police Station: + OCN/4 for this city
+		if (isWaste && city.celebrating) nopt += tdiv (m.ocn, 4);
+		let d = city.capitalDistance;
+		for (const f of m.fpCities) { if (f === city) Ni += 7; d = Math.min (d, m.dist (city, f)); } // a Forbidden Palace city: 7 more
+		let D = [tdiv (3 * d, 4), d, d, tdiv (3 * d, 2), m.maxD, tdiv (m.maxD, 4)][m.govLevel];
+		D = m.maxD < 2 ? 2 : Math.max (2, Math.min (D, m.maxD));
+		if (isWaste && city.celebrating) D = tdiv (D + 1, 2);
+		for (let k = 0; k < Ni; k++) D = tdiv (D + 1, 2);       // halved per Courthouse etc., rounding up
+		const R = m.govLevel === 5 ? tdiv (m.cityCount, 2) : city.rank;
+		const Rp = R >= nopt ? 2 * R - nopt : R;
+		const rankNum = tdiv (Rp * Y + 1, 2);
+		const v = tdiv (m.maxD * rankNum + D * Y * nopt + tdiv (m.maxD * nopt, 2), m.maxD * nopt); // rank + distance, rounded
+		const scaled = tdiv (v * m.corruptionPct, 100);
+		const capLost = tdiv (Math.max (0, 9 - Ni) * Y, 10);     // at most 90%, -10% per Courthouse etc., rounded down
+		return { lost: Math.max (0, Math.min (scaled, capLost)), D, rankNum, nopt, NiTotal: Ni, capLost };
 	}
-	function corruptionShare (m, city, ni, forWaste) {
-		const p = corruptionParts (m, city, ni, forWaste);
-		return p && p.share;
+	// The parts as shares of the city's yield, for display: distance, rank, cap; share = what is lost
+	function corruptionParts (m, city, ni, isWaste, Y) {
+		const x = corruptedYield (m, city, ni, Y, isWaste);
+		if (Y <= 0) return { dist: 0, rank: 0, cap: 0, share: 0 };
+		return { dist: x.D / m.maxD, rank: x.rankNum / (Y * x.nopt), cap: Math.max (0, 9 - x.NiTotal) / 10, share: x.lost / Y };
 	}
 
 	function parse (fileBytes, loadedRules) {
@@ -359,54 +367,58 @@ const Civ3Parse = (() => {
 		// Corruption model, for the Courthouse / Police Station what-if
 		result.model = null;
 		if (rules && world && capitalId >= 0) {
-			const all = [];
-			for (const off of findAll (b, 'CITY', gameOff))
-				if (i32 (off + 4) === 136 && u8 (off + 16) === player) all.push ({ id: i32 (off + 8), x: i16 (off + 12), y: i16 (off + 14) });
+			// The game's distance: wrapped |dx|, |dy|; max - ((dx + dy)/2 - min + 1)/2
 			const dist = (a, c) => {
 				let dx = Math.abs (a.x - c.x), dy = Math.abs (a.y - c.y);
-				if (world.wrapX) dx = Math.min (dx, world.width - dx);
-				if (world.wrapY) dy = Math.min (dy, world.height - dy);
-				const p = (dx + dy) >> 1, q = Math.abs (dx - dy) >> 1;
-				return Math.max (p, q) + (Math.min (p, q) >> 1);
+				if (world.wrapX && dx > tdiv (world.width, 2)) dx = world.width - dx;
+				if (world.wrapY && dy > tdiv (world.height, 2)) dy = world.height - dy;
+				const hi = Math.max (dx, dy), lo = Math.min (dx, dy);
+				return hi - tdiv (tdiv (dx + dy, 2) - lo + 1, 2);
 			};
 			const capital = result.cities.find ((c) => c.id === capitalId);
 			const reducing = rules.buildings.map ((x, k) => x.reducesCorruption ? k : -1).filter ((k) => k >= 0);
 			const fpLike = rules.buildings.map ((x, k) => x.forbiddenPalace ? k : -1).filter ((k) => k >= 0);
 			const has = (c, k) => c.buildings && c.buildings.has (k);
-			const palaces = result.cities.filter ((c) => c === capital || fpLike.some ((k) => has (c, k)));
 			const civ = rules.civs[playerRace];
 			const diffRow = rules.difficulties[result.difficultyId], gov = rules.governments[government];
 			const sizeRow = rules.worldSizes[world.sizeId];
 			if (capital && diffRow && gov && sizeRow) {
-				const order = [...result.cities].sort ((a, c) => dist (a, capital) - dist (c, capital) || a.id - c.id);
-				order.forEach ((c, k) => { c.rank = k; });
-				const m = { maxD: Math.floor ((world.width + world.height) / 4), ocn: sizeRow.optimalCities,
-				            difficulty: diffRow.optimalPercent / 100, commercial: civ ? civ.commercial : false,
-				            govLevel: gov.corruption, cityCount: result.cities.length,
-				            palaceWonders: result.cities.reduce ((n, c) => n + fpLike.filter ((k) => has (c, k)).length, 0) };
+				for (const c of result.cities) c.capitalDistance = dist (c, capital);
+				// Rank: your other cities closer to the capital (equal distance: lower city id first; the game breaks such ties
+				// with fields not read here)
+				for (const c of result.cities)
+					c.rank = result.cities.filter ((o) => o !== c && (o.capitalDistance < c.capitalDistance || (o.capitalDistance === c.capitalDistance && o.id < c.id))).length;
+				const ocn = sizeRow.optimalCities, lvl = gov.corruption;
+				const palaceWonders = result.cities.reduce ((n, c) => n + fpLike.filter ((k) => has (c, k)).length, 0);
+				const commercial = civ ? civ.commercial : false;
+				// Leader_get_optimal_city_number for a human player
+				let nopt = ocn + tdiv (palaceWonders * ocn * 3, lvl === 5 ? 1 : 8);
+				if (commercial) nopt += tdiv (ocn, 4);
+				nopt += [tdiv (ocn, 8), tdiv (ocn, 8), tdiv (ocn, 16), 0, 0, 2 * ocn][lvl] || 0;
+				nopt = tdiv (nopt * diffRow.optimalPercent, 100);
+				const m = { maxD: tdiv (world.width + world.height, 4), ocn, nopt, govLevel: lvl, cityCount: result.cities.length,
+				            commercial, palaceWonders, corruptionPct: diffRow.corruptionPercent ?? 100, dist,
+				            fpCities: result.cities.filter ((c) => fpLike.some ((k) => has (c, k))) };
 				const courthouse = reducing.find ((k) => /courthouse/i.test (rules.buildings[k].name)), police = reducing.find ((k) => /police/i.test (rules.buildings[k].name));
 				for (const c of result.cities) {
 					c.isCapital = c === capital;
-					c.palaceDistance = Math.min (...palaces.map ((p) => dist (c, p)));
 					c.palaceWondersHere = fpLike.filter ((k) => has (c, k)).length;
 					c.reducers = reducing.filter ((k) => has (c, k));
 				}
 				let match = 0, checked = 0;
 				for (const c of result.cities) {
 					const ni = c.reducers.length;
-					const pc = corruptionShare (m, c, ni, false), pw = corruptionShare (m, c, ni, true);
-					if (pc === null) continue;
 					checked++;
-					if (Math.abs (Math.round (c.commerce * pc) - c.corruption) <= 1 && Math.abs (Math.floor (c.shields * pw + 1e-9) - c.waste) <= 1) match++;
+					if (corruptedYield (m, c, ni, c.commerce, false).lost === c.corruption && corruptedYield (m, c, ni, c.shields, true).lost === c.waste) match++;
 					else c.modelOff = true;
 				}
 				result.model = { m, courthouse, police, reducing, match, checked,
-				                 shareFor: (c, ni, forWaste) => corruptionShare (m, c, ni, forWaste),
-				                 partsFor: (c, ni, forWaste) => corruptionParts (m, c, ni, forWaste) };
-				diag.push (`Corruption model: ${gov.name} (${['minimal', 'nuisance', 'problematic', 'rampant', 'catastrophic', 'communal'][gov.corruption] || '?'}), ` +
-				           `${diffRow.name}, ${civ ? civ.noun : '?'}${m.commercial ? ' (Commercial)' : ''}, optimal cities ${m.ocn}, ` +
+				                 lostFor: (c, ni, forWaste) => corruptedYield (m, c, ni, forWaste ? c.shields : c.commerce, forWaste).lost,
+				                 partsFor: (c, ni, forWaste) => corruptionParts (m, c, ni, forWaste, forWaste ? c.shields : c.commerce) };
+				diag.push (`Corruption model (the game's own rule): ${gov.name} (${['minimal', 'nuisance', 'problematic', 'rampant', 'catastrophic', 'communal'][gov.corruption] || '?'}), ` +
+				           `${diffRow.name}, ${civ ? civ.noun : '?'}${m.commercial ? ' (Commercial)' : ''}, optimal cities ${m.ocn} -> ${m.nopt} for you, ` +
 				           `${m.palaceWonders} Forbidden Palace-type wonder(s)`);
-				diag.push (`Corruption model matches the game within 1 in ${match} of ${checked} cities` + (match === checked ? '' : ' (cities that don\'t match are marked ~)'));
+				diag.push (`Corruption model matches the game exactly in ${match} of ${checked} cities` + (match === checked ? '' : ' (cities that don\'t match are marked ~: not connected to the capital, or police specialists)'));
 			} else diag.push ('Corruption model: missing capital, difficulty, government or world size');
 		}
 

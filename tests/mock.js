@@ -53,7 +53,7 @@ function makeRules () {
 	section ('RULE', [[300, (e) => { W.w32 (e + 288, RULES.maxTown); W.w32 (e + 292, RULES.maxCity); }]]);
 	section ('GOVT', [['Despotism', 3], ['Monarchy', 2], ['Republic', 1], ['Democracy', 0], ['Communism', 5]]
 		.map (([n, lvl]) => [400, (e) => { W.str (e + 28, n); W.w32 (e + 380, lvl); }]));
-	section ('DIFF', [['Chieftain', 100], ['Regent', 90], ['Monarch', 85], ['Deity', 60]].map (([n, pc]) => [120, (e) => { W.str (e + 4, n); W.w32 (e + 108, pc); }]));
+	section ('DIFF', [['Chieftain', 100], ['Regent', 90], ['Monarch', 85], ['Deity', 60]].map (([n, pc]) => [120, (e) => { W.str (e + 4, n); W.w32 (e + 108, pc); W.w32 (e + 116, 100); }]));
 	section ('WSIZ', [12, 16, 20].map ((ocn) => [40, (e) => { W.w32 (e + 4, ocn); }]));
 	section ('RACE', [['Mockians', 0], ['Neighbours', 2]].map (([noun, traits]) => [2400, (e) => {
 		W.w32 (e + 4, 0); W.w32 (e + 8, 0); W.str (e + 180, noun); W.buf[e + 272 + 2080] = traits;
@@ -127,8 +127,8 @@ const first = P.parse (makeSave (rules, cities, zero), rules);
 const byId = Object.fromEntries (first.cities.map ((c) => [c.id, c]));
 const sav = makeSave (rules, cities, (c) => {
 	const pc = byId[c.id], ni = pc.reducers.length;
-	const corruption = Math.round (c.commerce * first.model.shareFor (pc, ni, false));
-	const waste = Math.floor (c.shields * first.model.shareFor (pc, ni, true) + 1e-9);
+	const corruption = first.model.lostFor (pc, ni, false);
+	const waste = first.model.lostFor (pc, ni, true);
 	return { corruption, waste, ...first.econ.replay (c.commerce - corruption, pc.buildings) };
 });
 fs.writeFileSync (path.join (outDir, 'mock.biq'), biq);
@@ -153,8 +153,8 @@ if (turnsArg > 0) {
 		const pass1 = P.parse (makeSave (rules, list, zero, turn), rules), ids = Object.fromEntries (pass1.cities.map ((c) => [c.id, c]));
 		const sv = makeSave (rules, list, (c) => {
 			const pc = ids[c.id], ni = pc.reducers.length;
-			const corruption = Math.round (c.commerce * pass1.model.shareFor (pc, ni, false));
-			const waste = Math.floor (c.shields * pass1.model.shareFor (pc, ni, true) + 1e-9);
+			const corruption = pass1.model.lostFor (pc, ni, false);
+			const waste = pass1.model.lostFor (pc, ni, true);
 			return { corruption, waste, ...pass1.econ.replay (c.commerce - corruption, pc.buildings) };
 		}, turn);
 		fs.writeFileSync (path.join (dir, `mock-t${turn}.SAV`), sv);

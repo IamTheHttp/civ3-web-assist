@@ -451,17 +451,17 @@ const BASE_COLUMNS = [
   { key: 'ch', sec: 'corr', label: 'CH', chk: 'ch', model: true, title: 'Courthouse (tick to try it)' },
   { key: 'ps', sec: 'corr', label: 'PS', chk: 'ps', model: true, title: 'Police Station (tick to try it)' },
   { key: 'commerce', sec: 'commerce', label: 'Commerce', val: (c) => c.commerce, total: true, title: 'Raw commerce from tiles, before corruption' },
-  { key: 'corruption', sec: 'commerce', label: 'Corrupt', title: 'Commerce lost to corruption. ~: the corruption model doesn\'t match the game here', val: (c) => wi (c).corruption, show: (c) => (c.modelOff ? '~' : '') + arrow (c.corruption, wi (c).corruption), cls: (c) => wiCls (c, 'corruption') || (c.corruption ? 'amber' : 'dim'), total: true },
+  { key: 'corruption', sec: 'commerce', label: 'Corrupt', title: 'Commerce lost to corruption. ~: the game\'s corruption rule doesn\'t match here (the city may not be connected to the capital)', val: (c) => wi (c).corruption, show: (c) => (c.modelOff ? '~' : '') + arrow (c.corruption, wi (c).corruption), cls: (c) => wiCls (c, 'corruption') || (c.corruption ? 'amber' : 'dim'), total: true },
   { key: 'corruptionPct', sec: 'commerce', label: 'Corrupt %', val: (c) => wi (c).corruptionPct, show: (c) => arrow (c.corruptionPct, wi (c).corruptionPct, '%') + uncapped (c).text, tip: (c) => uncapped (c).tip, cls: (c) => wiCls (c, 'corruptionPct') || pctClass (c.corruptionPct),
     title: 'Share of the city\'s commerce lost to corruption. Over the cap, brackets show the uncapped parts: distance to the palace + city rank', ratio: ['corruption', 'commerce'] },
   { key: 'netCommerce', sec: 'commerce', label: 'Net Commerce', val: (c) => c.commerce - wi (c).corruption, show: (c) => arrow (c.commerce - c.corruption, c.commerce - wi (c).corruption),
     cls: (c) => wiCls (c, 'corruption') ? (wi (c).corruption < c.corruption ? 'better changed' : 'worse changed') : '', total: true, title: 'Commerce after corruption' },
   { key: 'chEffect', sec: 'corr', label: 'CH Effect', model: true, val: (c) => effectOf (c, 'ch').value, show: (c) => effectOf (c, 'ch').text,
     cls: (c) => effectOf (c, 'ch').value > 0 ? 'green' : 'dim', csv: (c) => effectOf (c, 'ch').text,
-    title: 'What building a Courthouse would gain this city per turn: commerce kept (after its Library, Marketplace etc.) and shields kept' },
+    title: 'What building a Courthouse would gain this city per turn: science, gold and luxury from the commerce kept (after its Library, Marketplace etc.), shields kept, and its upkeep' },
   { key: 'psEffect', sec: 'corr', label: 'PS Effect', model: true, val: (c) => effectOf (c, 'ps').value, show: (c) => effectOf (c, 'ps').text,
     cls: (c) => effectOf (c, 'ps').value > 0 ? 'green' : 'dim', csv: (c) => effectOf (c, 'ps').text,
-    title: 'What building a Police Station would gain this city per turn: commerce kept (after its Library, Marketplace etc.) and shields kept' },
+    title: 'What building a Police Station would gain this city per turn: science, gold and luxury from the commerce kept (after its Library, Marketplace etc.), shields kept, and its upkeep' },
   { key: 'gold', sec: 'output', label: 'Gold', title: 'Gold after Marketplace etc.', val: (c) => wi (c).gold, show: (c) => arrow (c.gold, wi (c).gold), cls: (c) => wiCls (c, 'gold', true), total: true },
   { key: 'luxury', sec: 'output', label: 'Lux', title: 'Luxury after Marketplace etc.', val: (c) => wi (c).luxury, show: (c) => arrow (c.luxury, wi (c).luxury), cls: (c) => wiCls (c, 'luxury', true), total: true },
   { key: 'science', sec: 'output', label: 'Sci', title: 'Science after Library etc.', val: (c) => wi (c).science, show: (c) => arrow (c.science, wi (c).science), cls: (c) => wiCls (c, 'science', true), total: true },
@@ -560,13 +560,11 @@ function evaluate (c, ticks) {
     const niNow = c.reducers.length, niNew = m.reducing.filter ((k) => set.has (k)).length;
     out.ni = niNew;
     if (niNow !== niNew) {
-      const sc0 = m.shareFor (c, niNow, false), sc1 = m.shareFor (c, niNew, false), sw0 = m.shareFor (c, niNow, true), sw1 = m.shareFor (c, niNew, true);
-      if (sc0 !== null && sc1 !== null) {
-        out.corruption = Math.max (0, Math.min (c.commerce, c.corruption + Math.round (c.commerce * sc1) - Math.round (c.commerce * sc0)));
-        out.waste = Math.max (0, Math.min (c.shields, c.waste + Math.floor (c.shields * sw1 + 1e-9) - Math.floor (c.shields * sw0 + 1e-9)));
-        out.corruptionPct = c.commerce > 0 ? Math.round (100 * out.corruption / c.commerce) : 0;
-        out.wastePct = c.shields > 0 ? Math.round (100 * out.waste / c.shields) : 0;
-      }
+      // Anchored to the game's own figures: only the change comes from the model
+      out.corruption = Math.max (0, Math.min (c.commerce, c.corruption + m.lostFor (c, niNew, false) - m.lostFor (c, niNow, false)));
+      out.waste = Math.max (0, Math.min (c.shields, c.waste + m.lostFor (c, niNew, true) - m.lostFor (c, niNow, true)));
+      out.corruptionPct = c.commerce > 0 ? Math.round (100 * out.corruption / c.commerce) : 0;
+      out.wastePct = c.shields > 0 ? Math.round (100 * out.waste / c.shields) : 0;
     }
   }
   // Gold / science / luxury: replay the slider split and building bonuses with the new commerce and buildings
@@ -601,7 +599,12 @@ function effectOf (c, key) {
   const parts = [], sign = (v) => (v > 0 ? '+' : '') + v;
   const dg = e.gold - c.gold, ds = e.science - c.science, dl = e.luxury - c.luxury, dsh = c.waste - e.waste, du = e.upkeep - c.upkeep;
   if (key === 'ch' || key === 'ps') {
-    parts.push (`${sign (dg + ds + dl)} com`, `${sign (dsh)} shd`);
+    // What the commerce kept turns into (after Library, Marketplace etc.), and the shields kept
+    if (ds) parts.push (`${sign (ds)} sci`);
+    if (dg) parts.push (`${sign (dg)} gold`);
+    if (dl) parts.push (`${sign (dl)} lux`);
+    if (! ds && ! dg && ! dl) parts.push ('0 com');
+    parts.push (`${sign (dsh)} shd`);
   } else {
     // Report what the building boosts, even when the gain rounds to zero
     if (bd.science50 || bd.doublesScience || ds) parts.push (`${sign (ds)} sci`);
@@ -644,9 +647,9 @@ function uncapped (c) {
   const pc = (x) => Math.round (100 * x), d = pc (p.dist), k = pc (p.rank);
   return { text: ` (${d}% + ${k}%)`,
     tip: `Capped at ${pc (p.cap)}%. Without the cap: ${d}% for distance to the nearest palace + ${k}% for rank ` +
-         `(this city is number ${c.rank + 1} by distance to the capital) = ${d + k}%. ` +
-         `The cap is 90%, −10% per Courthouse or Police Station, −70% with a Forbidden Palace.` +
-         (wi (c).corruptionPct > pc (p.cap) ? ' The game rounds the coins lost, so a city with little commerce can show more than the cap.' : '') };
+         `(${c.rank} of your cities are closer to the capital) = ${d + k}%. ` +
+         `The cap is 90%, −10% per Courthouse or Police Station, −70% with a Forbidden Palace; ` +
+         `the game rounds the coins lost down to a whole coin, so the shown share can be a little under the cap.` };
 }
 function arrow (now, then, unit = '') { return now === then ? `${now}${unit}` : `${now}${unit} → ${then}${unit}`; }
 function wiCls (c, key, higherIsBetter) { const e = wi (c); if (e[key] === c[key]) return ''; const up = e[key] > c[key]; return ((up === !! higherIsBetter) ? 'better' : 'worse') + ' changed'; }

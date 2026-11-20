@@ -34,13 +34,8 @@ Sections: name(4) + count + entries each starting with their length. Offsets fro
 - **CTZN**: specialist outputs (entertainer 1 lux, tax collector 2 gold, scientist 3 research in default rules).
 
 ## Formulas
-**Corruption/waste** *(community formula, verified 42/42 within 1)*:
-distance d = max(a,b) + min(a,b)/2 with a=(dx+dy)/2, b=|dx−dy|/2 (wrapped deltas), to nearest Palace/FP-type city;
-MaxD = (W+H)/4; gd = 1.5 rampant, 0.75 minimal, else 1; distance part = min(gd·d, MaxD)·0.5^Ni / MaxD (÷2 for waste when celebrating);
-rank R = order by distance to capital; Nopt = OCN·(L·(1 + 0.25·commercial + gr + gp·Nwe) + 0.25·Ni) (+OCN/4 for waste when celebrating),
-gr = 0.1 minimal/nuisance, 2 communal; gp = 3/8 (1 communal, per C3X source); rank part = R/(2Nopt) if R<Nopt else (2R−Nopt)/(2Nopt);
-cap = 0.9 − 0.1·Ni − 0.7·(FP-type wonders in city); share = min(dist+rank, cap). Corruption ≈ round(raw·share), waste ≈ floor(raw·share).
-Ni = Courthouse + Police Station in the city (both identical in effect; upkeep 1 vs 2).
+**Corruption/waste**: the rule in the game's code (`City_compute_corrupted_yield`), exact in 42/42 cities for both;
+see `docs/CORRUPTION.md`, which also lists how it differs from the community formula.
 
 **Commerce replay**: net = raw − corruption (+ per-city calibration); lux = round(net·L/10), gold = round(net·T/10), sci = net − lux − gold;
 each × (1 + Σ bonuses) floored; +50% per Library/University/Research Lab (sci) or Marketplace/Bank/Stock Exchange (gold), +100% research-doubling wonders.
