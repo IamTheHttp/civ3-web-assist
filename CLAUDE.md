@@ -25,6 +25,9 @@ github.com/IamTheHttp/civ3-web-assist. Layouts and formulas: `docs/REVERSE_ENGIN
 - Building costs in BIQ are in **tens of shields**; unit costs are plain shields.
 - Growth: box = 2 × factor × (sizeClass+1); factor 10 for humans (AI: difficulty), halved with accelerated production;
   sizeClass: >maxCity → 2, >maxTown → 1, else 0 (from the game exe's city screen code).
+- Food: food from tiles (+360) − food eaten (+492) = net food (+504) in 42/42 cities.
+- Size caps: BLDG flag byte +237 bit3 allows size level 2, bit4 level 3 (OpenCiv3 `Bldg.cs`). Default rules: Aqueduct (level 2);
+  Hospital and Shakespeare's Theater (level 3). Every city with a full food box at a size limit lacks the building (9/9).
 - Current buildings = BITM bitmap, not BINF history (captured cities keep the history of destroyed Palaces etc.).
 
 ## How to work here

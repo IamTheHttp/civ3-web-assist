@@ -17,6 +17,7 @@ Folder watching (auto-reload of the latest autosave) works only in Edge and Chro
 ## Develop
 - Build: `python3 build.py` inlines `src/blast.js` and `src/civ3parse.js` into `src/template.html` and writes `index.html`.
 - Parser smoke test: `node tests/synth.js`.
+- Mock data: `node tests/mock.js` writes `local-data/mock.biq` and `local-data/mock.SAV` (42 invented cities) to try the page without game files.
 - UI suite (Playwright + Chromium): put `maya.SAV` and `conquests.biq` in `local-data/`, then `python3 tests/uisuite.py`.
 - Decompressor fuzz: `cc -O2 -o tests/cblast tests/harness.c tests/blast.c`, then `node tests/fuzz.js` and `node tests/fuzz2.js 300` (number of streams).
 

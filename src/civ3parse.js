@@ -58,6 +58,8 @@ const Civ3Parse = (() => {
 				center: (b[e + 236] & 1) !== 0, reducesCorruption: (b[e + 237] & 1) !== 0, forbiddenPalace: ((b[e + 244] >> 5) & 1) !== 0,
 				science50: ((b[e + 236] >> 2) & 1) !== 0, luxury50: ((b[e + 236] >> 3) & 1) !== 0, gold50: ((b[e + 236] >> 4) & 1) !== 0,
 				doublesScience: ((b[e + 248] >> 4) & 1) !== 0, capitalization: ((b[e + 238] >> 3) & 1) !== 0,
+				// Size caps (OpenCiv3 QueryCiv3 Bldg.cs): Aqueduct-type buildings allow size level 2, Hospital-type level 3
+				allowsSize2: ((b[e + 237] >> 3) & 1) !== 0, allowsSize3: ((b[e + 237] >> 4) & 1) !== 0,
 				wonder: (b[e + 240] & 0b1100) !== 0 })),
 			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84) })) : [],
 			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380) })),
@@ -92,9 +94,10 @@ const Civ3Parse = (() => {
 	}
 
 	// Corruption and waste, the community formula (Apolyton/CivFanatics). Verified against a real save: within one coin
-	// or shield of the game in every city. Returns the share lost, 0..1.
-	function corruptionShare (m, city, ni, forWaste) {
-		if (city.isCapital) return 0;
+	// or shield of the game in every city. Returns the parts of the share lost: distance part, rank part, the cap, and
+	// share = min(distance + rank, cap), all 0..1.
+	function corruptionParts (m, city, ni, forWaste) {
+		if (city.isCapital) return { dist: 0, rank: 0, cap: 0, share: 0 };
 		const lvl = m.govLevel;
 		if (lvl === 4 || lvl > 5) return null; // Catastrophic (Anarchy) or unknown: not covered by the formula
 		const communal = lvl === 5;
@@ -108,7 +111,12 @@ const Civ3Parse = (() => {
 		if (celebrating) nopt += m.ocn / 4;
 		const rankPart = R < nopt ? R / (2 * nopt) : (2 * R - nopt) / (2 * nopt);
 		const cap = Math.max (0.9 - 0.1 * ni - 0.7 * city.palaceWondersHere, 0);
-		return Math.min (da / m.maxD + rankPart, cap);
+		const dist = da / m.maxD;
+		return { dist, rank: rankPart, cap, share: Math.min (dist + rankPart, cap) };
+	}
+	function corruptionShare (m, city, ni, forWaste) {
+		const p = corruptionParts (m, city, ni, forWaste);
+		return p && p.share;
 	}
 
 	function parse (fileBytes, loadedRules) {
@@ -378,13 +386,30 @@ const Civ3Parse = (() => {
 					else c.modelOff = true;
 				}
 				result.model = { m, courthouse, police, reducing, match, checked,
-				                 shareFor: (c, ni, forWaste) => corruptionShare (m, c, ni, forWaste) };
+				                 shareFor: (c, ni, forWaste) => corruptionShare (m, c, ni, forWaste),
+				                 partsFor: (c, ni, forWaste) => corruptionParts (m, c, ni, forWaste) };
 				diag.push (`Corruption model: ${gov.name} (${['minimal', 'nuisance', 'problematic', 'rampant', 'catastrophic', 'communal'][gov.corruption] || '?'}), ` +
 				           `${diffRow.name}, ${civ ? civ.noun : '?'}${m.commercial ? ' (Commercial)' : ''}, optimal cities ${m.ocn}, ` +
 				           `${m.palaceWonders} Forbidden Palace-type wonder(s)`);
 				diag.push (`Corruption model matches the game within 1 in ${match} of ${checked} cities` + (match === checked ? '' : ' (cities that don\'t match are marked ~)'));
 			} else diag.push ('Corruption model: missing capital, difficulty, government or world size');
 		}
+
+		// Growth blocked by the size cap: a town at the town limit needs an Aqueduct-type building, a city at the city
+		// limit a Hospital-type building. Without rules, only a full food box at a size limit counts.
+		const size2 = rules ? rules.buildings.map ((x, k) => x.allowsSize2 ? k : -1).filter ((k) => k >= 0) : [];
+		const size3 = rules ? rules.buildings.map ((x, k) => x.allowsSize3 ? k : -1).filter ((k) => k >= 0) : [];
+		if (rules) diag.push (`Size caps: towns grow past ${maxTown} with ${size2.map ((k) => rules.buildings[k].name).join (' / ') || '(none found)'}, ` +
+		                      `cities past ${maxCity} with ${size3.map ((k) => rules.buildings[k].name).join (' / ') || '(none found)'}`);
+		for (const c of result.cities) {
+			if (rules && c.buildings) {
+				if (c.size === maxTown) c.growthBlocked = ! size2.some ((k) => c.buildings.has (k));
+				else if (c.size === maxCity) c.growthBlocked = ! size3.some ((k) => c.buildings.has (k));
+				else c.growthBlocked = false;
+			} else c.growthBlocked = c.grow === 'max';
+		}
+		const okFood = result.cities.filter ((c) => c.foodTiles - c.foodEaten === c.foodNet).length;
+		diag.push (`Field check: food from tiles - food eaten = net food in ${okFood}/${result.cities.length} cities`);
 
 		for (const c of result.cities) {
 			c.corruptionPct = c.commerce > 0 ? Math.round (100 * c.corruption / c.commerce) : 0;

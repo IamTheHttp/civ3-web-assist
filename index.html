@@ -88,6 +88,16 @@ td.changed { background: color-mix(in srgb, var(--accent) 16%, transparent) !imp
 details { margin-top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; }
 summary { cursor: pointer; color: var(--muted); }
 #diag { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; margin: 8px 0 4px; }
+.summary { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+.card { flex: 1 1 210px; max-width: 360px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; }
+.card h2 { font-size: 12px; font-weight: 600; color: var(--gold); margin: 0 0 4px; text-transform: uppercase; letter-spacing: .4px; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 1px 14px; font-variant-numeric: tabular-nums; }
+.kv.three { grid-template-columns: 1fr auto auto; }
+.kv > span:nth-child(odd) { color: var(--muted); }
+.kv.three > span { color: var(--ink); }
+.kv.three > span.k { color: var(--muted); }
+.kv.three > span.h { color: var(--gold); font-size: 12px; text-align: right; }
+.kv > span.v, .kv.three > span:not(.k) { text-align: right; }
 .legend { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
 .legend b { color: var(--ink); font-weight: 600; }
 </style>
@@ -134,6 +144,8 @@ summary { cursor: pointer; color: var(--muted); }
     <p>Nothing is uploaded: the files are read inside this page.</p>
   </div>
 
+  <section class="summary" id="summary" aria-label="Empire summary" hidden></section>
+
   <div class="tablewrap" id="tablewrap" hidden>
     <table>
       <thead><tr id="headrow"></tr></thead>
@@ -150,6 +162,7 @@ summary { cursor: pointer; color: var(--muted); }
     <b>CH Effect</b> / <b>PS Effect</b>: what building a Courthouse / Police Station would gain the city each turn: commerce kept, after its Library, Marketplace etc. (<b>com</b>), shields kept (<b>shd</b>) and the building's gold upkeep (<b>upk</b>). The two buildings reduce corruption the same way; the Police Station costs more upkeep. Sorting by them ranks the best places, upkeep included.
     <b>Lib, Univ, Lab, Mkt, Bank, SE</b> (and their <b>Effect</b> columns) work the same way for buildings that boost science or gold: the effect is what the building would add to this city, worked out the way the game does it (your slider split, then the building bonuses), minus upkeep. Ticking a building also ticks what it requires.
     Use <b>View</b> to switch between column sets and <b>Columns…</b> to choose what a view shows.
+    <b>Corrupt %</b> over the cap shows the uncapped parts in brackets: distance to the palace + city rank (hover for details).
     Corruption figures come from the game's formula and are checked against your save (see Diagnostics); <b>~</b> marks a city where they didn't match.
     Click a column header to sort; click again to reverse.
   </p>
@@ -347,6 +360,8 @@ const Civ3Parse = (() => {
 				center: (b[e + 236] & 1) !== 0, reducesCorruption: (b[e + 237] & 1) !== 0, forbiddenPalace: ((b[e + 244] >> 5) & 1) !== 0,
 				science50: ((b[e + 236] >> 2) & 1) !== 0, luxury50: ((b[e + 236] >> 3) & 1) !== 0, gold50: ((b[e + 236] >> 4) & 1) !== 0,
 				doublesScience: ((b[e + 248] >> 4) & 1) !== 0, capitalization: ((b[e + 238] >> 3) & 1) !== 0,
+				// Size caps (OpenCiv3 QueryCiv3 Bldg.cs): Aqueduct-type buildings allow size level 2, Hospital-type level 3
+				allowsSize2: ((b[e + 237] >> 3) & 1) !== 0, allowsSize3: ((b[e + 237] >> 4) & 1) !== 0,
 				wonder: (b[e + 240] & 0b1100) !== 0 })),
 			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84) })) : [],
 			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380) })),
@@ -381,9 +396,10 @@ const Civ3Parse = (() => {
 	}
 
 	// Corruption and waste, the community formula (Apolyton/CivFanatics). Verified against a real save: within one coin
-	// or shield of the game in every city. Returns the share lost, 0..1.
-	function corruptionShare (m, city, ni, forWaste) {
-		if (city.isCapital) return 0;
+	// or shield of the game in every city. Returns the parts of the share lost: distance part, rank part, the cap, and
+	// share = min(distance + rank, cap), all 0..1.
+	function corruptionParts (m, city, ni, forWaste) {
+		if (city.isCapital) return { dist: 0, rank: 0, cap: 0, share: 0 };
 		const lvl = m.govLevel;
 		if (lvl === 4 || lvl > 5) return null; // Catastrophic (Anarchy) or unknown: not covered by the formula
 		const communal = lvl === 5;
@@ -397,7 +413,12 @@ const Civ3Parse = (() => {
 		if (celebrating) nopt += m.ocn / 4;
 		const rankPart = R < nopt ? R / (2 * nopt) : (2 * R - nopt) / (2 * nopt);
 		const cap = Math.max (0.9 - 0.1 * ni - 0.7 * city.palaceWondersHere, 0);
-		return Math.min (da / m.maxD + rankPart, cap);
+		const dist = da / m.maxD;
+		return { dist, rank: rankPart, cap, share: Math.min (dist + rankPart, cap) };
+	}
+	function corruptionShare (m, city, ni, forWaste) {
+		const p = corruptionParts (m, city, ni, forWaste);
+		return p && p.share;
 	}
 
 	function parse (fileBytes, loadedRules) {
@@ -667,13 +688,30 @@ const Civ3Parse = (() => {
 					else c.modelOff = true;
 				}
 				result.model = { m, courthouse, police, reducing, match, checked,
-				                 shareFor: (c, ni, forWaste) => corruptionShare (m, c, ni, forWaste) };
+				                 shareFor: (c, ni, forWaste) => corruptionShare (m, c, ni, forWaste),
+				                 partsFor: (c, ni, forWaste) => corruptionParts (m, c, ni, forWaste) };
 				diag.push (`Corruption model: ${gov.name} (${['minimal', 'nuisance', 'problematic', 'rampant', 'catastrophic', 'communal'][gov.corruption] || '?'}), ` +
 				           `${diffRow.name}, ${civ ? civ.noun : '?'}${m.commercial ? ' (Commercial)' : ''}, optimal cities ${m.ocn}, ` +
 				           `${m.palaceWonders} Forbidden Palace-type wonder(s)`);
 				diag.push (`Corruption model matches the game within 1 in ${match} of ${checked} cities` + (match === checked ? '' : ' (cities that don\'t match are marked ~)'));
 			} else diag.push ('Corruption model: missing capital, difficulty, government or world size');
 		}
+
+		// Growth blocked by the size cap: a town at the town limit needs an Aqueduct-type building, a city at the city
+		// limit a Hospital-type building. Without rules, only a full food box at a size limit counts.
+		const size2 = rules ? rules.buildings.map ((x, k) => x.allowsSize2 ? k : -1).filter ((k) => k >= 0) : [];
+		const size3 = rules ? rules.buildings.map ((x, k) => x.allowsSize3 ? k : -1).filter ((k) => k >= 0) : [];
+		if (rules) diag.push (`Size caps: towns grow past ${maxTown} with ${size2.map ((k) => rules.buildings[k].name).join (' / ') || '(none found)'}, ` +
+		                      `cities past ${maxCity} with ${size3.map ((k) => rules.buildings[k].name).join (' / ') || '(none found)'}`);
+		for (const c of result.cities) {
+			if (rules && c.buildings) {
+				if (c.size === maxTown) c.growthBlocked = ! size2.some ((k) => c.buildings.has (k));
+				else if (c.size === maxCity) c.growthBlocked = ! size3.some ((k) => c.buildings.has (k));
+				else c.growthBlocked = false;
+			} else c.growthBlocked = c.grow === 'max';
+		}
+		const okFood = result.cities.filter ((c) => c.foodTiles - c.foodEaten === c.foodNet).length;
+		diag.push (`Field check: food from tiles - food eaten = net food in ${okFood}/${result.cities.length} cities`);
 
 		for (const c of result.cities) {
 			c.corruptionPct = c.commerce > 0 ? Math.round (100 * c.corruption / c.commerce) : 0;
@@ -716,7 +754,7 @@ const BASE_COLUMNS = [
   { key: 'ps', sec: 'corr', label: 'PS', chk: 'ps', model: true, title: 'Police Station (tick to try it)' },
   { key: 'commerce', sec: 'commerce', label: 'Commerce', val: (c) => c.commerce, total: true, title: 'Raw commerce from tiles, before corruption' },
   { key: 'corruption', sec: 'commerce', label: 'Corrupt', val: (c) => wi (c).corruption, show: (c) => (c.modelOff ? '~' : '') + arrow (c.corruption, wi (c).corruption), cls: (c) => wiCls (c, 'corruption') || (c.corruption ? 'amber' : 'dim'), total: true },
-  { key: 'corruptionPct', sec: 'commerce', label: 'Corrupt %', val: (c) => wi (c).corruptionPct, show: (c) => arrow (c.corruptionPct, wi (c).corruptionPct, '%'), cls: (c) => wiCls (c, 'corruptionPct') || pctClass (c.corruptionPct),
+  { key: 'corruptionPct', sec: 'commerce', label: 'Corrupt %', val: (c) => wi (c).corruptionPct, show: (c) => arrow (c.corruptionPct, wi (c).corruptionPct, '%') + uncapped (c).text, tip: (c) => uncapped (c).tip, cls: (c) => wiCls (c, 'corruptionPct') || pctClass (c.corruptionPct),
     title: 'Share of the city\'s commerce lost to corruption', ratio: ['corruption', 'commerce'] },
   { key: 'chEffect', sec: 'corr', label: 'CH Effect', model: true, val: (c) => effectOf (c, 'ch').value, show: (c) => effectOf (c, 'ch').text,
     cls: (c) => effectOf (c, 'ch').value > 0 ? 'green' : 'dim', csv: (c) => effectOf (c, 'ch').text,
@@ -799,7 +837,8 @@ function tickKeysFor (c) {
 function evaluate (c, ticks) {
   const res = state.result, m = res.model, econ = res.econ, rules = res.rules;
   const now = { corruption: c.corruption, waste: c.waste, corruptionPct: c.corruptionPct, wastePct: c.wastePct,
-                gold: c.gold, science: c.science, luxury: c.luxury, upkeep: c.upkeep, value: 0, changed: false };
+                gold: c.gold, science: c.science, luxury: c.luxury, upkeep: c.upkeep, value: 0, changed: false,
+                ni: c.reducers ? c.reducers.length : 0 };
   if (! rules || ! c.buildings) return now;
   const want = (key) => (ticks && key in ticks) ? ticks[key] : ticked (c, key);
   const set = new Set (c.buildings);
@@ -818,6 +857,7 @@ function evaluate (c, ticks) {
   // Corruption and waste: Courthouse / Police Station
   if (m && ! c.isCapital) {
     const niNow = c.reducers.length, niNew = m.reducing.filter ((k) => set.has (k)).length;
+    out.ni = niNew;
     if (niNow !== niNew) {
       const sc0 = m.shareFor (c, niNow, false), sc1 = m.shareFor (c, niNew, false), sw0 = m.shareFor (c, niNow, true), sw1 = m.shareFor (c, niNew, true);
       if (sc0 !== null && sc1 !== null) {
@@ -887,6 +927,19 @@ function rebuildColumns () {
   const at = BASE_COLUMNS.findIndex ((c) => c.key === 'upkeep');
   COLUMNS = [...BASE_COLUMNS.slice (0, at), ...extra, ...BASE_COLUMNS.slice (at)];
 }
+// Corruption above the cap: the formula's distance and rank parts, shown when their sum is over the cap
+function uncapped (c) {
+  const res = state.result, none = { text: '', tip: '' };
+  if (! res || ! res.model || c.isCapital || c.modelOff) return none;
+  const p = res.model.partsFor (c, wi (c).ni, false);
+  if (! p || p.dist + p.rank <= p.cap + 1e-9) return none;
+  const pc = (x) => Math.round (100 * x), d = pc (p.dist), k = pc (p.rank);
+  return { text: ` (${d}% + ${k}%)`,
+    tip: `Capped at ${pc (p.cap)}%. Without the cap: ${d}% for distance to the nearest palace + ${k}% for rank ` +
+         `(this city is number ${c.rank + 1} by distance to the capital) = ${d + k}%. ` +
+         `The cap is 90%, −10% per Courthouse or Police Station, −70% with a Forbidden Palace.` +
+         (wi (c).corruptionPct > pc (p.cap) ? ' The game rounds the coins lost, so a city with little commerce can show more than the cap.' : '') };
+}
 function arrow (now, then, unit = '') { return now === then ? `${now}${unit}` : `${now}${unit} → ${then}${unit}`; }
 function wiCls (c, key, higherIsBetter) { const e = wi (c); if (e[key] === c[key]) return ''; const up = e[key] > c[key]; return ((up === !! higherIsBetter) ? 'better' : 'worse') + ' changed'; }
 function modelOn () { return !! (state.result && state.result.model); }
@@ -895,12 +948,61 @@ function econOn () { return !! (state.result && state.result.econ); }
 function pctClass (p) { return p >= 50 ? 'red' : (p >= 20 ? 'amber' : (p > 0 ? '' : 'dim')); }
 function problem (c) { return c.disorder || c.unhappy > c.happy || c.foodNet < 0 || c.resisters > 0; }
 
+// Empire summary: every city, the game's own figures (what-ifs not included)
+function renderSummary (res) {
+  const cs = res.cities, sum = (f) => cs.reduce ((n, c) => n + f (c), 0);
+  const citizens = sum ((c) => c.size), per = (x) => citizens ? (x / citizens).toFixed (1) : '–';
+  const commerce = sum ((c) => c.commerce), corruption = sum ((c) => c.corruption);
+  const shields = sum ((c) => c.shields), waste = sum ((c) => c.waste);
+  const spec = (k) => sum ((c) => c.specialistOutput[k]);
+  const gold = sum ((c) => c.gold) + spec ('gold'), science = sum ((c) => c.science) + spec ('science');
+  const luxury = sum ((c) => c.luxury) + spec ('luxury'), upkeep = sum ((c) => c.upkeep);
+  const growing = cs.filter ((c) => c.foodNet > 0 && ! c.growthBlocked), blocked = cs.filter ((c) => c.foodNet > 0 && c.growthBlocked);
+  const usableSurplus = growing.reduce ((n, c) => n + c.foodNet, 0), wasted = blocked.reduce ((n, c) => n + c.foodNet, 0);
+  const deficit = sum ((c) => Math.min (0, c.foodNet));
+  const food = sum ((c) => c.foodTiles), foodUsable = food - wasted;
+  const afterBonus = sum ((c) => c.gold + c.science + c.luxury);
+  const pct = (a, b) => b ? ` (${Math.round (100 * a / b)}%)` : '';
+  const fmt = (v) => v.toLocaleString ();
+  const row = (k, v, tip) => `<span${tip ? ` title="${tip}"` : ''}>${k}</span><span class="v">${v}</span>`;
+  const card = (title, tip, body, three) => `<div class="card"><h2 title="${tip}">${title}</h2><div class="kv${three ? ' three' : ''}">${body}</div></div>`;
+  const blockedNames = blocked.map ((c) => c.name).join (', ');
+  $('summary').innerHTML =
+    card ('Economy', 'All cities, as the game reports them. What-ifs are not included.',
+      row ('Commerce', fmt (commerce), 'Raw commerce from tiles, before corruption') +
+      row ('Corruption', fmt (corruption) + pct (corruption, commerce), 'Commerce lost to corruption') +
+      row ('Gold', fmt (gold), `Gold from cities after Marketplace etc.${spec ('gold') ? `, including ${spec ('gold')} from tax collectors` : ''}`) +
+      row ('Building upkeep', '−' + fmt (upkeep), 'Building maintenance per turn (unit support not included)') +
+      row ('Net gold', fmt (gold - upkeep), 'Gold minus building upkeep (unit support not included)') +
+      row ('Science', fmt (science), `Science from cities after Library etc.${spec ('science') ? `, including ${spec ('science')} from scientists` : ''}`) +
+      (luxury ? row ('Luxury', fmt (luxury), 'Luxury from cities and entertainers') : '')) +
+    card ('Production', 'All cities, as the game reports them.',
+      row ('Shields', fmt (shields), 'Raw shields from tiles, before waste') +
+      row ('Waste', fmt (waste) + pct (waste, shields), 'Shields lost to waste') +
+      row ('Net shields', fmt (shields - waste), 'Shields after waste')) +
+    card ('Food', 'Net food per turn, all cities.',
+      row ('Surplus', '+' + fmt (usableSurplus + wasted), 'Net food of all cities with a surplus') +
+      row ('Surplus that grows cities', '+' + fmt (usableSurplus), 'Surplus in cities that can grow') +
+      row ('Surplus wasted', '+' + fmt (wasted) + (blocked.length ? ` (${blocked.length})` : ''),
+          'Surplus in cities at their size limit without an Aqueduct / Hospital: the food box fills and the rest is lost.' + (blockedNames ? ` Cities: ${blockedNames}` : '')) +
+      (deficit ? row ('Deficit', fmt (deficit), 'Food missing in starving cities') : '')) +
+    card ('Per citizen', `Averages over ${citizens} citizens (specialists included). Total: from tiles. Usable: after corruption, waste and wasted food.`,
+      '<span class="h"></span><span class="h">Total</span><span class="h">Usable</span>' +
+      `<span class="k" title="Food from tiles; usable leaves out the wasted surplus">Food</span><span>${per (food)}</span><span>${per (foodUsable)}</span>` +
+      `<span class="k" title="Shields from tiles; usable is after waste">Shields</span><span>${per (shields)}</span><span>${per (shields - waste)}</span>` +
+      `<span class="k" title="Commerce from tiles; usable is after corruption">Commerce</span><span>${per (commerce)}</span><span>${per (commerce - corruption)}</span>` +
+      `<span class="k" title="Food + shields + commerce">Productivity</span><span>${per (food + shields + commerce)}</span><span>${per (foodUsable + shields - waste + commerce - corruption)}</span>` +
+      `<span class="k" title="Usable food + shields after waste + gold, science and luxury after Library, Marketplace etc. Specialists' output not included.">Modified productivity</span><span>–</span><span>${per (foodUsable + shields - waste + afterBonus)}</span>`, true);
+  $('summary').hidden = false;
+}
+
 function render () {
   const res = state.result;
   if (! res || ! res.ok) return;
   $('drop').hidden = true; $('tablewrap').hidden = false; $('legend').hidden = false; $('csv').disabled = false;
   $('title').textContent = `${state.fileName} · turn ${res.turn} · ${res.cities.length} ${res.cities.length === 1 ? 'city' : 'cities'}`;
 
+  renderSummary (res);
   const COLS = visibleColumns ();
   renderViewPicker ();
   const nTicks = tickCount ();
@@ -976,6 +1078,7 @@ function render () {
         continue;
       }
       td.textContent = col.show ? col.show (c) : col.val (c);
+      if (col.tip) { const t = col.tip (c); if (t) td.title = t; }
       td.className = [col.l ? 'l' : '', col.group ? 'group' : '', col.cls ? col.cls (c) : ''].join (' ').trim ();
       tr.appendChild (td);
     }
