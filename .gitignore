@@ -10,5 +10,11 @@ tests/cblast
 tests/ui_dark.png
 __pycache__/
 node_modules/
+# Editors and OS files
 .idea/
+.vscode/
+*.iml
+*.swp
+*~
 .DS_Store
+Thumbs.db
