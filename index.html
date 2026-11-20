@@ -113,6 +113,33 @@ summary { cursor: pointer; color: var(--muted); }
 .kv.three > span.h { color: var(--gold); font-size: 12px; text-align: right; }
 .kv > span.v, .kv.three > span:not(.k) { text-align: right; }
 #helpbtn { margin-left: auto; }
+#sidenav { position: fixed; top: 0; left: 0; bottom: 0; width: 132px; padding: 14px 8px; display: flex; flex-direction: column; gap: 6px;
+           background: var(--panel); border-right: 1px solid var(--line); z-index: 12; }
+#sidenav button { text-align: left; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+#sidenav button.active { border-color: var(--accent); color: var(--accent); }
+.navsub { font-size: 11px; color: var(--muted); }
+main { margin-left: 132px; }
+:root { --drawer-w: min(640px, 46vw); }
+/* On wide screens an open panel pushes the page aside, so the table and toolbar stay usable */
+@media (min-width: 1100px) { body.drawer-open main { margin-right: var(--drawer-w); } }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer-w); z-index: 14; display: flex; flex-direction: column;
+          background: var(--panel); border-left: 1px solid var(--line); box-shadow: -8px 0 24px rgba(0,0,0,.18); }
+.drawerhead { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.drawerhead h2 { font-size: 17px; margin: 0; flex: 1; }
+.drawerbody { overflow: auto; padding: 12px 16px 24px; flex: 1; }
+.drawer .summary { margin: 0; }
+.drawer .card { max-width: none; }
+.panelnote { color: var(--muted); }
+@media (max-width: 760px) {
+  #sidenav { position: static; width: auto; flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px 14px; }
+  #sidenav button { flex-direction: row; align-items: baseline; gap: 4px; }
+  main { margin-left: 0; }
+  .drawer { width: 100vw; }
+}
+@media (max-width: 1099px) { .drawer { width: min(640px, 100vw); } }
+.searchbar { display: flex; gap: 10px; align-items: center; margin: 0 0 8px; }
+#search { flex: 0 1 460px; font-size: 14px; padding: 6px 10px; }
+td.hit { background: color-mix(in srgb, var(--gold) 26%, transparent) !important; }
 .ms { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; margin: 6px 0; }
 .ms-met { border-left: 4px solid var(--green); } .ms-missed { border-left: 4px solid var(--red); } .ms-progress { border-left: 4px solid var(--accent); }
 .mshead { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 4px; }
@@ -187,6 +214,14 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
 </script>
 </head>
 <body>
+  <nav id="sidenav" aria-label="Panels">
+    <button type="button" data-open="summary">Summary</button>
+    <button type="button" data-open="milestones">Milestones <span class="navsub" id="mscount"></span></button>
+    <button type="button" data-open="history">History <span class="navsub" id="histcount"></span></button>
+    <button type="button" data-open="diplomacy">Diplomacy <span class="navsub" id="diplocount"></span></button>
+    <button type="button" data-open="tiers">Tiers</button>
+    <button type="button" data-open="diagnostics">Diagnostics</button>
+  </nav>
 <main>
   <header class="top">
     <h1>Civ3 Empire Viewer</h1>
@@ -214,8 +249,9 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Watch autosave folder…</dt><dd>Pick <code>Saves\Auto</code>; the newest save loads by itself.</dd>
         <dt>View</dt><dd>Switch between sets of columns.</dd>
         <dt>Columns…</dt><dd>Choose this view's columns. <b>Clear all columns</b> starts from empty; <b>New view</b> makes your own.</dd>
-        <dt>Tiers…</dt><dd>Name corruption tiers and set which buildings each tier should have, from which city size.</dd>
-        <dt>Filter cities</dt><dd>Type part of a city name.</dd>
+        <dt>Side menu</dt><dd>Summary, Milestones, History, Diplomacy, Tiers and Diagnostics open in a panel on the right; the table stays where it is. Esc or Close shuts it.</dd>
+        <dt>Tiers</dt><dd>Name corruption tiers and set which buildings each tier should have, from which city size.</dd>
+        <dt>Search (above the table)</dt><dd>Matches any text in the table: <code>library</code>, a city name, <code>max</code>, <code>no temple</code>. Several words must all match. Press <b>/</b> to jump there, Esc to clear.</dd>
         <dt>Problems only</dt><dd>Cities in disorder or close to it, starving, or with resisters.</dd>
         <dt>Needs attention</dt><dd>Cities missing a building their tier expects.</dd>
         <dt>Clear filters</dt><dd>Shows when a column is filtered; removes every filter in this view.</dd>
@@ -259,36 +295,15 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <label class="chk" for="viewsel">View</label>
     <select id="viewsel" aria-label="View"></select>
     <button id="editview" type="button">Columns…</button>
-    <button id="attnbtn" type="button" title="City tiers by corruption and the buildings each tier should have">Tiers…</button>
-    <input id="search" type="search" placeholder="Filter cities" aria-label="Filter cities by name">
     <label class="chk" title="Only cities that need attention: in disorder, more unhappy than happy citizens (disorder next turn), starving, or with resisters"><input id="problems" type="checkbox"> <span id="problemslabel">Problems only</span></label>
-    <label class="chk" title="Cities missing a building their tier expects (see Tiers…)"><input id="attnonly" type="checkbox"> <span id="attnlabel">Needs attention</span></label>
+    <label class="chk" title="Cities missing a building their tier expects (see Tiers)"><input id="attnonly" type="checkbox"> <span id="attnlabel">Needs attention</span></label>
     <button id="clearfilters" type="button" hidden title="Remove every column filter in this view">Clear filters</button>
     <button id="csv" type="button" disabled>Export CSV</button>
     <button id="resetwhatif" type="button" hidden>Reset what-ifs</button>
     <span class="status" id="status" aria-live="polite"></span>
   </div>
 
-  <div id="viewedit" class="bar" hidden>
-    <div class="vehead">
-      <label>Name <input id="viewname" type="text" maxlength="40"></label>
-      <button id="viewnew" type="button">New view</button>
-      <button id="viewclear" type="button" title="Untick every column except City, to pick the ones you want">Clear all columns</button>
-      <button id="viewdelete" type="button">Delete this view</button>
-      <button id="viewreset" type="button" title="Restore the original four views">Restore default views</button>
-      <button id="viewdone" type="button" class="primary">Done</button>
-    </div>
-    <div id="viewcols" class="vecols"></div>
-  </div>
 
-  <div id="attnedit" class="bar" hidden>
-    <div class="vehead">
-      <b>Tiers</b>
-      <button id="attnreset" type="button">Restore defaults</button>
-      <button id="attndone" type="button" class="primary">Done</button>
-    </div>
-    <div id="attnbody" class="attnbody"></div>
-  </div>
 
   <div id="drop">
     <p><b>Drop a .SAV file here</b>, or use <i>Open save…</i></p>
@@ -297,45 +312,17 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <p>Nothing is uploaded: the files are read inside this page.</p>
   </div>
 
-  <section class="summary" id="summary" aria-label="Empire summary" hidden></section>
-
-  <details id="milestones" class="hist" hidden>
-    <summary>Milestones <span id="mscount"></span></summary>
-    <div class="histbar">
-      <button id="msadd" type="button">Add milestone</button>
-      <button id="msreset" type="button" title="Replace this game's milestones with the default ones">Restore defaults</button>
-    </div>
-    <div id="mslist"></div>
-  </details>
-
-  <details id="history" class="hist" hidden>
-    <summary>History <span id="histcount"></span></summary>
-    <div class="histbar">
-      <select id="histchart" aria-label="Chart"></select>
-      <select id="histcity" aria-label="City"></select>
-      <label class="filebtn" for="histfiles" title="Read older saves of this game and store their turns. The page keeps showing the save you opened.">Add saves…</label>
-      <input id="histfiles" type="file" accept=".sav,.SAV" multiple hidden>
-      <button id="histclear" type="button" title="Delete every stored turn of this game from this browser">Delete this game's history</button>
-      <span class="sub" id="histstatus"></span>
-    </div>
-    <div class="histlegend" id="histlegend"></div>
-    <div id="histchartbox"></div>
-  </details>
 
 
-  <details id="diplomacy" class="hist" hidden>
-    <summary>Diplomacy <span id="diplocount"></span></summary>
-    <div class="diplowrap"><table class="diplo"><thead><tr>
-      <th class="l">Civilization</th><th class="l">Government</th><th>Cities</th>
-      <th title="Their total culture">Culture</th>
-      <th title="Their total culture ÷ yours. 0.5× = half of yours; above 1×, they have more culture than you, which raises the culture-flip risk in your cities near them">Culture ratio</th>
-      <th class="l">Status</th><th title="Times they declared war on you">War declarations</th><th class="l" title="You have an embassy with them">Embassy</th>
-      <th class="l">Allied against you with</th>
-    </tr></thead><tbody id="diplorows"></tbody></table></div>
-    <p class="histnote">Attitude toward you isn't stored in the save: the game works it out when you open diplomacy. Only civilizations you have met are listed.</p>
-  </details>
+
+
 
   <div id="fmenu" class="fmenu" role="dialog" aria-label="Filter" hidden></div>
+
+  <div class="searchbar" id="searchbar" hidden>
+    <input id="search" type="search" placeholder="Search the table: a city, library, max, at war…   ( / )" aria-label="Search the table">
+    <span class="sub" id="searchcount"></span>
+  </div>
 
   <div class="tablewrap" id="tablewrap" hidden>
     <table>
@@ -346,11 +333,85 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
   </div>
 
 
-  <details>
-    <summary>Diagnostics</summary>
+  <aside id="drawer" class="drawer" aria-labelledby="drawertitle" hidden>
+    <div class="drawerhead"><h2 id="drawertitle"></h2><button id="drawerclose" type="button" title="Close (Esc)">Close</button></div>
+    <div class="drawerbody">
+    <div class="panel" data-panel="summary" hidden>
+      <p class="panelnote" hidden>Open a save to see this.</p>
+  <section class="summary" id="summary" aria-label="Empire summary" hidden></section>
+    </div>
+    <div class="panel" data-panel="milestones" hidden>
+      <p class="panelnote" hidden>Open a save to see this.</p>
+  <section id="milestones" hidden>
+    <div class="histbar">
+      <button id="msadd" type="button">Add milestone</button>
+      <button id="msreset" type="button" title="Replace this game's milestones with the default ones">Restore defaults</button>
+    </div>
+    <div id="mslist"></div>
+  </section>
+    </div>
+    <div class="panel" data-panel="history" hidden>
+      <p class="panelnote" hidden>Open a save to see this.</p>
+  <section id="history" hidden>
+    <div class="histbar">
+      <select id="histchart" aria-label="Chart"></select>
+      <select id="histcity" aria-label="City"></select>
+      <label class="filebtn" for="histfiles" title="Read older saves of this game and store their turns. The page keeps showing the save you opened.">Add saves…</label>
+      <input id="histfiles" type="file" accept=".sav,.SAV" multiple hidden>
+      <button id="histclear" type="button" title="Delete every stored turn of this game from this browser">Delete this game's history</button>
+      <span class="sub" id="histstatus"></span>
+    </div>
+    <div class="histlegend" id="histlegend"></div>
+    <div id="histchartbox"></div>
+  </section>
+    </div>
+    <div class="panel" data-panel="diplomacy" hidden>
+      <p class="panelnote" hidden>Open a save to see this.</p>
+  <section id="diplomacy" hidden>
+    <div class="diplowrap"><table class="diplo"><thead><tr>
+      <th class="l">Civilization</th><th class="l">Government</th><th>Cities</th>
+      <th title="Their total culture">Culture</th>
+      <th title="Their total culture ÷ yours. 0.5× = half of yours; above 1×, they have more culture than you, which raises the culture-flip risk in your cities near them">Culture ratio</th>
+      <th class="l">Status</th><th title="Times they declared war on you">War declarations</th><th class="l" title="You have an embassy with them">Embassy</th>
+      <th class="l">Allied against you with</th>
+    </tr></thead><tbody id="diplorows"></tbody></table></div>
+    <p class="histnote">Attitude toward you isn't stored in the save: the game works it out when you open diplomacy. Only civilizations you have met are listed.</p>
+  </section>
+    </div>
+    <div class="panel" data-panel="columns" hidden>
+      <p class="panelnote" hidden>Open a save to see this.</p>
+  <div id="viewedit" hidden>
+    <div class="vehead">
+      <label>Name <input id="viewname" type="text" maxlength="40"></label>
+      <button id="viewnew" type="button">New view</button>
+      <button id="viewclear" type="button" title="Untick every column except City, to pick the ones you want">Clear all columns</button>
+      <button id="viewdelete" type="button">Delete this view</button>
+      <button id="viewreset" type="button" title="Restore the original four views">Restore default views</button>
+      <button id="viewdone" type="button" class="primary">Done</button>
+    </div>
+    <div id="viewcols" class="vecols"></div>
+  </div>
+    </div>
+    <div class="panel" data-panel="tiers" hidden>
+      <p class="panelnote" hidden>Open a save to see this.</p>
+  <div id="attnedit" hidden>
+    <div class="vehead">
+      <b>Tiers</b>
+      <button id="attnreset" type="button">Restore defaults</button>
+      <button id="attndone" type="button" class="primary">Done</button>
+    </div>
+    <div id="attnbody" class="attnbody"></div>
+  </div>
+    </div>
+    <div class="panel" data-panel="diagnostics" hidden>
+      <p class="panelnote" hidden>Open a save to see this.</p>
+  <section id="diagnostics">
     <div id="diag">No file loaded.</div>
     <button id="debug" type="button" disabled>Download debug report</button>
-  </details>
+  </section>
+    </div>
+    </div>
+  </aside>
 </main>
 
 <script>
@@ -1010,10 +1071,10 @@ const BASE_COLUMNS = [
   { key: 'name', sec: 'city', label: 'City', title: 'City name', l: true, val: (c) => c.name, csv: (c) => c.name },
   { key: 'size', sec: 'city', label: 'Size', title: 'Citizens in the city', val: (c) => c.size },
   { key: 'tier', sec: 'attn', label: 'Tier', l: true, val: (c) => tierOf (c), show: (c) => tierName (tierOf (c)), csv: (c) => tierName (tierOf (c)), cell: tierCell,
-    title: 'Tier by corruption (see Tiers…). Pick a tier to fix it for this city' },
+    title: 'Tier by corruption (see Tiers). Pick a tier to fix it for this city' },
   { key: 'attention', sec: 'attn', label: 'Attention', l: true, val: (c) => missingCount (c), show: (c) => warningsFor (c).map ((w) => w.text).join ('; '),
     cell: attentionCell, total: true, firstDir: -1,
-    title: 'Buildings missing for the city\'s tier (see Tiers…); green: in production now. Sorts the cities with the most missing first' },
+    title: 'Buildings missing for the city\'s tier (see Tiers); green: in production now. Sorts the cities with the most missing first' },
   { key: 'happy', sec: 'mood', label: 'Happy', title: 'Happy citizens', val: (c) => c.happy },
   { key: 'content', sec: 'mood', label: 'Content', title: 'Content citizens', val: (c) => c.content },
   { key: 'unhappy', sec: 'mood', label: 'Unhappy', title: 'Unhappy citizens', val: (c) => c.unhappy, cls: (c) => c.unhappy > c.happy ? 'red' : (c.unhappy ? 'amber' : '') },
@@ -1665,17 +1726,8 @@ $('histclear').addEventListener ('click', async () => {
   await HistoryStore.clear (gameIdOf (state.result)); setHistStatus ('History deleted'); refreshHistory ();
 });
 // Open or closed is remembered in this browser
-try { $('history').open = localStorage.getItem ('civ3viewer.historyOpen') === '1'; } catch (e) { /* ignore */ }
-try { $('diplomacy').open = localStorage.getItem ('civ3viewer.diplomacyOpen') === '1'; } catch (e) { /* ignore */ }
-try { $('milestones').open = localStorage.getItem ('civ3viewer.milestonesOpen') !== '0'; } catch (e) { /* ignore */ }
-$('milestones').addEventListener ('toggle', () => { try { localStorage.setItem ('civ3viewer.milestonesOpen', $('milestones').open ? '1' : '0'); } catch (e) { /* ignore */ } });
-$('diplomacy').addEventListener ('toggle', () => { try { localStorage.setItem ('civ3viewer.diplomacyOpen', $('diplomacy').open ? '1' : '0'); } catch (e) { /* ignore */ } });
-$('history').addEventListener ('toggle', () => {
-  try { localStorage.setItem ('civ3viewer.historyOpen', $('history').open ? '1' : '0'); } catch (e) { /* ignore */ }
-  if ($('history').open) drawHistory ();
-});
 let histResize = null;
-window.addEventListener ('resize', () => { clearTimeout (histResize); histResize = setTimeout (() => { if ($('history').open) drawHistory (); }, 150); });
+window.addEventListener ('resize', () => { clearTimeout (histResize); histResize = setTimeout (() => { if (panelOpen ('history')) drawHistory (); }, 150); });
 
 // ---------- column filters, as in a spreadsheet: ▾ on a column opens sort, a condition and a list of values ----------
 // Kept per view: { key: { op, a, b, out } }. op: a number condition (=, !=, >, >=, <, <=, between) or, for text,
@@ -1833,7 +1885,7 @@ function renderDiplomacy (res) {
   const mine = res.myCulture ? res.myCulture.total : 0;
   const byId = Object.fromEntries (ps.map ((p) => [p.id, p.name]));
   const order = [...ps].sort ((a, b) => (b.alive - a.alive) || (b.culture || 0) - (a.culture || 0));
-  $('diplocount').textContent = `(${ps.filter ((p) => p.alive).length} civilizations, ${ps.filter ((p) => p.alive && p.atWar).length} at war with you)`;
+  $('diplocount').textContent = `${ps.filter ((p) => p.alive).length} civs · ${ps.filter ((p) => p.alive && p.atWar).length} at war`;
   const body = $('diplorows'); body.textContent = '';
   for (const p of order) {
     const tr = document.createElement ('tr');
@@ -2015,7 +2067,7 @@ function milestoneEditor (ms) {
   ]));
   return wrap;
 }
-function refreshMilestoneViews () { renderMilestones (); if ($('history').open) drawHistory (); }
+function refreshMilestoneViews () { renderMilestones (); if (panelOpen ('history')) drawHistory (); }
 
 // Milestone marks for one history chart: a flag on each deadline in range, and target points for this chart's metrics
 function milestoneMarks (chart) {
@@ -2027,12 +2079,47 @@ function milestoneMarks (chart) {
 $('msadd').addEventListener ('click', () => {
   const id = 'm' + Date.now (), turn = (state.result.turn || 0) + 20;
   setGameMilestones ([...gameMilestones (), { id, isNew: true, name: 'New milestone', turn, targets: [{ metric: 'cities', cmp: '>=', value: state.result.cities.length + 2 }] }]);
-  state.msEdit = id; $('milestones').open = true; renderMilestones ();
+  state.msEdit = id; if (! panelOpen ('milestones')) openPanel ('milestones'); renderMilestones ();
 });
 $('msreset').addEventListener ('click', () => {
   if (! confirm ('Replace this game\'s milestones with the defaults?')) return;
   setGameMilestones (freshDefaults ()); state.msEdit = null; refreshMilestoneViews ();
 });
+
+// ---------- side menu and drawer: one panel at a time, beside the table ----------
+const PANEL_TITLES = { summary: 'Summary', milestones: 'Milestones', history: 'History', diplomacy: 'Diplomacy', columns: 'Columns', tiers: 'Tiers', diagnostics: 'Diagnostics' };
+const PANEL_CONTENT = { summary: 'summary', milestones: 'milestones', history: 'history', diplomacy: 'diplomacy', columns: 'viewedit', tiers: 'attnedit', diagnostics: 'diagnostics' };
+function panelOpen (key) { return ! $('drawer').hidden && state.panel === key; }
+function openPanel (key) {
+  if (panelOpen (key)) { closePanel (); return; }
+  state.panel = key;
+  $('drawer').hidden = false; document.body.classList.add ('drawer-open');
+  $('drawertitle').textContent = PANEL_TITLES[key];
+  for (const p of document.querySelectorAll ('.panel')) p.hidden = p.dataset.panel !== key;
+  for (const b of document.querySelectorAll ('#sidenav button, #editview')) b.classList.toggle ('active', (b.dataset.open || (b.id === 'editview' ? 'columns' : '')) === key);
+  // Editors draw only while open
+  $('viewedit').hidden = key !== 'columns'; $('attnedit').hidden = key !== 'tiers';
+  if (key === 'columns') renderViewEditor ();
+  if (key === 'tiers') renderAttentionEditor ();
+  syncPanelNote ();
+  if (key === 'history') drawHistory ();
+  fitTable ();
+}
+function closePanel () {
+  $('drawer').hidden = true; state.panel = null; document.body.classList.remove ('drawer-open');
+  $('viewedit').hidden = true; $('attnedit').hidden = true;
+  for (const b of document.querySelectorAll ('#sidenav button, #editview')) b.classList.remove ('active');
+  fitTable ();
+}
+// A panel whose content needs a save says so
+function syncPanelNote () {
+  const key = state.panel; if (! key) return;
+  const content = $(PANEL_CONTENT[key]), note = document.querySelector (`.panel[data-panel="${key}"] .panelnote`);
+  if (note) note.hidden = ! (content.hidden && ['summary', 'milestones', 'history', 'diplomacy'].includes (key));
+}
+for (const b of document.querySelectorAll ('#sidenav button')) b.addEventListener ('click', () => openPanel (b.dataset.open));
+$('drawerclose').addEventListener ('click', closePanel);
+document.addEventListener ('keydown', (e) => { if (e.key === 'Escape' && ! $('drawer').hidden && $('fmenu').hidden && ! $('help').open) closePanel (); });
 
 // Empire summary: every city, the game's own figures (what-ifs not included)
 function renderSummary (res) {
@@ -2093,12 +2180,13 @@ function render () {
   warnCache.clear ();
   const res = state.result;
   if (! res || ! res.ok) return;
-  $('drop').hidden = true; $('tablewrap').hidden = false; $('csv').disabled = false;
+  $('drop').hidden = true; $('tablewrap').hidden = false; $('searchbar').hidden = false; $('csv').disabled = false;
   $('title').textContent = `${state.fileName} · turn ${res.turn} · ${res.cities.length} ${res.cities.length === 1 ? 'city' : 'cities'}`;
 
   renderSummary (res);
   renderDiplomacy (res);
   renderMilestones ();
+  syncPanelNote ();
   const COLS = visibleColumns ();
   renderViewPicker ();
   const nTicks = tickCount ();
@@ -2125,14 +2213,20 @@ function render () {
     head.appendChild (th);
   }
 
-  const q = $('search').value.trim ().toLowerCase ();
+  // Search: every word must appear in some visible cell of the row (as shown, with what-ifs)
+  // Accents don't matter: "copan" finds Copán
+  const fold = (t) => String (t).normalize ('NFD').replace (/[\u0300-\u036f]/g, '').toLowerCase ();
+  const words = fold ($('search').value.trim ()).split (/\s+/).filter (Boolean);
+  const cellTexts = (c) => COLS.filter ((col) => ! col.chk).map ((col) => fold (col.show ? col.show (c) : col.val (c)));
+  const matches = (c) => { const t = cellTexts (c); return words.every ((w) => t.some ((x) => x.includes (w))); };
+  const hit = (text) => words.length && words.some ((w) => fold (text).includes (w));
   let sortCol = COLS.find ((c) => c.key === state.sortKey);
   if (! sortCol) { // the sorted column isn't in this view: fall back to size (or the city name) and show that
     sortCol = COLS.find ((c) => c.key === 'size') || COLS[0];
     state.sortKey = sortCol.key; state.sortDir = sortCol.key === 'size' ? -1 : 1;
   }
   const list = res.cities
-    .filter ((c) => ! q || c.name.toLowerCase ().includes (q))
+    .filter ((c) => ! words.length || matches (c))
     .filter ((c) => ! $('problems').checked || problem (c))
     .filter ((c) => ! $('attnonly').checked || needsAttention (c))
     .filter ((c) => passesFilters (c, COLS))
@@ -2148,6 +2242,7 @@ function render () {
   const sortIndex = COLS.indexOf (sortCol);
   if (sortIndex >= 0) head.children[sortIndex].setAttribute ('aria-sort', state.sortDir > 0 ? 'ascending' : 'descending');
 
+  $('searchcount').textContent = words.length ? `${list.length} of ${res.cities.length} cities match` : '';
   const problemCount = res.cities.filter (problem).length;
   $('problemslabel').textContent = `Problems only (${problemCount})`;
   $('attnlabel').textContent = `Needs attention (${res.cities.filter (needsAttention).length})`;
@@ -2167,6 +2262,7 @@ function render () {
       const td = document.createElement ('td');
       if (col.cell) {
         col.cell (c, td);
+        if (hit (col.show ? col.show (c) : col.val (c))) td.classList.add ('hit');
         if (col.l) td.classList.add ('l');
         if (col.group) td.classList.add ('group');
         tr.appendChild (td);
@@ -2193,7 +2289,7 @@ function render () {
       }
       td.textContent = col.show ? col.show (c) : col.val (c);
       if (col.tip) { const t = col.tip (c); if (t) td.title = t; }
-      td.className = [col.l ? 'l' : '', col.group ? 'group' : '', col.cls ? col.cls (c) : ''].join (' ').trim ();
+      td.className = [col.l ? 'l' : '', col.group ? 'group' : '', col.cls ? col.cls (c) : '', hit (td.textContent) ? 'hit' : ''].join (' ').trim ();
       tr.appendChild (td);
     }
     body.appendChild (tr);
@@ -2255,7 +2351,7 @@ function load (bytes, name) {
   if (res.ok) { render (); setStatus (`Loaded ${name} at ${state.loadedAt.toLocaleTimeString ()}`); recordTurn (res, name).then (refreshHistory); }
   else {
     setStatus (`Couldn't read ${name}. See Diagnostics below.`);
-    document.querySelector ('details').open = true;
+    openPanel ('diagnostics');
   }
 }
 function setStatus (s) { $('status').textContent = s; }
@@ -2269,6 +2365,13 @@ for (const t of [document.body]) {
   t.addEventListener ('drop', (e) => { e.preventDefault (); drop.classList.remove ('over'); const f = e.dataTransfer.files[0]; if (f) loadFile (f); });
 }
 $('search').addEventListener ('input', render);
+$('search').addEventListener ('keydown', (e) => { if (e.key === 'Escape' && $('search').value) { $('search').value = ''; render (); } });
+// / jumps to the search box (unless you're typing somewhere)
+document.addEventListener ('keydown', (e) => {
+  if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || $('searchbar').hidden) return;
+  const t = e.target; if (t.closest && t.closest ('input, select, textarea, dialog')) return;
+  e.preventDefault (); $('search').focus (); $('search').select ();
+});
 
 function renderViewPicker () {
   const sel = $('viewsel');
@@ -2328,8 +2431,8 @@ function renderViewEditor () {
     : '* needs the rules file (conquests.biq). The Commerce buildings columns (Library, Bank, …) appear once it is loaded. Views are saved in this browser.';
   box.appendChild (Object.assign (document.createElement ('div'), { className: 'note', textContent: note }));
 }
-$('editview').addEventListener ('click', () => { $('viewedit').hidden = ! $('viewedit').hidden; renderViewEditor (); fitTable (); });
-$('viewdone').addEventListener ('click', () => { $('viewedit').hidden = true; fitTable (); });
+$('editview').addEventListener ('click', () => openPanel ('columns'));
+$('viewdone').addEventListener ('click', closePanel);
 $('viewname').addEventListener ('input', () => { currentView ().name = $('viewname').value.trim () || 'Untitled'; saveViews (); renderViewPicker (); });
 $('viewnew').addEventListener ('click', () => {
   state.views.views.push ({ name: 'My view', columns: [...(currentView ().columns || COLUMNS.map ((c) => c.key))] });
@@ -2433,8 +2536,7 @@ $('theme').addEventListener ('click', () => {
 showTheme ();
 $('attnonly').addEventListener ('change', render);
 $('clearfilters').addEventListener ('click', () => { currentView ().filters = {}; saveViews (); closeFilterMenu (); render (); });
-$('attnbtn').addEventListener ('click', () => { $('attnedit').hidden = ! $('attnedit').hidden; renderAttentionEditor (); fitTable (); });
-$('attndone').addEventListener ('click', () => { $('attnedit').hidden = true; fitTable (); });
+$('attndone').addEventListener ('click', closePanel);
 $('attnreset').addEventListener ('click', () => { state.attention = JSON.parse (JSON.stringify (DEFAULT_ATTENTION)); saveAttention (); renderAttentionEditor (); render (); });
 
 // Folder watching (Edge/Chrome): reload the newest .SAV whenever it changes
