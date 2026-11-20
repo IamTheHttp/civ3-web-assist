@@ -5,6 +5,7 @@ and shows all your cities in sortable, customizable views:
 
 - Corruption and waste per city, with Courthouse and Police Station what-ifs.
 - Library, Marketplace, University, Bank and other building what-ifs, with their effect on gold, science and upkeep.
+- A "Try slider" what-if: judge Library, Marketplace and the other buildings at another science/gold/luxury split.
 - Growth, happiness, production, and saved custom views.
 
 Everything runs in your browser. The page uploads nothing.

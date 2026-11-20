@@ -24,6 +24,8 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
 - Corruption is applied to **raw** commerce; then the slider split (lux and gold rounded to nearest, science gets the rest);
   then building bonuses **add** (+50% each, +100% for research-doubling wonders), floored. Reproduces gold/sci/lux exactly
   in 40/42 cities; the other 2 are calibrated per city (the capital has +10 commerce not in its record; Memphis +1 gold from Wealth).
+- Slider rate limit: GOVT +520 (OpenCiv3 `ScienceRateCap`, tenths) is 10 for every government in the default rules; the player
+  confirmed 100% gold is possible under every government. The Effect columns use the save's slider, or the "Try slider" one.
 - Specialist output is stored separately (fields 528/532/536) and is NOT in the city's gold/sci/lux.
 - Difficulty optimal-cities % (DIFF +108): Chieftain 100, Warlord 95, Regent 90, Monarch 85, Emperor 80, Demigod 70,
   Deity 60, Sid 50. Difficulty corruption % (DIFF +116): 100 at every level in the default rules.

@@ -26,7 +26,8 @@ Sections: name(4) + count + entries each starting with their length. Offsets fro
   Default ids: Palace 0, Marketplace 4, Library 5, Courthouse 6, Bank 9, University 11, Research Lab 20, Police Station 28,
   Wealth 29, Forbidden Palace 56, Stock Exchange 76, Secret Police HQ 82. 83 buildings.
 - **PRTO**: +8 name[32], +84 cost (plain shields). **GOVT**: +28 name, +380 corruption level (0 minimal, 1 nuisance,
-  2 problematic, 3 rampant, 4 catastrophic, 5 communal). **DIFF**: +4 name, +108 optimal cities %. **WSIZ**: +4 optimal city number.
+  2 problematic, 3 rampant, 4 catastrophic, 5 communal), +396 number of governments, +516 required advance, +520 slider rate limit
+  (tenths; 10 in every default government, matching the game). **DIFF**: +4 name, +108 optimal cities %. **WSIZ**: +4 optimal city number.
 - **RULE**: +288 max town size, +292 max city size (OpenCiv3's 248/252 are 40 bytes off).
 - **RACE**: city-name list (24 bytes each) and great-leader list (32 each) come first, plus 4 eras × 520 bytes of art paths:
   noun at +180+shift, traits byte at +272+2080+shift (bit0 militaristic, 1 commercial, 2 expansionist, 3 scientific,

@@ -9,5 +9,7 @@
   over a big panel (the tier warnings are one Attention column, not a to-do list).
 - **Spreadsheet habits:** ▾ column menus with conditions and value lists; filters and sorting use **real** values, so
   what-if ticks never hide or move rows.
+- **Building value apart from the slider:** a Library or Marketplace multiplies only its share of the slider, so the Effect
+  columns can use a tried slider ("Try slider", default 50% science / 50% gold) instead of the save's. It is a what-if.
 - **Signals over raw numbers:** payback turns for buildings; green / amber / grey.
 - Likes sane defaults that are editable (tiers, milestones, payback limits).

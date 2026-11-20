@@ -65,6 +65,10 @@ td select.tiersel:hover { border-color: var(--line); }
 .vecols .note { flex-basis: 100%; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
 input[type=search] { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; min-width: 180px; }
 label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
+.sliderbox { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--muted); border: 1px solid transparent; border-radius: 4px; padding: 1px 4px; }
+.sliderbox.whatif { border-color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); }
+.sliderbox select { padding: 2px 4px; }
+.sliderbox select:disabled { opacity: .7; }
 .status { color: var(--muted); flex-basis: 100%; order: 99; min-height: 1.4em; } /* own line: long messages don't push the controls around */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 #drop { border: 2px dashed var(--line); border-radius: 8px; padding: 34px 20px; text-align: center; color: var(--muted); background: var(--panel); }
@@ -256,7 +260,8 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Needs attention</dt><dd>Cities missing a building their tier expects.</dd>
         <dt>Clear filters</dt><dd>Shows when a column is filtered; removes every filter in this view.</dd>
         <dt>Export CSV</dt><dd>The table as a spreadsheet file.</dd>
-        <dt>Reset what-ifs</dt><dd>Undo every tick you changed.</dd>
+        <dt>Try slider</dt><dd>Off: gold, science, luxury and the Effect columns use the slider from your save. On: they use the slider you set, for example 50% science and 50% gold, so a Marketplace isn't judged by a low gold rate. Happy and unhappy citizens aren't recalculated.</dd>
+        <dt>Reset what-ifs</dt><dd>Undo every tick you changed and turn Try slider off.</dd>
         <dt><span class="chip">◐ Auto</span></dt><dd>Theme: Auto (your system), Light or Dark.</dd>
       </dl>
 
@@ -299,6 +304,13 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <label class="chk" title="Cities missing a building their tier expects (see Tiers)"><input id="attnonly" type="checkbox"> <span id="attnlabel">Needs attention</span></label>
     <button id="clearfilters" type="button" hidden title="Remove every column filter in this view">Clear filters</button>
     <button id="csv" type="button" disabled>Export CSV</button>
+    <span class="sliderbox" id="sliderbox" hidden
+      title="Gold, science and luxury, and the Effect columns, use the slider from your save. Tick to try another one; happy and unhappy citizens are not recalculated">
+      <label class="chk"><input id="slideron" type="checkbox"> Try slider</label>
+      <select id="slsci" aria-label="Science %"></select> sci
+      <select id="sltax" aria-label="Gold %"></select> gold
+      <select id="sllux" aria-label="Luxury %"></select> lux
+    </span>
     <button id="resetwhatif" type="button" hidden>Reset what-ifs</button>
     <span class="status" id="status" aria-live="polite"></span>
   </div>
@@ -457,7 +469,7 @@ const BASE_COLUMNS = [
   { key: 'netCommerce', sec: 'commerce', label: 'Net Commerce', val: (c) => c.commerce - wi (c).corruption, show: (c) => arrow (c.commerce - c.corruption, c.commerce - wi (c).corruption),
     cls: (c) => wiCls (c, 'corruption') ? (wi (c).corruption < c.corruption ? 'better changed' : 'worse changed') : '', total: true, title: 'Commerce after corruption' },
   effectColumn ('ch', { key: 'chEffect', sec: 'corr', label: 'CH Effect', model: true,
-    title: 'What a Courthouse would gain this city per turn (science, gold and luxury from the commerce kept, after its Library, Marketplace etc.; shields kept; upkeep), and the turns until it pays back its cost. Sorts fastest payback first' }),
+    title: 'What a Courthouse would gain this city per turn (science, gold and luxury from the commerce kept, after its Library, Marketplace etc.; shields kept; upkeep), and the turns until it pays back its cost. Uses your slider, or the one in Try slider. Sorts fastest payback first' }),
   effectColumn ('ps', { key: 'psEffect', sec: 'corr', label: 'PS Effect', model: true,
     title: 'What a Police Station would gain this city per turn, and the turns until it pays back its cost. Sorts fastest payback first' }),
   { key: 'gold', sec: 'output', label: 'Gold', title: 'Gold after Marketplace etc.', val: (c) => wi (c).gold, show: (c) => arrow (c.gold, wi (c).gold), cls: (c) => wiCls (c, 'gold', true), total: true },
@@ -531,9 +543,42 @@ function tickKeysFor (c) {
   return keys;
 }
 
-// Values for the city with the given ticks (or its current ticks), anchored to the game's own numbers: only the
-// changes come from the corruption model and the commerce replay.
-function evaluate (c, ticks) {
+// ---------- tried slider: an empire-wide what-if for gold, science and luxury ----------
+// Rates in tenths, as the save stores them. The values are remembered in this browser; whether it is on is not.
+function loadSlider () {
+  try {
+    const v = JSON.parse (localStorage.getItem ('civ3viewer.slider') || 'null'), ks = [v.science, v.tax, v.luxury];
+    if (ks.every ((x) => Number.isInteger (x) && x >= 0 && x <= 10) && ks[0] + ks[1] + ks[2] === 10) return v;
+  } catch (e) { /* ignore */ }
+  return { science: 5, tax: 5, luxury: 0 };
+}
+state.slider = { on: false, rates: loadSlider () };
+// The tried slider while it is on; null: the save's slider
+function triedRates () { return state.slider.on && econOn () ? state.slider.rates : null; }
+function sliderText (r) { return `${r.science * 10}% sci / ${r.tax * 10}% gold / ${r.luxury * 10}% lux`; }
+// Changing one share moves gold (or science, when gold is changed) so the three add up to 100%
+function setRate (k, v) {
+  const r = { ...state.slider.rates, [k]: v }, other = k === 'tax' ? 'science' : 'tax';
+  const third = ['science', 'tax', 'luxury'].find ((x) => x !== k && x !== other);
+  r[other] = 10 - r[k] - r[third];
+  if (r[other] < 0) { r[third] = 10 - r[k]; r[other] = 0; }
+  state.slider.rates = r;
+  try { localStorage.setItem ('civ3viewer.slider', JSON.stringify (r)); } catch (e) { /* ignore */ }
+}
+function syncSlider () {
+  const box = $('sliderbox'), res = state.result;
+  box.hidden = ! econOn ();
+  if (box.hidden) return;
+  const on = !! triedRates (), r = on ? state.slider.rates : res.rates;
+  $('slideron').checked = on;
+  for (const [id, k] of [['slsci', 'science'], ['sltax', 'tax'], ['sllux', 'luxury']]) { $(id).value = r[k]; $(id).disabled = ! on; }
+  box.classList.toggle ('whatif', on);
+  $('slideron').parentElement.title = on ? `Tried slider. Your save: ${sliderText (res.rates)}` : `Your save's slider: ${sliderText (res.rates)}. Tick to try another one`;
+}
+
+// Values for the city with the given ticks (or its current ticks) and slider (null: the save's), anchored to the
+// game's own numbers: only the changes come from the corruption model and the commerce replay.
+function evaluate (c, ticks, rates) {
   const res = state.result, m = res.model, econ = res.econ, rules = res.rules;
   const now = { corruption: c.corruption, waste: c.waste, corruptionPct: c.corruptionPct, wastePct: c.wastePct,
                 gold: c.gold, science: c.science, luxury: c.luxury, upkeep: c.upkeep, value: 0, changed: false,
@@ -550,7 +595,7 @@ function evaluate (c, ticks) {
     const up = (rules.buildings[id] || {}).upkeep || 0;
     if (w) { set.add (id); upkeep += up; } else { set.delete (id); upkeep -= up; }
   }
-  if (! changed) return now;
+  if (! changed && ! rates) return now;
   const out = { ...now, upkeep, changed: true };
 
   // Corruption and waste: Courthouse / Police Station
@@ -568,20 +613,22 @@ function evaluate (c, ticks) {
   // Gold / science / luxury: replay the slider split and building bonuses with the new commerce and buildings
   if (econ && c.econ) {
     const net = c.econ.net + (c.corruption - out.corruption);
-    const o = econ.replay (net, set), off = c.econ.offset;
+    const o = econ.replay (net, set, rates || res.rates), off = c.econ.offset;
     out.gold = o.gold + off.gold; out.science = o.science + off.science; out.luxury = o.luxury + off.luxury;
   }
   out.value = (out.gold - c.gold) + (out.science - c.science) + (out.luxury - c.luxury) + (c.waste - out.waste) - (out.upkeep - c.upkeep);
   return out;
 }
-// The city's values with your what-if ticks; while filtering, its real values (filters pick cities by what they are)
+// The city's values with your what-if ticks and tried slider; while filtering and sorting, its real values (filters
+// pick cities by what they are)
 function wi (c) {
-  if (! state.realValues) return evaluate (c, null);
+  if (! state.realValues) return evaluate (c, null, triedRates ());
   const real = {}; for (const k of tickKeysFor (c)) real[k] = hasNow (c, k);
-  return evaluate (c, real);
+  return evaluate (c, real, null);
 }
 
-// What adding one building would do to the city as it is now (ignoring your ticks)
+// What adding one building would do to the city as it is now (ignoring your ticks), at the slider in use: the save's,
+// or the tried one while it is on
 function effectOf (c, key) {
   const res = state.result;
   const id = buildingIdOf (c, key);
@@ -591,11 +638,13 @@ function effectOf (c, key) {
   const bd = res.rules.buildings[id];
   if (bd && bd.requires >= 0 && ! c.buildings.has (bd.requires))
     return { value: -1e7, text: `needs ${res.rules.buildings[bd.requires] ? res.rules.buildings[bd.requires].name : '?'}` };
-  const ticks = {}; for (const k of tickKeysFor (c)) ticks[k] = hasNow (c, k);
-  ticks[key] = true;
-  const e = evaluate (c, ticks);
+  const rates = triedRates (), real = {};
+  for (const k of tickKeysFor (c)) real[k] = hasNow (c, k);
+  const base = evaluate (c, real, rates), e = evaluate (c, { ...real, [key]: true }, rates);
   const parts = [], sign = (v) => (v > 0 ? '+' : '') + v;
-  const dg = e.gold - c.gold, ds = e.science - c.science, dl = e.luxury - c.luxury, dsh = c.waste - e.waste, du = e.upkeep - c.upkeep;
+  const dg = e.gold - base.gold, ds = e.science - base.science, dl = e.luxury - base.luxury, dsh = base.waste - e.waste, du = e.upkeep - base.upkeep;
+  const gain = e.value - base.value;
+  const at = res.rates ? ` At ${rates ? 'the tried slider' : 'your slider'}: ${sliderText (rates || res.rates)}.` : '';
   if (key === 'ch' || key === 'ps') {
     // What the commerce kept turns into (after Library, Marketplace etc.), and the shields kept
     if (ds) parts.push (`${sign (ds)} sci`);
@@ -611,10 +660,10 @@ function effectOf (c, key) {
   }
   if (du) parts.push (`−${du} upk`);
   // Payback: build cost ÷ net gain per turn (gain = science, gold, luxury and shields kept, minus upkeep; counted 1:1)
-  const cost = buildCost (id), payback = e.value > 0 && cost ? Math.ceil (cost / e.value) : null;
+  const cost = buildCost (id), payback = gain > 0 && cost ? Math.ceil (cost / gain) : null;
   const tail = payback ? ` · ${payback} ${payback === 1 ? 'turn' : 'turns'}` : ' · never';
-  return { value: e.value, payback, sort: payback ? -payback : -1e6 + e.value, text: parts.join (', ') + tail,
-           tip: payback ? `Costs ${cost} shields and pays back in ${payback} turns (net +${e.value} per turn)` : `Costs ${cost} shields; the gain doesn't cover its upkeep, so it never pays back` };
+  return { value: gain, payback, sort: payback ? -payback : -1e6 + gain, text: parts.join (', ') + tail,
+           tip: (payback ? `Costs ${cost} shields and pays back in ${payback} turns (net +${gain} per turn).` : `Costs ${cost} shields; the gain doesn't cover its upkeep, so it never pays back.`) + at };
 }
 // Shields to build it (accelerated production halves costs, as for the city's current build)
 function buildCost (id) {
@@ -648,7 +697,7 @@ function rebuildColumns () {
     const bb = bonusBuildings ();
     for (const b of bb) extra.push ({ key: 'bt:' + b.name, sec: 'bonus', label: b.short, chk: 'b' + b.id, econ: true, title: `${b.name} (tick to try it)` });
     for (const b of bb) extra.push (effectColumn ('b' + b.id, { key: 'be:' + b.name, sec: 'bonusfx', label: b.short + ' Effect', econ: true,
-      title: `What a ${b.name} would gain this city per turn, and the turns until it pays back its cost. Sorts fastest payback first` }));
+      title: `What a ${b.name} would gain this city per turn, and the turns until it pays back its cost. Uses your slider, or the one in Try slider. Sorts fastest payback first` }));
   }
   const at = BASE_COLUMNS.findIndex ((c) => c.key === 'upkeep');
   COLUMNS = [...BASE_COLUMNS.slice (0, at), ...extra, ...BASE_COLUMNS.slice (at)];
@@ -1582,7 +1631,8 @@ function render () {
   syncPanelNote ();
   const COLS = visibleColumns ();
   renderViewPicker ();
-  const nTicks = tickCount ();
+  syncSlider ();
+  const nTicks = tickCount () + (triedRates () ? 1 : 0);
   $('resetwhatif').hidden = nTicks === 0;
   $('resetwhatif').textContent = `Reset what-ifs (${nTicks})`;
   const head = $('headrow'); head.textContent = '';
@@ -1733,7 +1783,7 @@ function load (bytes, name) {
   try { res = Civ3Parse.parse (bytes, state.rules); }
   catch (e) { res = { ok: false, cities: [], diag: ['Error while reading: ' + e.message] }; }
   const gameId = gameIdOf (res);
-  if (gameId !== state.gameId) state.toggles = {}; // a different game: what-ifs from the previous one don't apply
+  if (gameId !== state.gameId) { state.toggles = {}; state.slider.on = false; } // a different game: what-ifs from the previous one don't apply
   state.gameId = gameId;
   if (res.ok) {
     const live = new Set (res.cities.map ((c) => c.id + ':' + c.name));
@@ -1848,7 +1898,12 @@ $('viewreset').addEventListener ('click', () => {
   state.views = { views: JSON.parse (JSON.stringify (DEFAULT_VIEWS)), current: 0, seen: DEFAULT_VIEWS.map ((d) => d.name) }; saveViews (); renderViewEditor (); render (); renderViewPicker ();
 });
 renderViewPicker ();
-$('resetwhatif').addEventListener ('click', () => { state.toggles = {}; render (); });
+$('resetwhatif').addEventListener ('click', () => { state.toggles = {}; state.slider.on = false; render (); });
+for (const id of ['slsci', 'sltax', 'sllux'])
+  for (let v = 0; v <= 10; v++) $(id).appendChild (Object.assign (document.createElement ('option'), { value: v, textContent: v * 10 + '%' }));
+$('slideron').addEventListener ('change', () => { state.slider.on = $('slideron').checked; render (); });
+for (const [id, k] of [['slsci', 'science'], ['sltax', 'tax'], ['sllux', 'luxury']])
+  $(id).addEventListener ('change', () => { setRate (k, +$(id).value); render (); });
 
 // Ticks follow prerequisites: ticking a University also ticks its Library; unticking a Library unticks what needs it
 function setTick (c, key, on) {

@@ -329,8 +329,9 @@ const Civ3Parse = (() => {
 				}
 				return { sci, gold, lux };
 			};
-			const replay = (net, set) => {
-				const lux = Math.floor (net * R.luxury / 10 + 0.5), gold = Math.floor (net * R.tax / 10 + 0.5), sci = net - lux - gold;
+			// rates: a slider in tenths ({ luxury, science, tax }); the save's slider when not given
+			const replay = (net, set, rates = R) => {
+				const lux = Math.floor (net * rates.luxury / 10 + 0.5), gold = Math.floor (net * rates.tax / 10 + 0.5), sci = net - lux - gold;
 				const m = bonus (set);
 				return { gold: Math.floor (gold * m.gold + 1e-9), science: Math.floor (sci * m.sci + 1e-9), luxury: Math.floor (lux * m.lux + 1e-9) };
 			};
