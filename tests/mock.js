@@ -1,5 +1,6 @@
 // Writes a mock rules file and a mock save, to try the viewer without game files:
-//   node tests/mock.js  ->  local-data/mock.biq, local-data/mock.SAV
+//   node tests/mock.js            ->  local-data/mock.biq, local-data/mock.SAV
+//   node tests/mock.js --turns 30 ->  also local-data/mock-history/mock-t<turn>.SAV, one save per turn of the same game
 // The save holds 42 cities of one player. Corruption, waste and gold/science/luxury are filled in with the viewer's
 // own model, so the save is self-consistent; the numbers are invented, not taken from a real game.
 global.Blast = require ('../src/blast.js');
@@ -62,11 +63,11 @@ function makeRules () {
 }
 
 // Save: header, a small embedded scenario, GAME, LEAD, WRLD, then the cities
-function makeSave (rules, cities, fill) {
+function makeSave (rules, cities, fill, turn = 194) {
 	const W = writer (2000000);
 	W.str (0, 'CIV3');
 	W.str (562, 'VER#'); W.w32 (38, 8); W.p = 570;
-	const g = W.p; W.str (g, 'GAME'); W.w32 (g + 24, 2 /* Monarch */); W.w32 (g + 36, cities.length); W.w32 (g + 64, 194); W.w32 (g + 80, 1 << 1); W.p += 200;
+	const g = W.p; W.str (g, 'GAME'); W.w32 (g + 24, 2 /* Monarch */); W.w32 (g + 36, cities.length); W.w32 (g + 64, turn); W.w32 (g + 80, 1 << 1); W.p += 200;
 	W.str (W.p, 'LEAD'); W.w32 (W.p + 4, 420); W.w32 (W.p + 8, 1); W.w32 (W.p + 12, 0); W.w32 (W.p + 24, cities[0].id); W.w32 (W.p + 140, 2 /* Republic */);
 	W.w32 (W.p + 400, 0); W.w32 (W.p + 404, 6); W.w32 (W.p + 408, 4); W.p += 440;
 	W.str (W.p, 'WRLD'); W.w32 (W.p + 4, 2); W.w32 (W.p + 22, 100); W.w32 (W.p + 42, 100); W.w32 (W.p + 174, 4242); W.buf[W.p + 178] = 1; W.w32 (W.p + 238, 1); W.p += 300;
@@ -74,7 +75,7 @@ function makeSave (rules, cities, fill) {
 		const o = W.p, v = fill (c);
 		W.str (o, 'CITY'); W.w32 (o + 4, 136); W.w32 (o + 8, c.id); W.w16 (o + 12, c.x); W.w16 (o + 14, c.y); W.buf[o + 16] = 1;
 		W.w32 (o + 20, c.buildings.reduce ((n, k) => n + BUILDINGS[k][2], 0)); W.buf[o + 24] = c.celebrating ? 2 : 0;
-		W.w32 (o + 40, c.storedFood); W.w32 (o + 44, int (0, 60)); W.w32 (o + 52, 1); W.w32 (o + 56, 2); W.w32 (o + 220, int (1, 12));
+		W.w32 (o + 40, Math.min (c.storedFood, c.size > 8 ? 60 : 40)); W.w32 (o + 44, int (0, 60)); W.w32 (o + 52, 1); W.w32 (o + 56, 2); W.w32 (o + 220, int (1, 12));
 		W.w32 (o + 360, c.foodTiles); W.w32 (o + 364, c.shields); W.w32 (o + 368, c.commerce); W.str (o + 392, c.name);
 		W.w32 (o + 492, 2 * c.size); W.w32 (o + 496, v.waste); W.w32 (o + 500, v.corruption); W.w32 (o + 504, c.foodTiles - 2 * c.size);
 		W.w32 (o + 508, c.shields - v.waste); W.w32 (o + 512, v.gold + v.science + v.luxury);
@@ -135,3 +136,28 @@ fs.writeFileSync (path.join (outDir, 'mock.SAV'), sav);
 const check = P.parse (sav, rules);
 console.log (check.diag.join ('\n'));
 console.log (`wrote ${path.join (outDir, 'mock.biq')} and mock.SAV`);
+
+// A game over several turns: the empire grows from 30 to 42 cities and its cities grow; corruption etc. from the model
+const turnsArg = process.argv.indexOf ('--turns');
+if (turnsArg > 0) {
+	const N = Math.max (2, +process.argv[turnsArg + 1] || 30), dir = path.join (outDir, 'mock-history');
+	fs.mkdirSync (dir, { recursive: true });
+	for (let k = 0; k < N; k++) {
+		const f = 0.55 + 0.45 * k / (N - 1), turn = 194 - (N - 1) + k;
+		const list = cities.slice (0, 30 + Math.round (12 * k / (N - 1))).map ((c) => {
+			const size = Math.max (1, Math.round (c.size * f)), surplus = c.foodTiles - 2 * c.size;
+			const moods = c.moods.slice (0, size); while (moods.length < size) moods.push (1);
+			return { ...c, size, moods, foreign: Math.min (c.foreign, size), foodTiles: 2 * size + surplus,
+			         shields: Math.max (1, Math.round (c.shields * f * (0.9 + 0.2 * rnd ()))), commerce: Math.max (1, Math.round (c.commerce * f * (0.9 + 0.2 * rnd ()))) };
+		});
+		const pass1 = P.parse (makeSave (rules, list, zero, turn), rules), ids = Object.fromEntries (pass1.cities.map ((c) => [c.id, c]));
+		const sv = makeSave (rules, list, (c) => {
+			const pc = ids[c.id], ni = pc.reducers.length;
+			const corruption = Math.round (c.commerce * pass1.model.shareFor (pc, ni, false));
+			const waste = Math.floor (c.shields * pass1.model.shareFor (pc, ni, true) + 1e-9);
+			return { corruption, waste, ...pass1.econ.replay (c.commerce - corruption, pc.buildings) };
+		}, turn);
+		fs.writeFileSync (path.join (dir, `mock-t${turn}.SAV`), sv);
+	}
+	console.log (`wrote ${N} saves (turns ${194 - N + 1}-194) to ${dir}`);
+}

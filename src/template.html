@@ -8,6 +8,7 @@
 :root {
   --bg: #eef0ec; --panel: #ffffff; --ink: #1d2422; --muted: #5d6a64; --line: #d3d9d4; --stripe: #f5f7f4;
   --gold: #8a6a12; --head: #e6e9e3; --red: #b42318; --amber: #a05a00; --green: #2e7d32; --accent: #2f6f8f;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
   --mono: "Cascadia Mono", Consolas, "Courier New", monospace;
   --sans: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
   color-scheme: light; box-sizing: border-box;
@@ -17,12 +18,14 @@
   :root:not([data-theme="light"]) {
     --bg: #14181b; --panel: #1c2226; --ink: #e5eaec; --muted: #94a1a8; --line: #2e373d; --stripe: #20272c;
     --gold: #e0b43a; --head: #252d33; --red: #ff6b5e; --amber: #ffb347; --green: #8bd48f; --accent: #6cb6d9;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #14181b; --panel: #1c2226; --ink: #e5eaec; --muted: #94a1a8; --line: #2e373d; --stripe: #20272c;
   --gold: #e0b43a; --head: #252d33; --red: #ff6b5e; --amber: #ffb347; --green: #8bd48f; --accent: #6cb6d9;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70;
   color-scheme: dark;
 }
 *, *::before, *::after { box-sizing: inherit; }
@@ -62,7 +65,7 @@ td select.tiersel:hover { border-color: var(--line); }
 .vecols .note { flex-basis: 100%; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
 input[type=search] { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; min-width: 180px; }
 label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
-.status { color: var(--muted); margin-left: auto; }
+.status { color: var(--muted); flex-basis: 100%; order: 99; min-height: 1.4em; } /* own line: long messages don't push the controls around */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 #drop { border: 2px dashed var(--line); border-radius: 8px; padding: 34px 20px; text-align: center; color: var(--muted); background: var(--panel); }
 #drop.over { border-color: var(--accent); color: var(--ink); }
@@ -112,6 +115,28 @@ summary { cursor: pointer; color: var(--muted); }
 .legend { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
 .legend b { color: var(--ink); font-weight: 600; }
 #theme { margin-left: auto; }
+.hist { margin: 0 0 10px; }
+.histbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+#histchartbox { position: relative; width: 100%; overflow: hidden; }
+#histchartbox svg { display: block; max-width: 100%; height: auto; }
+.histnote { color: var(--muted); margin: 4px 0 8px; }
+.histlegend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--ink); font-size: 12.5px; }
+.histkey { display: inline-flex; align-items: center; gap: 6px; }
+.histkey i, .htip i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; }
+i.s1 { background: var(--s1); } i.s2 { background: var(--s2); } i.s3 { background: var(--s3); }
+.hline { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.hline.s1 { stroke: var(--s1); } .hline.s2 { stroke: var(--s2); } .hline.s3 { stroke: var(--s3); }
+.hdot { stroke: var(--panel); stroke-width: 2; }
+.hdot.s1 { fill: var(--s1); } .hdot.s2 { fill: var(--s2); } .hdot.s3 { fill: var(--s3); }
+.hgrid { stroke: var(--line); stroke-width: 1; }
+.haxis { fill: var(--muted); font-size: 11px; }
+.hlabel { fill: var(--ink); font-size: 12px; }
+.hloaded { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.hloadedlabel { fill: var(--ink); font-weight: 600; }
+.hcross { stroke: var(--muted); stroke-width: 1; }
+.htip { position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; font-size: 12.5px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.15); pointer-events: none; white-space: nowrap; }
+.htip div { display: flex; align-items: center; gap: 6px; }
 </style>
 <script>
 // Apply the saved theme before the page draws, so it doesn't flash in the other one
@@ -175,6 +200,20 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
 
   <section class="summary" id="summary" aria-label="Empire summary" hidden></section>
 
+  <details id="history" class="hist" hidden>
+    <summary>History <span id="histcount"></span></summary>
+    <div class="histbar">
+      <select id="histchart" aria-label="Chart"></select>
+      <select id="histcity" aria-label="City"></select>
+      <label class="filebtn" for="histfiles" title="Read older saves of this game and store their turns. The page keeps showing the save you opened.">Add saves…</label>
+      <input id="histfiles" type="file" accept=".sav,.SAV" multiple hidden>
+      <button id="histclear" type="button" title="Delete every stored turn of this game from this browser">Delete this game's history</button>
+      <span class="sub" id="histstatus"></span>
+    </div>
+    <div class="histlegend" id="histlegend"></div>
+    <div id="histchartbox"></div>
+  </details>
+
 
   <div class="tablewrap" id="tablewrap" hidden>
     <table>
@@ -191,6 +230,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <b>CH</b> / <b>PS</b>: the city has a Courthouse / Police Station. Tick or untick to see what that would change: corruption, waste and their shares show <i>now → then</i>. A what-if tick (something the city doesn't really have, or a building you've unticked) is <b>outlined in amber</b>; plain ticks are what the city has.
     <b>CH Effect</b> / <b>PS Effect</b>: what building a Courthouse / Police Station would gain the city each turn: commerce kept, after its Library, Marketplace etc. (<b>com</b>), shields kept (<b>shd</b>) and the building's gold upkeep (<b>upk</b>). The two buildings reduce corruption the same way; the Police Station costs more upkeep. Sorting by them ranks the best places, upkeep included.
     <b>Lib, Univ, Lab, Mkt, Bank, SE</b> (and their <b>Effect</b> columns) work the same way for buildings that boost science or gold: the effect is what the building would add to this city, worked out the way the game does it (your slider split, then the building bonuses), minus upkeep. Ticking a building also ticks what it requires.
+    <b>History</b>: each save you open stores its turn in this browser, per game; the chart marks the turn you have loaded.
     <b>Tier</b>: the city's tier by corruption; pick one to fix it for that city. <b>Attention</b>: buildings the city's tier expects that it doesn't have (<i>Tiers…</i>); green: being built now. Coastal and river buildings count only where they can be built.
     Use <b>View</b> to switch between column sets and <b>Columns…</b> to choose what a view shows.
     <b>Corrupt %</b> over the cap shows the uncapped parts in brackets: distance to the palace + city rank (hover for details).
@@ -635,6 +675,212 @@ function tierCell (c, td) {
   td.appendChild (sel);
 }
 
+// ---------- history: one snapshot per game and turn, kept in this browser (IndexedDB) ----------
+const HistoryStore = (() => {
+  let dbp = null;
+  const open = () => dbp || (dbp = new Promise ((ok, fail) => {
+    const r = indexedDB.open ('civ3viewer', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore ('snapshots', { keyPath: ['game', 'turn'] });
+    r.onsuccess = () => ok (r.result); r.onerror = () => fail (r.error);
+  }));
+  const run = async (mode, fn) => {
+    const db = await open ();
+    return new Promise ((ok, fail) => {
+      const tx = db.transaction ('snapshots', mode), req = fn (tx.objectStore ('snapshots'));
+      tx.oncomplete = () => ok (req && req.result); tx.onerror = () => fail (tx.error);
+    });
+  };
+  const range = (game) => IDBKeyRange.bound ([game, -1e9], [game, 1e9]);
+  return {
+    put: (snap) => run ('readwrite', (s) => s.put (snap)),
+    list: (game) => run ('readonly', (s) => s.getAll (range (game))),
+    clear: (game) => run ('readwrite', (s) => s.delete (range (game)))
+  };
+}) ();
+
+// Identifies a game across turns: world seed, map size and player number don't change during a game
+function gameIdOf (res) { return res.world ? `${res.world.seed}|${res.world.width}x${res.world.height}|${res.player}` : null; }
+
+// What a turn keeps: empire totals and, per city, the same figures
+function metricsOf (list) {
+  const sum = (f) => list.reduce ((n, c) => n + f (c), 0);
+  return {
+    cities: list.length, citizens: sum ((c) => c.size), commerce: sum ((c) => c.commerce), corruption: sum ((c) => c.corruption),
+    shields: sum ((c) => c.shields), waste: sum ((c) => c.waste),
+    gold: sum ((c) => c.gold + c.specialistOutput.gold), science: sum ((c) => c.science + c.specialistOutput.science),
+    luxury: sum ((c) => c.luxury + c.specialistOutput.luxury), upkeep: sum ((c) => c.upkeep), culture: sum ((c) => c.culture),
+    foodSurplus: sum ((c) => Math.max (0, c.foodNet)), foodWasted: sum ((c) => c.growthBlocked && c.foodNet > 0 ? c.foodNet : 0)
+  };
+}
+function snapshotOf (res, fileName) {
+  return { game: gameIdOf (res), turn: res.turn, savedAt: Date.now (), fileName,
+           civ: res.rules && res.rules.civs[res.playerRace] ? res.rules.civs[res.playerRace].noun : '',
+           totals: metricsOf (res.cities),
+           cities: res.cities.map ((c) => ({ id: c.id, name: c.name, ...metricsOf ([c]) })) };
+}
+async function recordTurn (res, fileName) {
+  if (! res.ok || ! gameIdOf (res) || ! window.indexedDB) return;
+  try { await HistoryStore.put (snapshotOf (res, fileName)); } catch (e) { setHistStatus ('History could not be saved in this browser: ' + e.message); }
+}
+
+const pct = (a, b) => b ? Math.round (1000 * a / b) / 10 : 0;
+const HIST_CHARTS = [
+  { key: 'commerce', name: 'Commerce', series: [['Commerce', (m) => m.commerce], ['Net commerce', (m) => m.commerce - m.corruption]] },
+  { key: 'shields', name: 'Shields', series: [['Shields', (m) => m.shields], ['Net shields', (m) => m.shields - m.waste]] },
+  { key: 'output', name: 'Science, gold, luxury', series: [['Science', (m) => m.science], ['Gold', (m) => m.gold], ['Luxury', (m) => m.luxury]] },
+  { key: 'losses', name: 'Corruption % and waste %', unit: '%', series: [['Corruption %', (m) => pct (m.corruption, m.commerce)], ['Waste %', (m) => pct (m.waste, m.shields)]] },
+  { key: 'food', name: 'Food surplus', series: [['Surplus', (m) => m.foodSurplus], ['Wasted at size limit', (m) => m.foodWasted]] },
+  { key: 'citizens', name: 'Citizens', series: [['Citizens', (m) => m.citizens]] },
+  { key: 'cities', name: 'Cities', empireOnly: true, series: [['Cities', (m) => m.cities]] },
+  { key: 'culture', name: 'Culture per turn', series: [['Culture', (m) => m.culture]] }
+];
+let histSnaps = [];
+function setHistStatus (s) { $('histstatus').textContent = s; }
+
+async function refreshHistory () {
+  const res = state.result, game = res && res.ok ? gameIdOf (res) : null;
+  $('history').hidden = ! game || ! window.indexedDB;
+  if ($('history').hidden) return;
+  try { histSnaps = (await HistoryStore.list (game)).sort ((a, b) => a.turn - b.turn); }
+  catch (e) { histSnaps = []; setHistStatus ('History is not available in this browser: ' + e.message); }
+  const n = histSnaps.length;
+  $('histcount').textContent = n ? `(${n} ${n === 1 ? 'turn' : 'turns'}${n > 1 ? `: ${histSnaps[0].turn}–${histSnaps[n - 1].turn}` : ''})` : '';
+  // City picker: cities seen in any turn, by their latest name
+  const sel = $('histcity'), keep = sel.value, names = new Map ();
+  for (const s of histSnaps) for (const c of s.cities) names.set (c.id, c.name);
+  sel.textContent = '';
+  sel.appendChild (Object.assign (document.createElement ('option'), { value: '', textContent: 'Whole empire' }));
+  [...names.entries ()].sort ((a, b) => a[1].localeCompare (b[1])).forEach (([id, name]) =>
+    sel.appendChild (Object.assign (document.createElement ('option'), { value: id, textContent: name })));
+  sel.value = names.has (+keep) ? keep : '';
+  drawHistory ();
+}
+
+function niceStep (max, ticks) {
+  const raw = max / ticks, mag = Math.pow (10, Math.floor (Math.log10 (raw || 1))), f = raw / mag;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * mag;
+}
+function drawHistory () {
+  const box = $('histchartbox'), legend = $('histlegend');
+  box.textContent = ''; legend.textContent = '';
+  const chart = HIST_CHARTS.find ((c) => c.key === $('histchart').value) || HIST_CHARTS[0];
+  const cityId = $('histcity').value === '' ? null : +$('histcity').value;
+  $('histchart').querySelector ('option[value="cities"]').disabled = cityId !== null;
+  const points = histSnaps.map ((s) => ({ turn: s.turn, m: cityId === null ? s.totals : (s.cities.find ((c) => c.id === cityId) || null) })).filter ((p) => p.m);
+  const loaded = state.result && state.result.turn;
+  if (histSnaps.length < 2)
+    box.appendChild (Object.assign (document.createElement ('p'), { className: 'histnote',
+      textContent: 'One turn stored so far. Each save you open adds its turn. Use Add saves… for older saves, or Watch autosave folder to add every turn as you play.' }));
+  if (! points.length) return;
+
+  const series = chart.series.map (([name, f], k) => ({ name, k, values: points.map ((p) => ({ turn: p.turn, v: f (p.m) })) }));
+  if (series.length > 1) for (const s of series) {
+    const item = document.createElement ('span'); item.className = 'histkey';
+    item.appendChild (Object.assign (document.createElement ('i'), { className: 's' + (s.k + 1) }));
+    item.appendChild (document.createTextNode (s.name)); legend.appendChild (item);
+  }
+
+  const W = Math.max (320, box.clientWidth || 800), H = 260, L = 46, R = 120, T = 22, B = 28;
+  const turns = points.map ((p) => p.turn);
+  let t0 = Math.min (...turns, loaded ?? Infinity), t1 = Math.max (...turns, loaded ?? -Infinity);
+  if (t0 === t1) { t0 -= 1; t1 += 1; }
+  const vmax = Math.max (1, ...series.flatMap ((s) => s.values.map ((p) => p.v)));
+  const step = niceStep (vmax, 4), ymax = chart.unit === '%' ? Math.min (100, Math.ceil (vmax / step) * step) || 100 : Math.ceil (vmax / step) * step;
+  const x = (t) => L + (W - L - R) * (t - t0) / (t1 - t0), y = (v) => T + (H - T - B) * (1 - v / ymax);
+  const NS = 'http://www.w3.org/2000/svg', svg = document.createElementNS (NS, 'svg');
+  const mk = (tag, attrs, parent = svg) => { const e = document.createElementNS (NS, tag); for (const [a, v] of Object.entries (attrs)) e.setAttribute (a, v); parent.appendChild (e); return e; };
+  svg.setAttribute ('viewBox', `0 0 ${W} ${H}`); svg.setAttribute ('width', W); svg.setAttribute ('height', H);
+  svg.setAttribute ('role', 'img'); svg.setAttribute ('aria-label', `${chart.name} by turn${cityId !== null ? ' for ' + $('histcity').selectedOptions[0].text : ''}`);
+  // Grid and axes: recessive
+  for (let v = 0; v <= ymax + 1e-9; v += step) {
+    mk ('line', { x1: L, x2: W - R, y1: y (v), y2: y (v), class: 'hgrid' });
+    mk ('text', { x: L - 6, y: y (v) + 4, class: 'haxis', 'text-anchor': 'end' }).textContent = (Math.round (v * 10) / 10).toLocaleString () + (chart.unit || '');
+  }
+  const tstep = Math.max (1, niceStep (t1 - t0, 6));
+  for (let t = Math.ceil (t0 / tstep) * tstep; t <= t1; t += tstep)
+    mk ('text', { x: x (t), y: H - 8, class: 'haxis', 'text-anchor': 'middle' }).textContent = t;
+  mk ('text', { x: W - R + 4, y: H - 8, class: 'haxis' }).textContent = 'turn';
+  // Loaded turn
+  if (loaded != null) {
+    mk ('line', { x1: x (loaded), x2: x (loaded), y1: T - 6, y2: H - B, class: 'hloaded' });
+    mk ('text', { x: x (loaded), y: T - 10, class: 'haxis hloadedlabel', 'text-anchor': x (loaded) > W - R - 60 ? 'end' : 'middle' }).textContent = `Loaded: turn ${loaded}`;
+  }
+  // Lines, markers when there are few points, direct labels at the right end
+  const ends = [];
+  for (const s of series) {
+    const d = s.values.map ((p, i) => `${i ? 'L' : 'M'}${x (p.turn).toFixed (1)},${y (p.v).toFixed (1)}`).join (' ');
+    mk ('path', { d, class: 'hline s' + (s.k + 1) });
+    if (s.values.length <= 40) for (const p of s.values) mk ('circle', { cx: x (p.turn), cy: y (p.v), r: 4, class: 'hdot s' + (s.k + 1) });
+    const last = s.values[s.values.length - 1];
+    ends.push ({ s, x: x (last.turn), y: y (last.v), v: last.v });
+  }
+  ends.sort ((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max (ends[i].y, ends[i - 1].y + 14);
+  for (const e of ends) {
+    const t = mk ('text', { x: W - R + 8, y: e.y + 4, class: 'hlabel' });
+    t.textContent = `${e.s.name} ${e.v.toLocaleString ()}${chart.unit || ''}`;
+  }
+  // Hover: crosshair on the nearest stored turn, values in a tooltip
+  const cross = mk ('line', { y1: T, y2: H - B, class: 'hcross', visibility: 'hidden' });
+  const hit = mk ('rect', { x: L, y: T, width: W - L - R, height: H - T - B, fill: 'transparent' });
+  const tip = Object.assign (document.createElement ('div'), { className: 'htip', hidden: true });
+  const move = (ev) => {
+    const r = svg.getBoundingClientRect (), px = (ev.clientX - r.left) * W / r.width;
+    let best = points[0];
+    for (const p of points) if (Math.abs (x (p.turn) - px) < Math.abs (x (best.turn) - px)) best = p;
+    cross.setAttribute ('x1', x (best.turn)); cross.setAttribute ('x2', x (best.turn)); cross.setAttribute ('visibility', 'visible');
+    tip.textContent = '';
+    tip.appendChild (Object.assign (document.createElement ('b'), { textContent: `Turn ${best.turn}${best.turn === loaded ? ' (loaded)' : ''}` }));
+    for (const s of series) {
+      const row = document.createElement ('div'), v = s.values.find ((p) => p.turn === best.turn).v;
+      row.appendChild (Object.assign (document.createElement ('i'), { className: 's' + (s.k + 1) }));
+      row.appendChild (document.createTextNode (`${s.name}: ${v.toLocaleString ()}${chart.unit || ''}`));
+      tip.appendChild (row);
+    }
+    tip.hidden = false;
+    const left = x (best.turn) * r.width / W;
+    tip.style.left = Math.min (r.width - tip.offsetWidth - 4, Math.max (0, left + 12)) + 'px';
+    tip.style.top = '8px';
+  };
+  hit.addEventListener ('pointermove', move);
+  hit.addEventListener ('pointerleave', () => { tip.hidden = true; cross.setAttribute ('visibility', 'hidden'); });
+  box.appendChild (svg); box.appendChild (tip);
+}
+
+// Older saves: read each one and store its turn; the page keeps showing the save you opened
+async function addSavesToHistory (files) {
+  let added = 0, other = 0, failed = 0;
+  const current = state.result ? gameIdOf (state.result) : null;
+  for (const f of files) {
+    setHistStatus (`Reading ${f.name}…`);
+    try {
+      const res = Civ3Parse.parse (new Uint8Array (await f.arrayBuffer ()), state.rules);
+      if (! res.ok || ! gameIdOf (res)) { failed++; continue; }
+      await recordTurn (res, f.name);
+      if (gameIdOf (res) === current) added++; else other++;
+    } catch (e) { failed++; }
+  }
+  setHistStatus (`Added ${added} ${added === 1 ? 'turn' : 'turns'}` + (other ? `; ${other} from another game (shown when you open that game)` : '') + (failed ? `; ${failed} couldn't be read` : ''));
+  refreshHistory ();
+}
+
+for (const c of HIST_CHARTS) $('histchart').appendChild (Object.assign (document.createElement ('option'), { value: c.key, textContent: c.name }));
+$('histchart').addEventListener ('change', drawHistory);
+$('histcity').addEventListener ('change', drawHistory);
+$('histfiles').addEventListener ('change', (e) => { const f = [...e.target.files]; e.target.value = ''; if (f.length) addSavesToHistory (f); });
+$('histclear').addEventListener ('click', async () => {
+  if (! state.result || ! confirm ('Delete every stored turn of this game from this browser?')) return;
+  await HistoryStore.clear (gameIdOf (state.result)); setHistStatus ('History deleted'); refreshHistory ();
+});
+// Open or closed is remembered in this browser
+try { $('history').open = localStorage.getItem ('civ3viewer.historyOpen') === '1'; } catch (e) { /* ignore */ }
+$('history').addEventListener ('toggle', () => {
+  try { localStorage.setItem ('civ3viewer.historyOpen', $('history').open ? '1' : '0'); } catch (e) { /* ignore */ }
+  if ($('history').open) drawHistory ();
+});
+let histResize = null;
+window.addEventListener ('resize', () => { clearTimeout (histResize); histResize = setTimeout (() => { if ($('history').open) drawHistory (); }, 150); });
+
 // Empire summary: every city, the game's own figures (what-ifs not included)
 function renderSummary (res) {
   const cs = res.cities, sum = (f) => cs.reduce ((n, c) => n + f (c), 0);
@@ -829,7 +1075,7 @@ function load (bytes, name) {
   state.lastBytes = bytes;
   try { res = Civ3Parse.parse (bytes, state.rules); }
   catch (e) { res = { ok: false, cities: [], diag: ['Error while reading: ' + e.message] }; }
-  const gameId = res.world ? `${res.world.seed}|${res.world.width}x${res.world.height}|${res.player}` : null;
+  const gameId = gameIdOf (res);
   if (gameId !== state.gameId) state.toggles = {}; // a different game: what-ifs from the previous one don't apply
   state.gameId = gameId;
   if (res.ok) {
@@ -842,7 +1088,7 @@ function load (bytes, name) {
   renderAttentionEditor ();
   state.rawFirstCity = null;
   showDiag ();
-  if (res.ok) { render (); setStatus (`Loaded ${name} at ${state.loadedAt.toLocaleTimeString ()}`); }
+  if (res.ok) { render (); setStatus (`Loaded ${name} at ${state.loadedAt.toLocaleTimeString ()}`); recordTurn (res, name).then (refreshHistory); }
   else {
     setStatus (`Couldn't read ${name}. See Diagnostics below.`);
     document.querySelector ('details').open = true;
