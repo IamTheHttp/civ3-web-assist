@@ -113,6 +113,13 @@ summary { cursor: pointer; color: var(--muted); }
 .kv.three > span.h { color: var(--gold); font-size: 12px; text-align: right; }
 .kv > span.v, .kv.three > span:not(.k) { text-align: right; }
 #helpbtn { margin-left: auto; }
+#filterrow th { top: var(--headh, 25px); padding: 2px 3px; cursor: default; background: var(--head); }
+#filterrow input, #filterrow select { width: 100%; min-width: 3.2em; font: inherit; font-size: 12px; font-weight: normal; color: var(--ink);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 1px 4px; }
+#filterrow input.on, #filterrow select.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+#filterrow .namecell { display: flex; gap: 3px; }
+#filterrow .namecell button { padding: 0 6px; font-size: 12px; }
+#filtersbtn[aria-pressed="true"], #filtersbtn.active { border-color: var(--accent); color: var(--accent); }
 dialog#help { width: min(780px, calc(100vw - 32px)); max-height: 86vh; padding: 0; border: 1px solid var(--line); border-radius: 8px;
               background: var(--panel); color: var(--ink); }
 dialog#help::backdrop { background: rgba(0, 0, 0, .45); }
@@ -185,6 +192,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Filter cities</dt><dd>Type part of a city name.</dd>
         <dt>Problems only</dt><dd>Cities in disorder or close to it, starving, or with resisters.</dd>
         <dt>Needs attention</dt><dd>Cities missing a building their tier expects.</dd>
+        <dt>Filters</dt><dd>A filter box under each column. Numbers: <code>&gt;50</code>, <code>&lt;=10</code>, <code>6</code>, <code>5-20</code>. Text: part of it, <code>!</code> to exclude. Each view keeps its filters.</dd>
         <dt>Export CSV</dt><dd>The table as a spreadsheet file.</dd>
         <dt>Reset what-ifs</dt><dd>Undo every tick you changed.</dd>
         <dt><span class="chip">◐ Auto</span></dt><dd>Theme: Auto (your system), Light or Dark.</dd>
@@ -226,6 +234,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <input id="search" type="search" placeholder="Filter cities" aria-label="Filter cities by name">
     <label class="chk" title="Only cities that need attention: in disorder, more unhappy than happy citizens (disorder next turn), starving, or with resisters"><input id="problems" type="checkbox"> <span id="problemslabel">Problems only</span></label>
     <label class="chk" title="Cities missing a building their tier expects (see Tiers…)"><input id="attnonly" type="checkbox"> <span id="attnlabel">Needs attention</span></label>
+    <button id="filtersbtn" type="button" aria-pressed="false" title="Show a filter box under each column name">Filters</button>
     <button id="csv" type="button" disabled>Export CSV</button>
     <button id="resetwhatif" type="button" hidden>Reset what-ifs</button>
     <span class="status" id="status" aria-live="polite"></span>
@@ -278,7 +287,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
 
   <div class="tablewrap" id="tablewrap" hidden>
     <table>
-      <thead><tr id="headrow"></tr></thead>
+      <thead><tr id="headrow"></tr><tr id="filterrow" hidden></tr></thead>
       <tbody id="rows"></tbody>
       <tfoot><tr id="totals"></tr></tfoot>
     </table>
@@ -928,6 +937,96 @@ $('history').addEventListener ('toggle', () => {
 let histResize = null;
 window.addEventListener ('resize', () => { clearTimeout (histResize); histResize = setTimeout (() => { if ($('history').open) drawHistory (); }, 150); });
 
+// ---------- column filters: kept per view ----------
+// Number columns: >50, >=5, <10, <=10, =6 or 6, !=0, 5-20 (a range). Text columns, and anything else: part of the text;
+// ! in front excludes. Tick columns: has / hasn't.
+function parseFilter (expr) {
+  const e = String (expr).trim ();
+  if (! e) return null;
+  let m;
+  if ((m = e.match (/^(-?\d+(?:\.\d+)?)\s*(?:-|\.\.)\s*(-?\d+(?:\.\d+)?)%?$/))) {
+    const lo = Math.min (+m[1], +m[2]), hi = Math.max (+m[1], +m[2]);
+    return { num: (v) => v >= lo && v <= hi };
+  }
+  if ((m = e.match (/^(>=|<=|!=|<>|>|<|=)?\s*(-?\d+(?:\.\d+)?)%?$/))) {
+    const op = m[1] || '=', n = +m[2];
+    const f = { '>': (v) => v > n, '<': (v) => v < n, '>=': (v) => v >= n, '<=': (v) => v <= n, '!=': (v) => v !== n, '<>': (v) => v !== n, '=': (v) => v === n }[op];
+    return { num: f };
+  }
+  return { text: textFilter (e) };
+}
+function textFilter (expr) {
+  const e = String (expr).trim (), neg = e.startsWith ('!'), t = (neg ? e.slice (1) : e).trim ().toLowerCase ();
+  return (s) => s.toLowerCase ().includes (t) !== neg;
+}
+function viewFilters () { const v = currentView (); return v.filters || (v.filters = {}); }
+function activeFilters (cols) {
+  const f = viewFilters ();
+  return cols.filter ((col) => f[col.key] !== undefined && f[col.key] !== '');
+}
+function passesFilters (c, cols) {
+  const f = viewFilters ();
+  for (const col of cols) {
+    const expr = f[col.key];
+    if (expr === undefined || expr === '') continue;
+    if (col.chk) { if (ticked (c, col.chk) !== (expr === 'yes')) return false; continue; }
+    const p = parseFilter (expr), v = col.val (c);
+    if (p.num && ! col.l && typeof v === 'number') { if (! p.num (v)) return false; continue; }
+    // Text columns, and text typed in a number column (e.g. "max" in Grow): match the shown text
+    if (! textFilter (expr) (String (col.show ? col.show (c) : v))) return false;
+  }
+  return true;
+}
+function renderFilterRow (COLS) {
+  const row = $('filterrow');
+  row.hidden = ! state.showFilters;
+  row.textContent = '';
+  const n = activeFilters (COLS).length;
+  $('filtersbtn').textContent = n ? `Filters (${n})` : 'Filters';
+  $('filtersbtn').setAttribute ('aria-pressed', state.showFilters ? 'true' : 'false');
+  $('filtersbtn').classList.toggle ('active', n > 0);
+  if (! state.showFilters) return;
+  const f = viewFilters ();
+  for (const col of COLS) {
+    const th = document.createElement ('th');
+    th.className = (col.l ? 'l ' : '') + (col.group ? 'group' : '');
+    let input;
+    if (col.chk) {
+      input = document.createElement ('select');
+      for (const [v, t] of [['', 'Any'], ['yes', '✓'], ['no', '✗']]) input.appendChild (Object.assign (document.createElement ('option'), { value: v, textContent: t }));
+      input.value = f[col.key] || '';
+      input.title = 'Any, ✓ has it (or ticked), ✗ doesn\'t';
+      input.addEventListener ('change', () => { setFilter (col.key, input.value); });
+    } else {
+      input = Object.assign (document.createElement ('input'), { type: 'text', value: f[col.key] || '' });
+      input.title = col.l ? 'Part of the text; ! in front to exclude' : 'A number (6), a comparison (>50, <=10, !=0) or a range (5-20). Text works too';
+      input.addEventListener ('input', () => { state.filterFocus = { key: col.key, pos: input.selectionStart }; setFilter (col.key, input.value); });
+    }
+    input.dataset.key = col.key;
+    input.setAttribute ('aria-label', `Filter ${col.label}`);
+    if (f[col.key]) input.classList.add ('on');
+    if (col.key === 'name') {
+      const wrap = Object.assign (document.createElement ('div'), { className: 'namecell' });
+      const clear = Object.assign (document.createElement ('button'), { type: 'button', textContent: '×', title: 'Clear all filters in this view' });
+      clear.addEventListener ('click', () => { currentView ().filters = {}; saveViews (); render (); });
+      wrap.append (input, clear); th.appendChild (wrap);
+    } else th.appendChild (input);
+    row.appendChild (th);
+  }
+  $('tablewrap').style.setProperty ('--headh', $('headrow').offsetHeight + 'px');
+  // Typing re-renders the table: put the cursor back where it was
+  if (state.filterFocus) {
+    const el = row.querySelector (`[data-key="${CSS.escape (state.filterFocus.key)}"]`);
+    if (el) { el.focus (); if (el.setSelectionRange) el.setSelectionRange (state.filterFocus.pos, state.filterFocus.pos); }
+    state.filterFocus = null; // once: the next keystroke sets it again
+  }
+}
+function setFilter (key, value) {
+  const f = viewFilters ();
+  if (value === '') delete f[key]; else f[key] = value;
+  saveViews (); render ();
+}
+
 // Empire summary: every city, the game's own figures (what-ifs not included)
 function renderSummary (res) {
   const cs = res.cities, sum = (f) => cs.reduce ((n, c) => n + f (c), 0);
@@ -1021,12 +1120,14 @@ function render () {
     .filter ((c) => ! q || c.name.toLowerCase ().includes (q))
     .filter ((c) => ! $('problems').checked || problem (c))
     .filter ((c) => ! $('attnonly').checked || needsAttention (c))
+    .filter ((c) => passesFilters (c, COLS))
     .sort ((a, b) => {
       const va = sortCol.val (a), vb = sortCol.val (b);
       const d = typeof va === 'string' ? va.localeCompare (vb) : va - vb;
       return d * state.sortDir || a.name.localeCompare (b.name);
     });
 
+  renderFilterRow (COLS);
   for (const th of head.children) th.setAttribute ('aria-sort', 'none');
   const sortIndex = COLS.indexOf (sortCol);
   if (sortIndex >= 0) head.children[sortIndex].setAttribute ('aria-sort', state.sortDir > 0 ? 'ascending' : 'descending');
@@ -1041,7 +1142,7 @@ function render () {
     td.colSpan = COLS.length; td.className = 'empty';
     td.textContent = $('problems').checked && ! problemCount
       ? 'No cities with problems: none in disorder, none with more unhappy than happy citizens, none starving, none with resisters.'
-      : 'No cities match.';
+      : (activeFilters (COLS).length ? 'No cities match the filters. × in the City filter clears them.' : 'No cities match.');
     tr.appendChild (td); body.appendChild (tr);
   }
   for (const c of list) {
@@ -1315,6 +1416,7 @@ $('theme').addEventListener ('click', () => {
 });
 showTheme ();
 $('attnonly').addEventListener ('change', render);
+$('filtersbtn').addEventListener ('click', () => { state.showFilters = ! state.showFilters; state.filterFocus = null; render (); });
 $('attnbtn').addEventListener ('click', () => { $('attnedit').hidden = ! $('attnedit').hidden; renderAttentionEditor (); fitTable (); });
 $('attndone').addEventListener ('click', () => { $('attnedit').hidden = true; fitTable (); });
 $('attnreset').addEventListener ('click', () => { state.attention = JSON.parse (JSON.stringify (DEFAULT_ATTENTION)); saveAttention (); renderAttentionEditor (); render (); });

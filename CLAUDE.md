@@ -59,4 +59,3 @@ github.com/IamTheHttp/civ3-web-assist. Layouts and formulas: `docs/REVERSE_ENGIN
 - **Turn milestones.** The player sets targets per turn, e.g. "by turn 20: 10 cities, 10 net shields, 50 science,
   10 workers", and sees whether the loaded save meets them (and, with history, when each was met). Cities, shields and
   science come from data the viewer reads; workers need the save's UNIT records, which the viewer doesn't read yet.
-- **Column filters.** Filter the table per column (e.g. Size ≥ 6, Corrupt % > 50, Tier = Core), next to sorting.
