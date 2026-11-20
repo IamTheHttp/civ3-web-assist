@@ -111,7 +111,12 @@ summary { cursor: pointer; color: var(--muted); }
 .kv > span.v, .kv.three > span:not(.k) { text-align: right; }
 .legend { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
 .legend b { color: var(--ink); font-weight: 600; }
+#theme { margin-left: auto; }
 </style>
+<script>
+// Apply the saved theme before the page draws, so it doesn't flash in the other one
+try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) { /* ignore */ }
+</script>
 </head>
 <body>
 <main>
@@ -119,6 +124,7 @@ summary { cursor: pointer; color: var(--muted); }
     <h1>Civ3 Empire Viewer</h1>
     <span class="sub" id="title">Open a save to see your cities</span>
     <span class="sub" id="rulesstatus"></span>
+    <button id="theme" type="button"></button>
   </header>
 
   <div class="bar">
@@ -1535,6 +1541,21 @@ try {
   }
 } catch (e) { /* ignore */ }
 $('problems').addEventListener ('change', render);
+
+// Theme: Auto follows the system setting; Light and Dark are fixed and remembered in this browser
+const THEMES = ['auto', 'light', 'dark'], THEME_LABEL = { auto: '◐ Auto', light: '☀ Light', dark: '☾ Dark' };
+function showTheme () {
+  const t = document.documentElement.dataset.theme || 'auto';
+  $('theme').textContent = THEME_LABEL[t];
+  $('theme').title = `Theme: ${t === 'auto' ? 'follows your system setting' : t}. Click to change`;
+}
+$('theme').addEventListener ('click', () => {
+  const t = THEMES[(THEMES.indexOf (document.documentElement.dataset.theme || 'auto') + 1) % THEMES.length];
+  if (t === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  try { if (t === 'auto') localStorage.removeItem ('civ3viewer.theme'); else localStorage.setItem ('civ3viewer.theme', t); } catch (e) { /* ignore */ }
+  showTheme ();
+});
+showTheme ();
 $('attnonly').addEventListener ('change', render);
 $('attnbtn').addEventListener ('click', () => { $('attnedit').hidden = ! $('attnedit').hidden; renderAttentionEditor (); fitTable (); });
 $('attndone').addEventListener ('click', () => { $('attnedit').hidden = true; fitTable (); });
