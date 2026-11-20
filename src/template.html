@@ -129,6 +129,7 @@ summary { cursor: pointer; color: var(--muted); }
     <div class="vehead">
       <label>Name <input id="viewname" type="text" maxlength="40"></label>
       <button id="viewnew" type="button">New view</button>
+      <button id="viewclear" type="button" title="Untick every column except City, to pick the ones you want">Clear all columns</button>
       <button id="viewdelete" type="button">Delete this view</button>
       <button id="viewreset" type="button" title="Restore the original four views">Restore default views</button>
       <button id="viewdone" type="button" class="primary">Done</button>
@@ -679,6 +680,9 @@ $('viewnew').addEventListener ('click', () => {
   state.views.views.push ({ name: 'My view', columns: [...(currentView ().columns || COLUMNS.map ((c) => c.key))] });
   state.views.current = state.views.views.length - 1; saveViews (); renderViewEditor (); render (); renderViewPicker ();
   $('viewname').focus (); $('viewname').select ();
+});
+$('viewclear').addEventListener ('click', () => {
+  currentView ().columns = ['name']; saveViews (); renderViewEditor (); render ();
 });
 $('viewdelete').addEventListener ('click', () => {
   if (state.views.views.length <= 1) return;
