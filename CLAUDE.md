@@ -19,8 +19,10 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
 - Save = PKWare DCL compressed (`blast`); the JS port is fuzz-tested against the C original (4000 random + 300 valid streams).
 - Corruption/waste: the game's own rule, transcribed from the exe (`City_compute_corrupted_yield` 0x4B1190 and helpers), matches
   **exactly in 42/42 cities** for both (the community formula: 27/42 each). Details and the differences: `docs/CORRUPTION.md`.
-- AI cost factor (DIFF +104; human = 10) from the **game** difficulty scales AI food boxes, unit and building costs
-  (`Leader_get_food_cost_factor` 0x5660E0, `Leader_get_unit_cost` 0x56A210, building cost 0x569FE0).
+- AI cost factor (DIFF +104; human = 10) from the **game** difficulty scales AI food boxes, unit, building and tech costs
+  (`Leader_get_food_cost_factor` 0x5660E0, `Leader_get_unit_cost` 0x56A210, building cost 0x569FE0, tech cost 0x569C10:
+  unnamed in C3X, reads TECH +68 cost). History's AI comparison shows AI food, shields and science × 10 / factor.
+- Other civs' cities: every CITY record passes the same self-checks as the player's (68/68 in the Maya save).
 - Corruption is applied to **raw** commerce; then the slider split (lux and gold rounded to nearest, science gets the rest);
   then building bonuses **add** (+50% each, +100% for research-doubling wonders), floored. Reproduces gold/sci/lux exactly
   in 40/42 cities; the other 2 are calibrated per city (the capital has +10 commerce not in its record; Memphis +1 gold from Wealth).

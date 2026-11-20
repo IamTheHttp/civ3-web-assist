@@ -200,6 +200,11 @@ dialog#help::backdrop { background: rgba(0, 0, 0, .45); }
 i.s1 { background: var(--s1); } i.s2 { background: var(--s2); } i.s3 { background: var(--s3); }
 .hline { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .hline.s1 { stroke: var(--s1); } .hline.s2 { stroke: var(--s2); } .hline.s3 { stroke: var(--s3); }
+.hline.hcmp { stroke-dasharray: 7 5; stroke-width: 1.75; }
+.histkey i.dash { background: none; border-top: 2px dashed var(--ink); height: 0; width: 20px; border-radius: 0; }
+.hcmpdot { fill: var(--panel); stroke-width: 2; }
+.hcmpdot.s1 { stroke: var(--s1); } .hcmpdot.s2 { stroke: var(--s2); } .hcmpdot.s3 { stroke: var(--s3); }
+.htip .cmp { color: var(--muted); }
 .hdot { stroke: var(--panel); stroke-width: 2; }
 .hdot.s1 { fill: var(--s1); } .hdot.s2 { fill: var(--s2); } .hdot.s3 { fill: var(--s3); }
 .hgrid { stroke: var(--line); stroke-width: 1; }
@@ -368,6 +373,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <div class="histbar">
       <select id="histchart" aria-label="Chart"></select>
       <select id="histcity" aria-label="City"></select>
+      <select id="histcmp" aria-label="Compare with"></select>
       <label class="filebtn" for="histfiles" title="Read older saves of this game and store their turns. The page keeps showing the save you opened.">Add saves…</label>
       <input id="histfiles" type="file" accept=".sav,.SAV" multiple hidden>
       <button id="histclear" type="button" title="Delete every stored turn of this game from this browser">Delete this game's history</button>
@@ -988,6 +994,8 @@ function snapshotOf (res, fileName) {
   return { game: gameIdOf (res), turn: res.turn, savedAt: Date.now (), fileName,
            civ: rules && rules.civs[res.playerRace] ? rules.civs[res.playerRace].noun : '',
            totals,
+           // Other civilizations' totals and their cost factor, for the comparison line
+           civs: (res.civs || []).map ((c) => ({ id: c.id, name: c.name, factor: c.factor, totals: c.totals })), difficulty: res.difficultyName,
            cities: res.cities.map ((c) => ({ id: c.id, name: c.name, ...metricsOf ([c]) })) };
 }
 async function recordTurn (res, fileName) {
@@ -1009,6 +1017,45 @@ const HIST_CHARTS = [
   { key: 'techs', name: 'Techs known', empireOnly: true, series: [['Techs', (m) => m.techs ?? null, 'techs']] }
 ];
 let histSnaps = [];
+
+// ---------- comparison with the other civilizations ----------
+// Their food, shields and science are shown in your costs: x 10 / their cost factor (the AI pays less from Monarch up)
+function adjusted (c) {
+  const k = 10 / (c.factor || 10), t = c.totals, r = (v) => Math.round (v * k);
+  return { ...t, shields: r (t.shields), waste: r (t.waste), science: r (t.science), foodSurplus: r (t.foodSurplus) };
+}
+function cmpLabel (v) { return v === 'avg' ? 'AI average' : (v === 'best' ? 'Best AI' : v); }
+function cmpShort (v) { return v === 'avg' ? 'AI avg' : (v === 'best' ? 'Best AI' : v); }
+// The comparison value of one stored turn: { v, who }, or null when the turn has no such civilization or value
+function cmpValue (snap, cmp, f) {
+  const civs = (snap.civs || []).filter ((c) => c.totals.cities > 0);
+  if (! civs.length) return null;
+  const ok = (v) => v !== null && v !== undefined && isFinite (v);
+  if (cmp === 'avg') {
+    const sum = {}, n = {};
+    for (const c of civs) for (const [k, v] of Object.entries (adjusted (c))) if (typeof v === 'number') { sum[k] = (sum[k] || 0) + v; n[k] = (n[k] || 0) + 1; }
+    const avg = {}; for (const k of Object.keys (sum)) avg[k] = Math.round (sum[k] / n[k]);
+    const v = f (avg); return ok (v) ? { v, who: `average of ${civs.length} civilizations` } : null;
+  }
+  // Best AI: the one with the strongest economy that turn (net commerce + net shields, adjusted), the same civilization
+  // in every chart
+  const strength = (c) => { const a = adjusted (c); return a.commerce - a.corruption + a.shields - a.waste; };
+  const c = cmp === 'best' ? civs.reduce ((m, x) => (strength (x) > strength (m) ? x : m)) : civs.find ((x) => x.name === cmp);
+  if (! c) return null;
+  const v = f (adjusted (c)); return ok (v) ? { v, who: c.name } : null;
+}
+// How the comparison is adjusted, from the newest stored turn with other civilizations
+function cmpNote () {
+  const s = [...histSnaps].reverse ().find ((x) => x.civs && x.civs.length);
+  if (! s) return 'Other civilizations appear once a save is stored with this version of the page (open a save, or Add saves… again).';
+  const f = s.civs.find ((c) => c.factor !== 10);
+  if (! f) return 'Not adjusted: the other civilizations pay the same costs as you.';
+  return 'Best AI: the civilization with the most net commerce + net shields that turn. ' +
+         `AI food, shields and science × ${(10 / f.factor).toFixed (2)}: at ${s.difficulty || 'this difficulty'} the AI pays ${f.factor * 10}% of your costs ` +
+         `for food, production and research (cost factor ${f.factor}; yours 10), so their numbers are shown in your costs. ` +
+         'Commerce, gold, luxury, culture and counts are not adjusted.';
+}
+
 function setHistStatus (s) { $('histstatus').textContent = s; }
 
 async function refreshHistory () {
@@ -1027,6 +1074,14 @@ async function refreshHistory () {
   [...names.entries ()].sort ((a, b) => a[1].localeCompare (b[1])).forEach (([id, name]) =>
     sel.appendChild (Object.assign (document.createElement ('option'), { value: id, textContent: name })));
   sel.value = names.has (+keep) ? keep : '';
+  // Comparison picker: AI average, best AI, or any civilization seen in a stored turn
+  const cmp = $('histcmp'), keepCmp = state.histCmp || '', civNames = new Set ();
+  for (const s of histSnaps) for (const c of s.civs || []) civNames.add (c.name);
+  cmp.textContent = '';
+  for (const [v, t] of [['', 'No comparison'], ['avg', 'Compare: AI average'], ['best', 'Compare: best AI'], ...[...civNames].sort ().map ((n) => [n, 'Compare: ' + n])])
+    cmp.appendChild (Object.assign (document.createElement ('option'), { value: v, textContent: t }));
+  cmp.value = [...cmp.options].some ((o) => o.value === keepCmp) ? keepCmp : '';
+  cmp.title = cmpNote ();
   drawHistory ();
   renderMilestones (); // history decides whether past deadlines were met
 }
@@ -1050,10 +1105,23 @@ function drawHistory () {
 
   const series = chart.series.map (([name, f], k) => ({ name, k, values: points.map ((p) => ({ turn: p.turn, v: f (p.m) })).filter ((p) => p.v !== null && p.v !== undefined) }));
   const marks = cityId === null ? milestoneMarks (chart) : [];
+  // The comparison line: whole empire only
+  $('histcmp').disabled = cityId !== null;
+  const cmp = cityId === null ? $('histcmp').value : '';
+  const cmpSeries = ! cmp ? [] : chart.series.map (([name, f], k) => ({ name, k, values: histSnaps.map ((s) => {
+    const x = cmpValue (s, cmp, f); return x ? { turn: s.turn, v: x.v, who: x.who } : null; }).filter (Boolean) }));
   if (series.length > 1) for (const s of series) {
     const item = document.createElement ('span'); item.className = 'histkey';
     item.appendChild (Object.assign (document.createElement ('i'), { className: 's' + (s.k + 1) }));
     item.appendChild (document.createTextNode (s.name)); legend.appendChild (item);
+  }
+  if (cmp) {
+    const item = Object.assign (document.createElement ('span'), { className: 'histkey', title: cmpNote () });
+    item.appendChild (Object.assign (document.createElement ('i'), { className: 'dash' }));
+    item.appendChild (document.createTextNode (`${cmpLabel (cmp)}, adjusted for difficulty ⓘ`)); legend.appendChild (item);
+    if (! cmpSeries.some ((s) => s.values.length))
+      box.appendChild (Object.assign (document.createElement ('p'), { className: 'histnote',
+        textContent: 'No other civilizations in the stored turns yet. Open a save, or use Add saves… to read older saves again.' }));
   }
 
   const W = Math.max (320, box.clientWidth || 800), H = 260, L = 46, R = 120, T = 22, B = 28;
@@ -1063,7 +1131,7 @@ function drawHistory () {
   const aimed = marks.filter ((m) => m.targets.length && m.ms.turn >= t0);
   t1 = Math.max (t1, ...aimed.map ((m) => m.ms.turn));
   if (t0 === t1) { t0 -= 1; t1 += 1; }
-  const vmax = Math.max (1, ...series.flatMap ((s) => s.values.map ((p) => p.v)), ...aimed.flatMap ((m) => m.targets.map ((x) => +x.t.value)));
+  const vmax = Math.max (1, ...series.flatMap ((s) => s.values.map ((p) => p.v)), ...cmpSeries.flatMap ((s) => s.values.map ((p) => p.v)), ...aimed.flatMap ((m) => m.targets.map ((x) => +x.t.value)));
   const step = niceStep (vmax, 4), ymax = chart.unit === '%' ? Math.min (100, Math.ceil (vmax / step) * step) || 100 : Math.ceil (vmax / step) * step;
   const x = (t) => L + (W - L - R) * (t - t0) / (t1 - t0), y = (v) => T + (H - T - B) * (1 - v / ymax);
   const NS = 'http://www.w3.org/2000/svg', svg = document.createElementNS (NS, 'svg');
@@ -1107,6 +1175,14 @@ function drawHistory () {
     const last = s.values[s.values.length - 1];
     ends.push ({ s, x: x (last.turn), y: y (last.v), v: last.v });
   }
+  for (const s of cmpSeries) {
+    if (! s.values.length) continue;
+    const d = s.values.map ((p, i) => `${i ? 'L' : 'M'}${x (p.turn).toFixed (1)},${y (p.v).toFixed (1)}`).join (' ');
+    mk ('path', { d, class: 'hline hcmp s' + (s.k + 1) });
+    if (s.values.length <= 40) for (const p of s.values) mk ('circle', { cx: x (p.turn), cy: y (p.v), r: 3.5, class: 'hcmpdot s' + (s.k + 1) });
+    const last = s.values[s.values.length - 1];
+    ends.push ({ s: { name: cmpShort (cmp) }, x: x (last.turn), y: y (last.v), v: last.v });
+  }
   ends.sort ((a, b) => a.y - b.y);
   for (let i = 1; i < ends.length; i++) ends[i].y = Math.max (ends[i].y, ends[i - 1].y + 14);
   for (const e of ends) {
@@ -1130,6 +1206,14 @@ function drawHistory () {
       const row = document.createElement ('div'), v = hit.v;
       row.appendChild (Object.assign (document.createElement ('i'), { className: 's' + (s.k + 1) }));
       row.appendChild (document.createTextNode (`${s.name}: ${v.toLocaleString ()}${chart.unit || ''}`));
+      tip.appendChild (row);
+    }
+    for (const s of cmpSeries) {
+      const hit = s.values.find ((p) => p.turn === best.turn);
+      if (! hit) continue;
+      const row = Object.assign (document.createElement ('div'), { className: 'cmp' });
+      row.appendChild (Object.assign (document.createElement ('i'), { className: 's' + (s.k + 1) }));
+      row.appendChild (document.createTextNode (`${s.name}, ${cmpLabel (cmp)}: ${hit.v.toLocaleString ()}${chart.unit || ''}${cmp === 'best' ? ` (${hit.who})` : ''}`));
       tip.appendChild (row);
     }
     tip.hidden = false;
@@ -1162,6 +1246,7 @@ async function addSavesToHistory (files) {
 for (const c of HIST_CHARTS) $('histchart').appendChild (Object.assign (document.createElement ('option'), { value: c.key, textContent: c.name }));
 $('histchart').addEventListener ('change', drawHistory);
 $('histcity').addEventListener ('change', drawHistory);
+$('histcmp').addEventListener ('change', () => { state.histCmp = $('histcmp').value; drawHistory (); });
 $('histfiles').addEventListener ('change', (e) => { const f = [...e.target.files]; e.target.value = ''; if (f.length) addSavesToHistory (f); });
 $('histclear').addEventListener ('click', async () => {
   if (! state.result || ! confirm ('Delete every stored turn of this game from this browser?')) return;

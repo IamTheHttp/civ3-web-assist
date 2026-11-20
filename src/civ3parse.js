@@ -224,6 +224,7 @@ const Civ3Parse = (() => {
 		// Cities: a "CITY" header with length 136 starts a real city record (other CITY headers are something else)
 		const CITY_FIXED = 556, CTZN_SIZE = 308;
 		let found = 0, rejected = 0;
+		const civTotals = {}; // owner -> totals of all its cities
 		for (const off of findAll (b, 'CITY', gameOff)) {
 			if (i32 (off + 4) !== 136) continue;
 			if (off + CITY_FIXED > b.length) { rejected++; continue; }
@@ -253,6 +254,18 @@ const Civ3Parse = (() => {
 			}
 			found++;
 			const owner = u8 (off + 16);
+			// Totals per civilization (every owner), for the History comparison. Same fields as the player's cities;
+			// specialists' output added as in the player's totals. A city counts as checked when its commerce split,
+			// shields and food add up.
+			{
+				const t = civTotals[owner] || (civTotals[owner] = { cities: 0, citizens: 0, commerce: 0, corruption: 0, shields: 0, waste: 0,
+					gold: 0, science: 0, luxury: 0, upkeep: 0, culture: 0, foodSurplus: 0, checked: 0 });
+				const gold = i32 (off + 524), sci = i32 (off + 520), lux = i32 (off + 516), sh = i32 (off + 364), wa = i32 (off + 496), net = i32 (off + 504);
+				t.cities++; t.citizens += count; t.commerce += i32 (off + 368); t.corruption += i32 (off + 500); t.shields += sh; t.waste += wa;
+				t.gold += gold + i32 (off + 536); t.science += sci + i32 (off + 532); t.luxury += lux + i32 (off + 528);
+				t.upkeep += i32 (off + 20); t.culture += i32 (off + 220); t.foodSurplus += Math.max (0, net);
+				if (gold + sci + lux === i32 (off + 512) && sh - wa === i32 (off + 508) && i32 (off + 360) - i32 (off + 492) === net) t.checked++;
+			}
 			if (owner !== player) continue;
 
 			const flags0 = u8 (off + 24);
@@ -517,6 +530,35 @@ const Civ3Parse = (() => {
 			diag.push (`Known techs: ${result.knownTechs.size} of ${rules.techs.length}; buildings in production need a known tech in ${ok.length}/${building.length} cities`);
 			if (ok.length !== building.length) { result.knownTechs = null; diag.push ('Known techs don\'t fit this save; not used'); }
 		}
+		// Other civilizations' totals, for the History comparison. Their food, shields and research are cheaper by the AI
+		// cost factor: the game difficulty's (DIFF +104) for an AI player, 10 for a human player. Verified in the GOG exe:
+		// food box (Leader_get_food_cost_factor 0x5660E0), units (0x56A210), buildings (0x569FE0), techs (0x569C10, which
+		// reads the tech's cost at TECH +68). Known techs per player: the same bits as the player's.
+		result.civs = [];
+		{
+			const diffRow = rules && rules.difficulties[result.difficultyId];
+			const techCount = (id) => {
+				if (! result.knownTechs) return null;
+				let n = 0; for (let k = 0; k < rules.techs.length; k++) if ((i32 (techStart + 4 * k) >>> id) & 1) n++;
+				return n;
+			};
+			const raceOf = {};
+			for (const o of findAll (b, 'LEAD', gameOff)) { const id = i32 (o + 8), r = i32 (o + 12); if (id > 0 && id < 32 && ! (id in raceOf)) raceOf[id] = r; }
+			let cities = 0, checked = 0;
+			for (const [k, t] of Object.entries (civTotals)) {
+				const id = +k;
+				if (id === 0 || id === player) continue; // 0: barbarians
+				const race = raceOf[id], civ = rules && rules.civs[race];
+				const human = ((humanBits >>> id) & 1) === 1;
+				result.civs.push ({ id, name: civ ? civ.noun : `Player ${id}`, factor: human || ! diffRow ? 10 : diffRow.costFactor,
+				                   totals: { ...t, techs: techCount (id) } });
+				cities += t.cities; checked += t.checked;
+			}
+			result.difficultyName = diffRow ? diffRow.name : null;
+			diag.push (`Other civilizations: ${result.civs.length} with cities, ${cities} cities; commerce, shields and food add up in ${checked}/${cities}` +
+			           (diffRow ? `; AI cost factor ${diffRow.costFactor} (${diffRow.name}), yours 10` : ''));
+		}
+
 		const okFood = result.cities.filter ((c) => c.foodTiles - c.foodEaten === c.foodNet).length;
 		diag.push (`Field check: food from tiles - food eaten = net food in ${okFood}/${result.cities.length} cities`);
 
