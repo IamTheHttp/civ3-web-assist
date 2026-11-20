@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Civ3 Empire Viewer</title>
+<style>
+:root {
+  --bg: #eef0ec; --panel: #ffffff; --ink: #1d2422; --muted: #5d6a64; --line: #d3d9d4; --stripe: #f5f7f4;
+  --gold: #8a6a12; --head: #e6e9e3; --red: #b42318; --amber: #a05a00; --green: #2e7d32; --accent: #2f6f8f;
+  --mono: "Cascadia Mono", Consolas, "Courier New", monospace;
+  --sans: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  color-scheme: light; box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14181b; --panel: #1c2226; --ink: #e5eaec; --muted: #94a1a8; --line: #2e373d; --stripe: #20272c;
+    --gold: #e0b43a; --head: #252d33; --red: #ff6b5e; --amber: #ffb347; --green: #8bd48f; --accent: #6cb6d9;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14181b; --panel: #1c2226; --ink: #e5eaec; --muted: #94a1a8; --line: #2e373d; --stripe: #20272c;
+  --gold: #e0b43a; --head: #252d33; --red: #ff6b5e; --amber: #ffb347; --green: #8bd48f; --accent: #6cb6d9;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: inherit; }
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 13.5px/1.4 var(--sans); }
+main { padding: 12px 14px 30px; }
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; margin-bottom: 12px; }
+h1 { font-size: 20px; margin: 0; letter-spacing: .2px; }
+.sub { color: var(--muted); }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--panel); border: 1px solid var(--line);
+       border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+button, .filebtn { font: inherit; color: var(--ink); background: var(--head); border: 1px solid var(--line); border-radius: 4px;
+       padding: 5px 11px; cursor: pointer; }
+button:hover, .filebtn:hover { border-color: var(--accent); }
+button.primary, .filebtn.primary { background: var(--accent); color: #fff; border-color: transparent; }
+select, input[type=text] { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; }
+#viewedit:not([hidden]) { display: block; }
+[hidden] { display: none !important; }
+.vehead { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.vecols { display: flex; flex-wrap: wrap; gap: 10px 26px; }
+.vegroup { min-width: 140px; }
+.vegroup h3 { font-size: 12px; font-weight: 600; color: var(--gold); margin: 0 0 3px; text-transform: uppercase; letter-spacing: .4px; }
+.vecols label { display: flex; gap: 6px; align-items: center; white-space: nowrap; padding: 1px 0; }
+.vecols label.na { color: var(--muted); }
+.vecols .note { flex-basis: 100%; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+input[type=search] { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; min-width: 180px; }
+label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
+.status { color: var(--muted); margin-left: auto; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#drop { border: 2px dashed var(--line); border-radius: 8px; padding: 34px 20px; text-align: center; color: var(--muted); background: var(--panel); }
+#drop.over { border-color: var(--accent); color: var(--ink); }
+#drop p { margin: 6px 0; }
+#drop code { font-family: var(--mono); font-size: 12.5px; }
+.tablewrap { overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+             width: fit-content; max-width: 100%; max-height: 70vh; }
+table { border-collapse: separate; border-spacing: 0; width: auto; font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { position: sticky; left: 0; z-index: 1; background: var(--panel); border-right: 1px solid var(--line); }
+tbody tr:nth-child(even) td:first-child { background: var(--stripe); }
+th:first-child { z-index: 3; background: var(--head); }
+tfoot td:first-child { background: var(--head); }
+tfoot td { position: sticky; bottom: 0; z-index: 2; }
+tfoot td:first-child { z-index: 3; }
+td.empty { text-align: left; color: var(--muted); padding: 14px 10px; white-space: normal; }
+th, td { padding: 3px 7px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { position: sticky; top: 0; z-index: 2; background: var(--head); color: var(--gold); font-size: 12px; font-weight: 600; text-align: right;
+     cursor: pointer; user-select: none; }
+th.l, td.l { text-align: left; }
+td { text-align: right; }
+th[aria-sort="ascending"]::after { content: " \25B2"; font-size: 9px; }
+th[aria-sort="descending"]::after { content: " \25BC"; font-size: 9px; }
+tbody tr:nth-child(even) td { background: var(--stripe); }
+tbody tr:hover td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+tfoot td { font-weight: 600; color: var(--gold); background: var(--head); border-bottom: 0; }
+.red { color: var(--red); font-weight: 600; } .amber { color: var(--amber); } .green { color: var(--green); } .dim { color: var(--muted); }
+.group { border-left: 2px solid var(--line); }
+td.chk, th.chk { text-align: center; padding: 4px 4px; }
+td.chk input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; margin: 0; }
+td.chk.whatif { background: color-mix(in srgb, var(--amber) 28%, transparent) !important; box-shadow: inset 0 0 0 2px var(--amber); }
+td.chk.whatif input { accent-color: var(--amber); }
+td.changed { background: color-mix(in srgb, var(--accent) 16%, transparent) !important; }
+.better { color: var(--green); font-weight: 600; }
+.worse { color: var(--red); font-weight: 600; }
+details { margin-top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; }
+summary { cursor: pointer; color: var(--muted); }
+#diag { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; margin: 8px 0 4px; }
+.legend { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
+.legend b { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>Civ3 Empire Viewer</h1>
+    <span class="sub" id="title">Open a save to see your cities</span>
+    <span class="sub" id="rulesstatus"></span>
+  </header>
+
+  <div class="bar">
+    <label class="filebtn primary" for="file">Open save…</label>
+    <input id="file" type="file" accept=".sav,.SAV" hidden>
+    <label class="filebtn" for="rulesfile" title="Your game's conquests.biq (in the Conquests folder). Needed for names and the Courthouse what-if; remembered for next time.">Load rules (conquests.biq)…</label>
+    <input id="rulesfile" type="file" accept=".biq,.BIQ" hidden>
+    <button id="watch" type="button" title="Pick your Saves\Auto folder; the newest save is reloaded automatically">Watch autosave folder…</button>
+    <label class="chk" for="viewsel">View</label>
+    <select id="viewsel" aria-label="View"></select>
+    <button id="editview" type="button">Columns…</button>
+    <input id="search" type="search" placeholder="Filter cities" aria-label="Filter cities by name">
+    <label class="chk" title="Only cities that need attention: in disorder, more unhappy than happy citizens (disorder next turn), starving, or with resisters"><input id="problems" type="checkbox"> <span id="problemslabel">Problems only</span></label>
+    <button id="csv" type="button" disabled>Export CSV</button>
+    <button id="resetwhatif" type="button" hidden>Reset what-ifs</button>
+    <span class="status" id="status" aria-live="polite"></span>
+  </div>
+
+  <div id="viewedit" class="bar" hidden>
+    <div class="vehead">
+      <label>Name <input id="viewname" type="text" maxlength="40"></label>
+      <button id="viewnew" type="button">New view</button>
+      <button id="viewdelete" type="button">Delete this view</button>
+      <button id="viewreset" type="button" title="Restore the original four views">Restore default views</button>
+      <button id="viewdone" type="button" class="primary">Done</button>
+    </div>
+    <div id="viewcols" class="vecols"></div>
+  </div>
+
+  <div id="drop">
+    <p><b>Drop a .SAV file here</b>, or use <i>Open save…</i></p>
+    <p>Autosaves are in your Conquests folder under <code>Saves\Auto</code>. Use <i>Watch autosave folder…</i> (Edge or Chrome) to refresh every turn.</p>
+    <p>For building and unit names and the Courthouse what-if, also use <i>Load rules (conquests.biq)…</i> once: it's in your <code>Conquests</code> folder.</p>
+    <p>Nothing is uploaded: the files are read inside this page.</p>
+  </div>
+
+  <div class="tablewrap" id="tablewrap" hidden>
+    <table>
+      <thead><tr id="headrow"></tr></thead>
+      <tbody id="rows"></tbody>
+      <tfoot><tr id="totals"></tr></tfoot>
+    </table>
+  </div>
+
+  <p class="legend" id="legend" hidden>
+    <b>Grow</b>: turns until the city grows (same rule as the city screen); <b>–</b> not growing, <b>max</b> food box full and waiting for an Aqueduct or Hospital.
+    <b>Food</b>: net food per turn. <b>Box</b>: food stored / needed. <b>Shields</b> and <b>Commerce</b>: raw totals from the city's tiles, before waste and corruption. <b>Waste</b> and <b>Corrupt</b>: shields and commerce lost, and as a share of the city's total (<b>%</b>; the totals row shows your whole empire).
+    <b>Resist</b>: resisting citizens. <b>Foreign</b>: citizens of another nationality (culture-flip risk). <b>Spec</b>: entertainers / scientists / taxmen.
+    <b>CH</b> / <b>PS</b>: the city has a Courthouse / Police Station. Tick or untick to see what that would change: corruption, waste and their shares show <i>now → then</i>. A what-if tick (something the city doesn't really have, or a building you've unticked) is <b>outlined in amber</b>; plain ticks are what the city has.
+    <b>CH Effect</b> / <b>PS Effect</b>: what building a Courthouse / Police Station would gain the city each turn: commerce kept, after its Library, Marketplace etc. (<b>com</b>), shields kept (<b>shd</b>) and the building's gold upkeep (<b>upk</b>). The two buildings reduce corruption the same way; the Police Station costs more upkeep. Sorting by them ranks the best places, upkeep included.
+    <b>Lib, Univ, Lab, Mkt, Bank, SE</b> (and their <b>Effect</b> columns) work the same way for buildings that boost science or gold: the effect is what the building would add to this city, worked out the way the game does it (your slider split, then the building bonuses), minus upkeep. Ticking a building also ticks what it requires.
+    Use <b>View</b> to switch between column sets and <b>Columns…</b> to choose what a view shows.
+    Corruption figures come from the game's formula and are checked against your save (see Diagnostics); <b>~</b> marks a city where they didn't match.
+    Click a column header to sort; click again to reverse.
+  </p>
+
+  <details>
+    <summary>Diagnostics</summary>
+    <div id="diag">No file loaded.</div>
+    <button id="debug" type="button" disabled>Download debug report</button>
+  </details>
+</main>
+
+<script>
+/*BLAST*/
+</script>
+<script>
+/*PARSER*/
+</script>
+<script>
+const $ = (id) => document.getElementById (id);
+const BASE_COLUMNS = [
+  { key: 'name', sec: 'city', label: 'City', l: true, val: (c) => c.name, csv: (c) => c.name },
+  { key: 'size', sec: 'city', label: 'Size', val: (c) => c.size },
+  { key: 'happy', sec: 'mood', label: 'Happy', val: (c) => c.happy },
+  { key: 'content', sec: 'mood', label: 'Content', val: (c) => c.content },
+  { key: 'unhappy', sec: 'mood', label: 'Unhappy', val: (c) => c.unhappy, cls: (c) => c.unhappy > c.happy ? 'red' : (c.unhappy ? 'amber' : '') },
+  { key: 'resisters', sec: 'mood', label: 'Resist', val: (c) => c.resisters, cls: (c) => c.resisters ? 'red' : 'dim' },
+  { key: 'spec', sec: 'mood', label: 'Spec', val: (c) => c.entertainers + c.scientists + c.taxmen,
+    show: (c) => (c.entertainers + c.scientists + c.taxmen) ? `${c.entertainers}/${c.scientists}/${c.taxmen}` : '0',
+    cls: (c) => (c.entertainers + c.scientists + c.taxmen) ? '' : 'dim', title: 'Entertainers / scientists / taxmen' },
+  { key: 'foreign', sec: 'mood', label: 'Foreign', val: (c) => c.foreign, cls: (c) => c.foreign ? 'amber' : 'dim' },
+  { key: 'grow', sec: 'food', label: 'Grow', val: (c) => c.grow === null ? 9998 : (c.grow === 'max' ? 9999 : c.grow),
+    show: (c) => c.grow === null ? '–' : c.grow, cls: (c) => c.grow === null ? (c.foodNet < 0 ? 'red' : 'dim') : (c.grow === 'max' ? 'amber' : '') },
+  { key: 'foodNet', sec: 'food', label: 'Food', val: (c) => c.foodNet, show: (c) => (c.foodNet > 0 ? '+' : '') + c.foodNet, cls: (c) => c.foodNet < 0 ? 'red' : '', total: true },
+  { key: 'box', sec: 'food', label: 'Box', val: (c) => c.storedFood / c.foodBox, show: (c) => `${c.storedFood}/${c.foodBox}`, csv: (c) => `${c.storedFood}/${c.foodBox}` },
+  { key: 'shields', sec: 'shields', label: 'Shields', val: (c) => c.shields, total: true, title: 'Raw shields from tiles, before waste' },
+  { key: 'waste', sec: 'shields', label: 'Waste', val: (c) => wi (c).waste, show: (c) => arrow (c.waste, wi (c).waste), cls: (c) => wiCls (c, 'waste') || (c.waste ? 'amber' : 'dim'), total: true },
+  { key: 'wastePct', sec: 'shields', label: 'Waste %', val: (c) => wi (c).wastePct, show: (c) => arrow (c.wastePct, wi (c).wastePct, '%'), cls: (c) => wiCls (c, 'wastePct') || pctClass (c.wastePct),
+    title: 'Share of the city\'s shields lost to waste', ratio: ['waste', 'shieldsGross'] },
+  { key: 'ch', sec: 'corr', label: 'CH', chk: 'ch', model: true, title: 'Courthouse (tick to try it)' },
+  { key: 'ps', sec: 'corr', label: 'PS', chk: 'ps', model: true, title: 'Police Station (tick to try it)' },
+  { key: 'commerce', sec: 'commerce', label: 'Commerce', val: (c) => c.commerce, total: true, title: 'Raw commerce from tiles, before corruption' },
+  { key: 'corruption', sec: 'commerce', label: 'Corrupt', val: (c) => wi (c).corruption, show: (c) => (c.modelOff ? '~' : '') + arrow (c.corruption, wi (c).corruption), cls: (c) => wiCls (c, 'corruption') || (c.corruption ? 'amber' : 'dim'), total: true },
+  { key: 'corruptionPct', sec: 'commerce', label: 'Corrupt %', val: (c) => wi (c).corruptionPct, show: (c) => arrow (c.corruptionPct, wi (c).corruptionPct, '%'), cls: (c) => wiCls (c, 'corruptionPct') || pctClass (c.corruptionPct),
+    title: 'Share of the city\'s commerce lost to corruption', ratio: ['corruption', 'commerce'] },
+  { key: 'chEffect', sec: 'corr', label: 'CH Effect', model: true, val: (c) => effectOf (c, 'ch').value, show: (c) => effectOf (c, 'ch').text,
+    cls: (c) => effectOf (c, 'ch').value > 0 ? 'green' : 'dim', csv: (c) => effectOf (c, 'ch').text,
+    title: 'What building a Courthouse would gain this city per turn: commerce kept (after its Library, Marketplace etc.) and shields kept' },
+  { key: 'psEffect', sec: 'corr', label: 'PS Effect', model: true, val: (c) => effectOf (c, 'ps').value, show: (c) => effectOf (c, 'ps').text,
+    cls: (c) => effectOf (c, 'ps').value > 0 ? 'green' : 'dim', csv: (c) => effectOf (c, 'ps').text,
+    title: 'What building a Police Station would gain this city per turn: commerce kept (after its Library, Marketplace etc.) and shields kept' },
+  { key: 'gold', sec: 'output', label: 'Gold', val: (c) => wi (c).gold, show: (c) => arrow (c.gold, wi (c).gold), cls: (c) => wiCls (c, 'gold', true), total: true },
+  { key: 'luxury', sec: 'output', label: 'Lux', val: (c) => wi (c).luxury, show: (c) => arrow (c.luxury, wi (c).luxury), cls: (c) => wiCls (c, 'luxury', true), total: true },
+  { key: 'science', sec: 'output', label: 'Sci', val: (c) => wi (c).science, show: (c) => arrow (c.science, wi (c).science), cls: (c) => wiCls (c, 'science', true), total: true },
+  { key: 'upkeep', sec: 'other', label: 'Upkeep', val: (c) => wi (c).upkeep, show: (c) => arrow (c.upkeep, wi (c).upkeep), cls: (c) => wiCls (c, 'upkeep'), total: true, title: 'Building maintenance per turn' },
+  { key: 'culture', sec: 'other', label: 'Culture', val: (c) => c.culture, total: true, title: 'Culture per turn' },
+  { key: 'status', sec: 'other', label: 'Status', l: true, val: (c) => c.disorder ? 2 : (c.celebrating ? 1 : 0),
+    show: (c) => c.disorder ? 'Disorder' : (c.celebrating ? 'Celebrating' : ''), cls: (c) => c.disorder ? 'red' : 'green' },
+  { key: 'build', sec: 'build', label: 'Production', l: true, val: (c) => c.buildName, show: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : ''),
+    csv: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : '') },
+];
+let state = { result: null, sortKey: 'size', sortDir: -1, fileName: '', loadedAt: null, rules: null, toggles: {} };
+
+// ---------- views: named sets of columns, saved in this browser ----------
+const DEFAULT_VIEWS = [
+  { name: 'Overview', columns: ['name', 'size', 'happy', 'content', 'unhappy', 'grow', 'foodNet', 'shields', 'commerce', 'corruptionPct', 'gold', 'luxury', 'science', 'status', 'build'] },
+  { name: 'Growth & happiness', columns: ['name', 'size', 'happy', 'content', 'unhappy', 'resisters', 'spec', 'foreign', 'grow', 'foodNet', 'box', 'luxury', 'status', 'build'] },
+  { name: 'Corruption management', columns: ['name', 'size', 'shields', 'waste', 'wastePct', 'commerce', 'corruption', 'corruptionPct', 'ch', 'ps', 'chEffect', 'psEffect', 'upkeep', 'build'] },
+  { name: 'Science & gold buildings', columns: ['name', 'size', 'commerce', 'corruptionPct', 'gold', 'science', 'bt:Library', 'bt:University', 'bt:Research Lab', 'bt:Marketplace', 'bt:Bank', 'bt:Stock Exchange',
+    'be:Library', 'be:University', 'be:Research Lab', 'be:Marketplace', 'be:Bank', 'be:Stock Exchange', 'upkeep'] },
+  { name: 'All columns', columns: null },
+];
+function loadViews () {
+  try {
+    const v = JSON.parse (localStorage.getItem ('civ3viewer.views') || 'null');
+    if (v && Array.isArray (v.views) && v.views.length) {
+      // Add default views introduced since these were saved (your own views and edits are kept)
+      v.seen = v.seen || ['Overview', 'Growth & happiness', 'Corruption management', 'All columns'];
+      for (const d of DEFAULT_VIEWS)
+        if (! v.seen.includes (d.name)) { v.views.splice (Math.max (0, v.views.length - 1), 0, JSON.parse (JSON.stringify (d))); v.seen.push (d.name); }
+      return v;
+    }
+  } catch (e) { /* ignore */ }
+  return { views: JSON.parse (JSON.stringify (DEFAULT_VIEWS)), current: 0, seen: DEFAULT_VIEWS.map ((d) => d.name) };
+}
+function saveViews () { try { localStorage.setItem ('civ3viewer.views', JSON.stringify (state.views)); } catch (e) { /* ignore */ } }
+state.views = loadViews ();
+function currentView () { return state.views.views[state.views.current] || state.views.views[0]; }
+function visibleColumns () {
+  const v = currentView ();
+  const avail = COLUMNS.filter ((c) => (! c.model || modelOn ()) && (! c.econ || econOn ()));
+  if (! v.columns) return avail;
+  // Always the standard column order, whatever order the view stored them in
+  return avail.filter ((c) => c.key === 'name' || v.columns.includes (c.key));
+}
+function isGroupStart (cols, i) { return i > 0 && cols[i].sec !== cols[i - 1].sec; }
+
+// ---------- what-if ----------
+// A tick key is 'ch', 'ps', or 'b<id>' for a commerce building (Library, Marketplace, ...)
+function buildingIdOf (c, key) {
+  const m = state.result && state.result.model;
+  if (key === 'ch') return m ? m.courthouse : undefined;
+  if (key === 'ps') return m ? m.police : undefined;
+  return key[0] === 'b' ? +key.slice (1) : undefined;
+}
+function hasNow (c, key) {
+  const id = buildingIdOf (c, key);
+  return id !== undefined && !! c.buildings && c.buildings.has (id);
+}
+// What-if ticks are stored per city by id and name, so they can't attach to a different city after loading a save
+function tickKey (c) { return c.id + ':' + c.name; }
+function tickCount () { return Object.values (state.toggles).reduce ((n, t) => n + Object.keys (t).length, 0); }
+function ticked (c, key) {
+  const t = state.toggles[tickKey (c)]; return (t && key in t) ? t[key] : hasNow (c, key);
+}
+function tickKeysFor (c) {
+  const keys = ['ch', 'ps'];
+  if (state.result && state.result.econ) for (const col of bonusBuildings ()) keys.push ('b' + col.id);
+  return keys;
+}
+
+// Values for the city with the given ticks (or its current ticks), anchored to the game's own numbers: only the
+// changes come from the corruption model and the commerce replay.
+function evaluate (c, ticks) {
+  const res = state.result, m = res.model, econ = res.econ, rules = res.rules;
+  const now = { corruption: c.corruption, waste: c.waste, corruptionPct: c.corruptionPct, wastePct: c.wastePct,
+                gold: c.gold, science: c.science, luxury: c.luxury, upkeep: c.upkeep, value: 0, changed: false };
+  if (! rules || ! c.buildings) return now;
+  const want = (key) => (ticks && key in ticks) ? ticks[key] : ticked (c, key);
+  const set = new Set (c.buildings);
+  let upkeep = c.upkeep, changed = false;
+  for (const key of tickKeysFor (c)) {
+    const id = buildingIdOf (c, key); if (id === undefined) continue;
+    const w = want (key), h = set.has (id);
+    if (w === h) continue;
+    changed = true;
+    const up = (rules.buildings[id] || {}).upkeep || 0;
+    if (w) { set.add (id); upkeep += up; } else { set.delete (id); upkeep -= up; }
+  }
+  if (! changed) return now;
+  const out = { ...now, upkeep, changed: true };
+
+  // Corruption and waste: Courthouse / Police Station
+  if (m && ! c.isCapital) {
+    const niNow = c.reducers.length, niNew = m.reducing.filter ((k) => set.has (k)).length;
+    if (niNow !== niNew) {
+      const sc0 = m.shareFor (c, niNow, false), sc1 = m.shareFor (c, niNew, false), sw0 = m.shareFor (c, niNow, true), sw1 = m.shareFor (c, niNew, true);
+      if (sc0 !== null && sc1 !== null) {
+        out.corruption = Math.max (0, Math.min (c.commerce, c.corruption + Math.round (c.commerce * sc1) - Math.round (c.commerce * sc0)));
+        out.waste = Math.max (0, Math.min (c.shields, c.waste + Math.floor (c.shields * sw1 + 1e-9) - Math.floor (c.shields * sw0 + 1e-9)));
+        out.corruptionPct = c.commerce > 0 ? Math.round (100 * out.corruption / c.commerce) : 0;
+        out.wastePct = c.shields > 0 ? Math.round (100 * out.waste / c.shields) : 0;
+      }
+    }
+  }
+  // Gold / science / luxury: replay the slider split and building bonuses with the new commerce and buildings
+  if (econ && c.econ) {
+    const net = c.econ.net + (c.corruption - out.corruption);
+    const o = econ.replay (net, set), off = c.econ.offset;
+    out.gold = o.gold + off.gold; out.science = o.science + off.science; out.luxury = o.luxury + off.luxury;
+  }
+  out.value = (out.gold - c.gold) + (out.science - c.science) + (out.luxury - c.luxury) + (c.waste - out.waste) - (out.upkeep - c.upkeep);
+  return out;
+}
+function wi (c) { return evaluate (c, null); }
+
+// What adding one building would do to the city as it is now (ignoring your ticks)
+function effectOf (c, key) {
+  const res = state.result;
+  const id = buildingIdOf (c, key);
+  if (! res || ! res.rules || id === undefined) return { value: -1e9, text: '' };
+  if ((key === 'ch' || key === 'ps') && c.isCapital) return { value: -1e9, text: 'capital' };
+  if (hasNow (c, key)) return { value: -1e8, text: 'has one' };
+  const bd = res.rules.buildings[id];
+  if (bd && bd.requires >= 0 && ! c.buildings.has (bd.requires))
+    return { value: -1e7, text: `needs ${res.rules.buildings[bd.requires] ? res.rules.buildings[bd.requires].name : '?'}` };
+  const ticks = {}; for (const k of tickKeysFor (c)) ticks[k] = hasNow (c, k);
+  ticks[key] = true;
+  const e = evaluate (c, ticks);
+  const parts = [], sign = (v) => (v > 0 ? '+' : '') + v;
+  const dg = e.gold - c.gold, ds = e.science - c.science, dl = e.luxury - c.luxury, dsh = c.waste - e.waste, du = e.upkeep - c.upkeep;
+  if (key === 'ch' || key === 'ps') {
+    parts.push (`${sign (dg + ds + dl)} com`, `${sign (dsh)} shd`);
+  } else {
+    // Report what the building boosts, even when the gain rounds to zero
+    if (bd.science50 || bd.doublesScience || ds) parts.push (`${sign (ds)} sci`);
+    if (bd.gold50 || dg) parts.push (`${sign (dg)} gold`);
+    if (bd.luxury50 || dl) parts.push (`${sign (dl)} lux`);
+  }
+  if (du) parts.push (`−${du} upk`);
+  return { value: e.value, text: parts.join (', ') };
+}
+
+// Commerce buildings from the rules that can be ticked: non-wonders that boost science, gold or luxury
+function bonusBuildings () {
+  const rules = state.result && state.result.rules;
+  if (! rules) return [];
+  const short = { 'Library': 'Lib', 'University': 'Univ', 'Research Lab': 'Lab', 'Marketplace': 'Mkt', 'Bank': 'Bank', 'Stock Exchange': 'SE' };
+  return rules.buildings.map ((b, id) => ({ ...b, id })).filter ((b) => ! b.wonder && (b.science50 || b.gold50 || b.luxury50))
+    .map ((b) => ({ id: b.id, name: b.name, short: short[b.name] || b.name.slice (0, 5) }));
+}
+let COLUMNS = BASE_COLUMNS;
+function rebuildColumns () {
+  const extra = [];
+  if (state.result && state.result.econ) {
+    const bb = bonusBuildings ();
+    for (const b of bb) extra.push ({ key: 'bt:' + b.name, sec: 'bonus', label: b.short, chk: 'b' + b.id, econ: true, title: `${b.name} (tick to try it)` });
+    for (const b of bb) extra.push ({ key: 'be:' + b.name, sec: 'bonusfx', label: b.short + ' Effect', econ: true,
+      val: (c) => effectOf (c, 'b' + b.id).value, show: (c) => effectOf (c, 'b' + b.id).text, csv: (c) => effectOf (c, 'b' + b.id).text,
+      cls: (c) => effectOf (c, 'b' + b.id).value > 0 ? 'green' : 'dim', title: `What building a ${b.name} would gain this city per turn` });
+  }
+  const at = BASE_COLUMNS.findIndex ((c) => c.key === 'upkeep');
+  COLUMNS = [...BASE_COLUMNS.slice (0, at), ...extra, ...BASE_COLUMNS.slice (at)];
+}
+function arrow (now, then, unit = '') { return now === then ? `${now}${unit}` : `${now}${unit} → ${then}${unit}`; }
+function wiCls (c, key, higherIsBetter) { const e = wi (c); if (e[key] === c[key]) return ''; const up = e[key] > c[key]; return ((up === !! higherIsBetter) ? 'better' : 'worse') + ' changed'; }
+function modelOn () { return !! (state.result && state.result.model); }
+function econOn () { return !! (state.result && state.result.econ); }
+
+function pctClass (p) { return p >= 50 ? 'red' : (p >= 20 ? 'amber' : (p > 0 ? '' : 'dim')); }
+function problem (c) { return c.disorder || c.unhappy > c.happy || c.foodNet < 0 || c.resisters > 0; }
+
+function render () {
+  const res = state.result;
+  if (! res || ! res.ok) return;
+  $('drop').hidden = true; $('tablewrap').hidden = false; $('legend').hidden = false; $('csv').disabled = false;
+  $('title').textContent = `${state.fileName} · turn ${res.turn} · ${res.cities.length} ${res.cities.length === 1 ? 'city' : 'cities'}`;
+
+  const COLS = visibleColumns ();
+  renderViewPicker ();
+  const nTicks = tickCount ();
+  $('resetwhatif').hidden = nTicks === 0;
+  $('resetwhatif').textContent = `Reset what-ifs (${nTicks})`;
+  const head = $('headrow'); head.textContent = '';
+  COLS.forEach ((col, ci) => { col.group = isGroupStart (COLS, ci); });
+  for (const col of COLS) {
+    const th = document.createElement ('th');
+    th.textContent = col.label;
+    th.className = (col.l ? 'l ' : '') + (col.group ? 'group ' : '') + (col.chk ? 'chk' : '');
+    if (col.title) th.title = col.title;
+    th.tabIndex = 0;
+    th.setAttribute ('aria-sort', state.sortKey === col.key ? (state.sortDir > 0 ? 'ascending' : 'descending') : 'none');
+    const go = () => { if (state.sortKey === col.key) state.sortDir *= -1; else { state.sortKey = col.key; state.sortDir = col.l ? 1 : -1; } render (); };
+    th.addEventListener ('click', go);
+    th.addEventListener ('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault (); go (); } });
+    head.appendChild (th);
+  }
+
+  const q = $('search').value.trim ().toLowerCase ();
+  let sortCol = COLS.find ((c) => c.key === state.sortKey && ! c.chk);
+  if (! sortCol) { // the sorted column isn't in this view: fall back to size (or the city name) and show that
+    sortCol = COLS.find ((c) => c.key === 'size') || COLS[0];
+    state.sortKey = sortCol.key; state.sortDir = sortCol.key === 'size' ? -1 : 1;
+  }
+  const list = res.cities
+    .filter ((c) => ! q || c.name.toLowerCase ().includes (q))
+    .filter ((c) => ! $('problems').checked || problem (c))
+    .sort ((a, b) => {
+      const va = sortCol.val (a), vb = sortCol.val (b);
+      const d = typeof va === 'string' ? va.localeCompare (vb) : va - vb;
+      return d * state.sortDir || a.name.localeCompare (b.name);
+    });
+
+  for (const th of head.children) th.setAttribute ('aria-sort', 'none');
+  const sortIndex = COLS.indexOf (sortCol);
+  if (sortIndex >= 0) head.children[sortIndex].setAttribute ('aria-sort', state.sortDir > 0 ? 'ascending' : 'descending');
+
+  const problemCount = res.cities.filter (problem).length;
+  $('problemslabel').textContent = `Problems only (${problemCount})`;
+
+  const body = $('rows'); body.textContent = '';
+  if (! list.length) {
+    const tr = document.createElement ('tr'), td = document.createElement ('td');
+    td.colSpan = COLS.length; td.className = 'empty';
+    td.textContent = $('problems').checked && ! problemCount
+      ? 'No cities with problems: none in disorder, none with more unhappy than happy citizens, none starving, none with resisters.'
+      : 'No cities match.';
+    tr.appendChild (td); body.appendChild (tr);
+  }
+  for (const c of list) {
+    const tr = document.createElement ('tr');
+    for (const col of COLS) {
+      const td = document.createElement ('td');
+      if (col.chk) {
+        td.className = 'chk' + (col.group ? ' group' : '');
+        const key = col.chk, id = buildingIdOf (c, key);
+        const bd = id !== undefined && state.result.rules ? state.result.rules.buildings[id] : null;
+        if (bd && ! ((key === 'ch' || key === 'ps') && c.isCapital)) {
+          const box = document.createElement ('input');
+          box.type = 'checkbox'; box.checked = ticked (c, key);
+          box.setAttribute ('aria-label', `${bd.name} in ${c.name}`);
+          const built = hasNow (c, key), whatIf = ticked (c, key) !== built;
+          box.title = whatIf
+            ? (built ? `What-if: ${bd.name} removed (the city has one). Tick again to undo` : `What-if: ${bd.name} added (the city doesn't have one). Untick to undo`)
+            : (built ? `${bd.name}: built. Untick to see the city without it` : `${bd.name}: not built. Tick to see the effect of building it`);
+          if (whatIf) td.classList.add ('whatif');
+          box.addEventListener ('change', () => { setTick (c, key, box.checked); render (); });
+          td.appendChild (box);
+        }
+        tr.appendChild (td);
+        continue;
+      }
+      td.textContent = col.show ? col.show (c) : col.val (c);
+      td.className = [col.l ? 'l' : '', col.group ? 'group' : '', col.cls ? col.cls (c) : ''].join (' ').trim ();
+      tr.appendChild (td);
+    }
+    body.appendChild (tr);
+  }
+
+  const foot = $('totals'); foot.textContent = '';
+  for (const col of COLS) {
+    const td = document.createElement ('td');
+    td.className = [col.l ? 'l' : '', col.group ? 'group' : ''].join (' ').trim ();
+    if (col.key === 'name') td.textContent = list.length === res.cities.length ? 'Total' : `Total (${list.length} shown)`;
+    else if (col.chk) td.className += ' chk';
+    else if (col.key === 'chEffect' || col.key === 'psEffect' || col.key.startsWith ('be:') || col.key === 'status' || col.key === 'build') td.textContent = '';
+    else if (col.ratio) {
+      const num = list.reduce ((s, c) => s + wi (c)[col.ratio[0]], 0), den = list.reduce ((s, c) => s + (col.ratio[1] === 'shieldsGross' ? c.shields : c[col.ratio[1]]), 0);
+      td.textContent = den > 0 ? Math.round (100 * num / den) + '%' : '0%';
+    }
+    else if (['size', 'happy', 'content', 'unhappy', 'resisters', 'foreign'].includes (col.key) || col.total)
+      td.textContent = list.reduce ((s, c) => s + col.val (c), 0);
+    if (! col.chk && ['waste', 'corruption', 'gold', 'science', 'luxury', 'upkeep'].includes (col.key)) {
+      const now = list.reduce ((s, c) => s + c[col.key], 0), then = list.reduce ((s, c) => s + wi (c)[col.key], 0);
+      td.textContent = arrow (now, then);
+    }
+    foot.appendChild (td);
+  }
+  fitTable ();
+}
+
+function fitTable () {
+  const w = $('tablewrap'); if (w.hidden) return;
+  const top = w.getBoundingClientRect ().top;
+  w.style.maxHeight = Math.max (240, window.innerHeight - top - 14) + 'px';
+}
+window.addEventListener ('resize', fitTable);
+
+function showDiag () {
+  const r = state.result;
+  $('diag').textContent = r ? r.diag.join ('\n') : 'No file loaded.';
+  $('debug').disabled = ! r;
+}
+
+function load (bytes, name) {
+  let res;
+  state.lastBytes = bytes;
+  try { res = Civ3Parse.parse (bytes, state.rules); }
+  catch (e) { res = { ok: false, cities: [], diag: ['Error while reading: ' + e.message] }; }
+  const gameId = res.world ? `${res.world.seed}|${res.world.width}x${res.world.height}|${res.player}` : null;
+  if (gameId !== state.gameId) state.toggles = {}; // a different game: what-ifs from the previous one don't apply
+  state.gameId = gameId;
+  if (res.ok) {
+    const live = new Set (res.cities.map ((c) => c.id + ':' + c.name));
+    for (const k of Object.keys (state.toggles)) if (! live.has (k)) delete state.toggles[k];
+  }
+  state.result = res; state.fileName = name; state.loadedAt = new Date ();
+  rebuildColumns ();
+  renderViewEditor ();
+  state.rawFirstCity = null;
+  showDiag ();
+  if (res.ok) { render (); setStatus (`Loaded ${name} at ${state.loadedAt.toLocaleTimeString ()}`); }
+  else {
+    setStatus (`Couldn't read ${name}. See Diagnostics below.`);
+    document.querySelector ('details').open = true;
+  }
+}
+function setStatus (s) { $('status').textContent = s; }
+
+async function loadFile (file) { load (new Uint8Array (await file.arrayBuffer ()), file.name); }
+$('file').addEventListener ('change', (e) => { if (e.target.files[0]) loadFile (e.target.files[0]); });
+const drop = $('drop');
+for (const t of [document.body]) {
+  t.addEventListener ('dragover', (e) => { e.preventDefault (); drop.classList.add ('over'); });
+  t.addEventListener ('dragleave', () => drop.classList.remove ('over'));
+  t.addEventListener ('drop', (e) => { e.preventDefault (); drop.classList.remove ('over'); const f = e.dataTransfer.files[0]; if (f) loadFile (f); });
+}
+$('search').addEventListener ('input', render);
+
+function renderViewPicker () {
+  const sel = $('viewsel');
+  const names = state.views.views.map ((v) => v.name).join ('|');
+  if (sel.dataset.names !== names) {
+    sel.textContent = '';
+    state.views.views.forEach ((v, i) => { const o = document.createElement ('option'); o.value = i; o.textContent = v.name; sel.appendChild (o); });
+    sel.dataset.names = names;
+  }
+  sel.value = state.views.current;
+}
+$('viewsel').addEventListener ('change', () => { state.views.current = +$('viewsel').value; saveViews (); renderViewEditor (); render (); });
+const SECTION_NAMES = { city: 'City', mood: 'Citizens', food: 'Food & growth', shields: 'Shields', corr: 'Courthouse & Police',
+  commerce: 'Commerce & corruption', output: 'Gold, luxury, science', bonus: 'Commerce buildings', bonusfx: 'Commerce building effects',
+  other: 'Other', build: 'Production' };
+function columnAvailable (col) { return (! col.model || modelOn ()) && (! col.econ || econOn ()); }
+function setViewColumns (keys) {
+  // Known columns in their standard order, then any the view had that aren't available right now (kept, not lost)
+  const known = COLUMNS.map ((c) => c.key);
+  const ordered = known.filter ((k) => k === 'name' || keys.includes (k));
+  const kept = keys.filter ((k) => ! known.includes (k));
+  currentView ().columns = [...ordered, ...kept];
+}
+function renderViewEditor () {
+  if ($('viewedit').hidden) return;
+  const v = currentView ();
+  $('viewname').value = v.name;
+  const box = $('viewcols'); box.textContent = '';
+  const chosen = v.columns || COLUMNS.map ((c) => c.key);
+  const groups = {};
+  for (const col of COLUMNS) {
+    if (col.key === 'name') continue;
+    (groups[col.sec] || (groups[col.sec] = [])).push (col);
+  }
+  for (const [sec, cols] of Object.entries (groups)) {
+    const g = document.createElement ('div'); g.className = 'vegroup';
+    g.appendChild (Object.assign (document.createElement ('h3'), { textContent: SECTION_NAMES[sec] || sec }));
+    for (const col of cols) {
+      const avail = columnAvailable (col);
+      const lab = document.createElement ('label'), cb = document.createElement ('input');
+      cb.type = 'checkbox'; cb.checked = chosen.includes (col.key);
+      if (! avail) { lab.className = 'na'; lab.title = 'Needs the rules file (conquests.biq); kept in the view and shown once it is loaded'; }
+      else if (col.title) lab.title = col.title;
+      cb.addEventListener ('change', () => {
+        const keys = (currentView ().columns || COLUMNS.map ((c) => c.key)).filter ((k) => k !== col.key);
+        if (cb.checked) keys.push (col.key);
+        setViewColumns (keys);
+        saveViews (); render ();
+      });
+      lab.appendChild (cb);
+      lab.appendChild (document.createTextNode (col.label + (avail ? '' : ' *')));
+      g.appendChild (lab);
+    }
+    box.appendChild (g);
+  }
+  const note = econOn () ? 'The City column is always shown; columns keep a fixed order. Views are saved in this browser.'
+    : '* needs the rules file (conquests.biq). The Commerce buildings columns (Library, Bank, …) appear once it is loaded. Views are saved in this browser.';
+  box.appendChild (Object.assign (document.createElement ('div'), { className: 'note', textContent: note }));
+}
+$('editview').addEventListener ('click', () => { $('viewedit').hidden = ! $('viewedit').hidden; renderViewEditor (); fitTable (); });
+$('viewdone').addEventListener ('click', () => { $('viewedit').hidden = true; fitTable (); });
+$('viewname').addEventListener ('input', () => { currentView ().name = $('viewname').value.trim () || 'Untitled'; saveViews (); renderViewPicker (); });
+$('viewnew').addEventListener ('click', () => {
+  state.views.views.push ({ name: 'My view', columns: [...(currentView ().columns || COLUMNS.map ((c) => c.key))] });
+  state.views.current = state.views.views.length - 1; saveViews (); renderViewEditor (); render (); renderViewPicker ();
+  $('viewname').focus (); $('viewname').select ();
+});
+$('viewdelete').addEventListener ('click', () => {
+  if (state.views.views.length <= 1) return;
+  state.views.views.splice (state.views.current, 1);
+  state.views.current = Math.max (0, state.views.current - 1); saveViews (); renderViewEditor (); render (); renderViewPicker ();
+});
+$('viewreset').addEventListener ('click', () => {
+  state.views = { views: JSON.parse (JSON.stringify (DEFAULT_VIEWS)), current: 0, seen: DEFAULT_VIEWS.map ((d) => d.name) }; saveViews (); renderViewEditor (); render (); renderViewPicker ();
+});
+renderViewPicker ();
+$('resetwhatif').addEventListener ('click', () => { state.toggles = {}; render (); });
+
+// Ticks follow prerequisites: ticking a University also ticks its Library; unticking a Library unticks what needs it
+function setTick (c, key, on) {
+  const t = state.toggles[tickKey (c)] || (state.toggles[tickKey (c)] = {});
+  const rules = state.result.rules;
+  const apply = (k, v) => { t[k] = v; if (t[k] === hasNow (c, k)) delete t[k]; };
+  apply (key, on);
+  const id = buildingIdOf (c, key);
+  if (on && key[0] === 'b') {
+    let req = rules.buildings[id] ? rules.buildings[id].requires : -1;
+    while (req >= 0 && rules.buildings[req]) { if (! ticked (c, 'b' + req)) apply ('b' + req, true); req = rules.buildings[req].requires; }
+  }
+  if (! on) {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const k of tickKeysFor (c)) {
+        const bid = buildingIdOf (c, k), bd = bid !== undefined ? rules.buildings[bid] : null;
+        if (bd && bd.requires >= 0 && ticked (c, k) && ! ticked (c, 'b' + bd.requires) && bonusBuildings ().some ((b) => b.id === bd.requires)) { apply (k, false); changed = true; }
+      }
+    }
+  }
+  if (! Object.keys (t).length) delete state.toggles[tickKey (c)];
+}
+
+function useRules (bytes, name, remember) {
+  const r = Civ3Parse.parseRulesFile (bytes);
+  if (! r.rules) { setStatus (`${name}: ${r.diag.join ('; ')}`); return false; }
+  state.rules = r.rules;
+  $('rulesstatus').textContent = `· rules: ${name}`;
+  if (remember) {
+    try {
+      let bin = ''; for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode (bytes[i]);
+      localStorage.setItem ('civ3viewer.rules', JSON.stringify ({ name, data: btoa (bin) }));
+    } catch (e) { /* storage unavailable: rules just won't be remembered */ }
+  }
+  if (state.lastBytes) load (state.lastBytes, state.fileName);
+  return true;
+}
+$('rulesfile').addEventListener ('change', async (e) => {
+  const f = e.target.files[0]; if (! f) return;
+  if (useRules (new Uint8Array (await f.arrayBuffer ()), f.name, true)) setStatus (`Rules loaded from ${f.name}`);
+});
+try {
+  const saved = JSON.parse (localStorage.getItem ('civ3viewer.rules') || 'null');
+  if (saved) {
+    const bin = atob (saved.data), bytes = new Uint8Array (bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt (i);
+    useRules (bytes, saved.name + ' (remembered)', false);
+  }
+} catch (e) { /* ignore */ }
+$('problems').addEventListener ('change', render);
+
+// Folder watching (Edge/Chrome): reload the newest .SAV whenever it changes
+let watchTimer = null;
+$('watch').addEventListener ('click', async () => {
+  if (! window.showDirectoryPicker) { setStatus ('Folder watching needs Edge or Chrome. You can still open saves one at a time.'); return; }
+  let dir;
+  try { dir = await window.showDirectoryPicker (); } catch (e) { return; }
+  let last = '';
+  const poll = async () => {
+    try {
+      let newest = null;
+      for await (const entry of dir.values ()) {
+        if (entry.kind !== 'file' || ! /\.sav$/i.test (entry.name)) continue;
+        const f = await entry.getFile ();
+        if (! newest || f.lastModified > newest.lastModified) newest = f;
+      }
+      if (! newest) { setStatus (`Watching ${dir.name}: no .SAV files yet`); return; }
+      const sig = newest.name + '|' + newest.lastModified + '|' + newest.size;
+      if (sig !== last) {
+        last = sig;
+        await new Promise ((r) => setTimeout (r, 800)); // let the game finish writing
+        await loadFile (await (await dir.getFileHandle (newest.name)).getFile ());
+        setStatus (`Watching ${dir.name} · loaded ${newest.name} at ${new Date ().toLocaleTimeString ()}`);
+      }
+    } catch (e) { setStatus ('Watching stopped: ' + e.message); clearInterval (watchTimer); }
+  };
+  clearInterval (watchTimer);
+  await poll ();
+  watchTimer = setInterval (poll, 3000);
+});
+
+$('csv').addEventListener ('click', () => {
+  const res = state.result; if (! res) return;
+  const esc = (v) => /[",\n]/.test (String (v)) ? `"${String (v).replace (/"/g, '""')}"` : String (v);
+  const COLS = visibleColumns ();
+  const cell = (col, c) => col.chk ? (ticked (c, col.chk) ? 'yes' : '') : (col.csv ? col.csv (c) : (col.show ? col.show (c) : col.val (c)));
+  const lines = [COLS.map ((c) => esc (c.label)).join (',')];
+  for (const c of res.cities) lines.push (COLS.map ((col) => esc (cell (col, c))).join (','));
+  download (lines.join ('\r\n'), (state.fileName || 'cities').replace (/\.sav$/i, '') + '.csv', 'text/csv');
+});
+
+$('debug').addEventListener ('click', () => {
+  const r = state.result; if (! r) return;
+  const report = { file: state.fileName, diag: r.diag, turn: r.turn, player: r.player, cityCount: r.cities.length,
+                   firstCities: r.cities.slice (0, 5).map (({ raw, buildings, ...c }) => ({ ...c, buildings: buildings ? [...buildings] : null })) };
+  download (JSON.stringify (report, null, 2), 'civ3-viewer-debug.json', 'application/json');
+});
+
+function download (text, name, type) {
+  const a = document.createElement ('a');
+  a.href = URL.createObjectURL (new Blob ([text], { type }));
+  a.download = name; document.body.appendChild (a); a.click (); a.remove ();
+  setTimeout (() => URL.revokeObjectURL (a.href), 1000);
+}
+</script>
+</body>
+</html>

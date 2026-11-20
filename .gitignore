@@ -1,0 +1,14 @@
+# Game files and personal saves: copyrighted or private, never commit
+local-data/
+*.SAV
+*.sav
+*.biq
+*.BIQ
+*.exe
+# Build and test output
+tests/cblast
+tests/ui_dark.png
+__pycache__/
+node_modules/
+.idea/
+.DS_Store
