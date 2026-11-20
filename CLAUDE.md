@@ -2,6 +2,7 @@
 
 Offline single-file HTML viewer for Civilization III: Complete saves. Published at
 github.com/IamTheHttp/civ3-web-assist. Layouts and formulas: `docs/REVERSE_ENGINEERING.md`.
+Read `docs/learnings/README.md` first: workflow, player preferences, reverse-engineering method, open questions.
 
 ## The player and the setup
 - Plays **Civilization III Complete, GOG version**, on **Windows**, with the C3X exe mod.
