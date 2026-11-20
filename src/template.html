@@ -263,7 +263,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <h3>The table</h3>
       <dl>
         <dt>Sort</dt><dd>Click a column name. Click again to reverse.</dd>
-        <dt>▾ Filter</dt><dd>On each column, as in a spreadsheet: sort, a condition (greater than, between, contains…) or tick the values to keep. A blue ▾ marks a filtered column. Filters use the real numbers, so what-if ticks don't hide a city; each view keeps its own.</dd>
+        <dt>▾ Filter</dt><dd>On each column, as in a spreadsheet: sort, a condition (greater than, between, contains…) or tick the values to keep. A blue ▾ marks a filtered column. Filters and sorting use the real numbers, so a what-if tick never hides or moves a city; each view keeps its own filters.</dd>
         <dt>What-if ticks</dt><dd>Tick <b>CH</b>, <b>PS</b>, <b>Lib</b>, <b>Mkt</b>… to try a building. Changed numbers show <i>now → then</i>; an amber outline marks a tick that isn't real.</dd>
         <dt>Effect columns</dt><dd>What one building would gain the city per turn, after upkeep, and how many turns until it pays back its cost: <span class="green">green</span> fast, <span class="amber">amber</span> slow, grey never. They sort fastest payback first. Set the limits in Tiers.</dd>
         <dt>Tier</dt><dd>Pick a tier to fix it for that city; <i>(auto)</i> follows corruption.</dd>
@@ -652,8 +652,8 @@ function rebuildColumns () {
   }
   const at = BASE_COLUMNS.findIndex ((c) => c.key === 'upkeep');
   COLUMNS = [...BASE_COLUMNS.slice (0, at), ...extra, ...BASE_COLUMNS.slice (at)];
-  // Tick columns sort by the tick (with your what-ifs): ticked first or last
-  for (const col of COLUMNS) if (col.chk && ! col.val) col.val = (c) => ticked (c, col.chk) ? 1 : 0;
+  // Tick columns sort by whether the city has the building (real, like every sort)
+  for (const col of COLUMNS) if (col.chk && ! col.val) col.val = (c) => (state.realValues ? hasNow (c, col.chk) : ticked (c, col.chk)) ? 1 : 0;
 }
 // Corruption above the cap: the formula's distance and rank parts, shown when their sum is over the cap
 function uncapped (c) {
@@ -1618,13 +1618,17 @@ function render () {
     sortCol = COLS.find ((c) => c.key === 'size') || COLS[0];
     state.sortKey = sortCol.key; state.sortDir = sortCol.key === 'size' ? -1 : 1;
   }
+  // Sorting uses the real values, so a what-if tick changes numbers but never moves a row
+  const sortKeys = new Map ();
+  state.realValues = true;
+  try { for (const c of res.cities) sortKeys.set (c, sortCol.val (c)); } finally { state.realValues = false; }
   const list = res.cities
     .filter ((c) => ! words.length || matches (c))
     .filter ((c) => ! $('problems').checked || problem (c))
     .filter ((c) => ! $('attnonly').checked || needsAttention (c))
     .filter ((c) => passesFilters (c, COLS))
     .sort ((a, b) => {
-      const va = sortCol.val (a), vb = sortCol.val (b);
+      const va = sortKeys.get (a), vb = sortKeys.get (b);
       const d = typeof va === 'string' ? va.localeCompare (vb) : va - vb;
       return d * state.sortDir || a.name.localeCompare (b.name);
     });
