@@ -112,9 +112,19 @@ summary { cursor: pointer; color: var(--muted); }
 .kv > span.k { color: var(--muted); }
 .kv.three > span.h { color: var(--gold); font-size: 12px; text-align: right; }
 .kv > span.v, .kv.three > span:not(.k) { text-align: right; }
-.legend { color: var(--muted); font-size: 12.5px; margin-top: 10px; }
-.legend b { color: var(--ink); font-weight: 600; }
-#theme { margin-left: auto; }
+#helpbtn { margin-left: auto; }
+dialog#help { width: min(780px, calc(100vw - 32px)); max-height: 86vh; padding: 0; border: 1px solid var(--line); border-radius: 8px;
+              background: var(--panel); color: var(--ink); }
+dialog#help::backdrop { background: rgba(0, 0, 0, .45); }
+.helphead { position: sticky; top: 0; display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.helphead h2 { font-size: 17px; margin: 0; flex: 1; }
+.helpbody { padding: 4px 16px 16px; }
+.helpbody h3 { font-size: 12px; font-weight: 600; color: var(--gold); text-transform: uppercase; letter-spacing: .4px; margin: 16px 0 6px; }
+.helpbody ol { margin: 0; padding-left: 20px; } .helpbody li { margin: 3px 0; }
+.helpbody dl { display: grid; grid-template-columns: minmax(120px, max-content) 1fr; gap: 4px 14px; margin: 0; }
+.helpbody dt { font-weight: 600; white-space: nowrap; } .helpbody dd { margin: 0; color: var(--muted); }
+.helpbody .chip { display: inline-block; padding: 0 6px; border-radius: 4px; border: 1px solid var(--line); background: var(--head); font-weight: 600; }
+@media (max-width: 560px) { .helpbody dl { grid-template-columns: 1fr; } .helpbody dd { margin-bottom: 6px; } }
 .hist { margin: 0 0 10px; }
 .histbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
 #histchartbox { position: relative; width: 100%; overflow: hidden; }
@@ -149,8 +159,59 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <h1>Civ3 Empire Viewer</h1>
     <span class="sub" id="title">Open a save to see your cities</span>
     <span class="sub" id="rulesstatus"></span>
+    <button id="helpbtn" type="button" title="How the buttons and columns work">? Help</button>
     <button id="theme" type="button"></button>
   </header>
+
+  <dialog id="help" aria-labelledby="helptitle">
+    <div class="helphead"><h2 id="helptitle">How it works</h2><button id="helpclose" type="button">Close</button></div>
+    <div class="helpbody">
+      <h3>Get started</h3>
+      <ol>
+        <li><b>Load rules (conquests.biq)…</b> once. It's in your Conquests folder; the page remembers it.</li>
+        <li><b>Open save…</b>, or drop a .SAV file on the page.</li>
+        <li>Optional: <b>Watch autosave folder…</b> reloads the newest save each turn (Edge or Chrome).</li>
+      </ol>
+      <p class="dim">Your files stay on your computer. Settings and history stay in this browser.</p>
+
+      <h3>Buttons</h3>
+      <dl>
+        <dt>Open save…</dt><dd>Read a save file.</dd>
+        <dt>Load rules…</dt><dd>Read conquests.biq: names, corruption model, what-ifs, tiers.</dd>
+        <dt>Watch autosave folder…</dt><dd>Pick <code>Saves\Auto</code>; the newest save loads by itself.</dd>
+        <dt>View</dt><dd>Switch between sets of columns.</dd>
+        <dt>Columns…</dt><dd>Choose this view's columns. <b>Clear all columns</b> starts from empty; <b>New view</b> makes your own.</dd>
+        <dt>Tiers…</dt><dd>Name corruption tiers and set which buildings each tier should have, from which city size.</dd>
+        <dt>Filter cities</dt><dd>Type part of a city name.</dd>
+        <dt>Problems only</dt><dd>Cities in disorder or close to it, starving, or with resisters.</dd>
+        <dt>Needs attention</dt><dd>Cities missing a building their tier expects.</dd>
+        <dt>Export CSV</dt><dd>The table as a spreadsheet file.</dd>
+        <dt>Reset what-ifs</dt><dd>Undo every tick you changed.</dd>
+        <dt><span class="chip">◐ Auto</span></dt><dd>Theme: Auto (your system), Light or Dark.</dd>
+      </dl>
+
+      <h3>The table</h3>
+      <dl>
+        <dt>Sort</dt><dd>Click a column name. Click again to reverse.</dd>
+        <dt>What-if ticks</dt><dd>Tick <b>CH</b>, <b>PS</b>, <b>Lib</b>, <b>Mkt</b>… to try a building. Changed numbers show <i>now → then</i>; an amber outline marks a tick that isn't real.</dd>
+        <dt>Effect columns</dt><dd>What one building would gain the city per turn, after upkeep. Sort them to find the best places.</dd>
+        <dt>Tier</dt><dd>Pick a tier to fix it for that city; <i>(auto)</i> follows corruption.</dd>
+        <dt>Attention</dt><dd><span class="amber">Amber</span>: missing. <span class="green">Green</span>: being built now.</dd>
+        <dt>Colours</dt><dd><span class="red">Red</span>: serious (half or more lost, disorder). <span class="amber">Amber</span>: watch it. <b>~</b>: the corruption model doesn't match the game in that city.</dd>
+        <dt>Hover</dt><dd>Point at a column name or a number for more detail.</dd>
+      </dl>
+
+      <h3>Panels</h3>
+      <dl>
+        <dt>Summary cards</dt><dd>Your whole empire. Point at a line to see how it's worked out.</dd>
+        <dt>History</dt><dd>Each save you open stores its turn. Pick a chart and a city; the dashed line is the turn you have loaded. <b>Add saves…</b> adds older saves at once.</dd>
+        <dt>Diagnostics</dt><dd>What the page read from your files. <b>Download debug report</b> if something looks wrong.</dd>
+      </dl>
+
+      <h3>Columns</h3>
+      <dl id="helpcols"></dl>
+    </div>
+  </dialog>
 
   <div class="bar">
     <label class="filebtn primary" for="file">Open save…</label>
@@ -223,20 +284,6 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     </table>
   </div>
 
-  <p class="legend" id="legend" hidden>
-    <b>Grow</b>: turns until the city grows (same rule as the city screen); <b>–</b> not growing, <b>max</b> food box full and waiting for an Aqueduct or Hospital.
-    <b>Food</b>: net food per turn. <b>Box</b>: food stored / needed. <b>Shields</b> and <b>Commerce</b>: raw totals from the city's tiles, before waste and corruption. <b>Net Shields</b> and <b>Net Commerce</b>: shields after waste and commerce after corruption. <b>Waste</b> and <b>Corrupt</b>: shields and commerce lost, and as a share of the city's total (<b>%</b>; the totals row shows your whole empire).
-    <b>Resist</b>: resisting citizens. <b>Foreign</b>: citizens of another nationality (culture-flip risk). <b>Spec</b>: entertainers / scientists / taxmen.
-    <b>CH</b> / <b>PS</b>: the city has a Courthouse / Police Station. Tick or untick to see what that would change: corruption, waste and their shares show <i>now → then</i>. A what-if tick (something the city doesn't really have, or a building you've unticked) is <b>outlined in amber</b>; plain ticks are what the city has.
-    <b>CH Effect</b> / <b>PS Effect</b>: what building a Courthouse / Police Station would gain the city each turn: commerce kept, after its Library, Marketplace etc. (<b>com</b>), shields kept (<b>shd</b>) and the building's gold upkeep (<b>upk</b>). The two buildings reduce corruption the same way; the Police Station costs more upkeep. Sorting by them ranks the best places, upkeep included.
-    <b>Lib, Univ, Lab, Mkt, Bank, SE</b> (and their <b>Effect</b> columns) work the same way for buildings that boost science or gold: the effect is what the building would add to this city, worked out the way the game does it (your slider split, then the building bonuses), minus upkeep. Ticking a building also ticks what it requires.
-    <b>History</b>: each save you open stores its turn in this browser, per game; the chart marks the turn you have loaded.
-    <b>Tier</b>: the city's tier by corruption; pick one to fix it for that city. <b>Attention</b>: buildings the city's tier expects that it doesn't have (<i>Tiers…</i>); green: being built now. Coastal and river buildings count only where they can be built.
-    Use <b>View</b> to switch between column sets and <b>Columns…</b> to choose what a view shows.
-    <b>Corrupt %</b> over the cap shows the uncapped parts in brackets: distance to the palace + city rank (hover for details).
-    Corruption figures come from the game's formula and are checked against your save (see Diagnostics); <b>~</b> marks a city where they didn't match.
-    Click a column header to sort; click again to reverse.
-  </p>
 
   <details>
     <summary>Diagnostics</summary>
@@ -254,27 +301,27 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
 <script>
 const $ = (id) => document.getElementById (id);
 const BASE_COLUMNS = [
-  { key: 'name', sec: 'city', label: 'City', l: true, val: (c) => c.name, csv: (c) => c.name },
-  { key: 'size', sec: 'city', label: 'Size', val: (c) => c.size },
+  { key: 'name', sec: 'city', label: 'City', title: 'City name', l: true, val: (c) => c.name, csv: (c) => c.name },
+  { key: 'size', sec: 'city', label: 'Size', title: 'Citizens in the city', val: (c) => c.size },
   { key: 'tier', sec: 'attn', label: 'Tier', l: true, val: (c) => tierOf (c), show: (c) => tierName (tierOf (c)), csv: (c) => tierName (tierOf (c)), cell: tierCell,
     title: 'Tier by corruption (see Tiers…). Pick a tier to fix it for this city' },
   { key: 'attention', sec: 'attn', label: 'Attention', l: true, val: (c) => missingCount (c), show: (c) => warningsFor (c).map ((w) => w.text).join ('; '),
     cell: attentionCell, total: true, firstDir: -1,
     title: 'Buildings missing for the city\'s tier (see Tiers…); green: in production now. Sorts the cities with the most missing first' },
-  { key: 'happy', sec: 'mood', label: 'Happy', val: (c) => c.happy },
-  { key: 'content', sec: 'mood', label: 'Content', val: (c) => c.content },
-  { key: 'unhappy', sec: 'mood', label: 'Unhappy', val: (c) => c.unhappy, cls: (c) => c.unhappy > c.happy ? 'red' : (c.unhappy ? 'amber' : '') },
-  { key: 'resisters', sec: 'mood', label: 'Resist', val: (c) => c.resisters, cls: (c) => c.resisters ? 'red' : 'dim' },
+  { key: 'happy', sec: 'mood', label: 'Happy', title: 'Happy citizens', val: (c) => c.happy },
+  { key: 'content', sec: 'mood', label: 'Content', title: 'Content citizens', val: (c) => c.content },
+  { key: 'unhappy', sec: 'mood', label: 'Unhappy', title: 'Unhappy citizens', val: (c) => c.unhappy, cls: (c) => c.unhappy > c.happy ? 'red' : (c.unhappy ? 'amber' : '') },
+  { key: 'resisters', sec: 'mood', label: 'Resist', title: 'Citizens resisting your rule', val: (c) => c.resisters, cls: (c) => c.resisters ? 'red' : 'dim' },
   { key: 'spec', sec: 'mood', label: 'Spec', val: (c) => c.entertainers + c.scientists + c.taxmen,
     show: (c) => (c.entertainers + c.scientists + c.taxmen) ? `${c.entertainers}/${c.scientists}/${c.taxmen}` : '0',
     cls: (c) => (c.entertainers + c.scientists + c.taxmen) ? '' : 'dim', title: 'Entertainers / scientists / taxmen' },
-  { key: 'foreign', sec: 'mood', label: 'Foreign', val: (c) => c.foreign, cls: (c) => c.foreign ? 'amber' : 'dim' },
-  { key: 'grow', sec: 'food', label: 'Grow', val: (c) => c.grow === null ? 9998 : (c.grow === 'max' ? 9999 : c.grow),
+  { key: 'foreign', sec: 'mood', label: 'Foreign', title: 'Citizens of another nationality: culture-flip risk', val: (c) => c.foreign, cls: (c) => c.foreign ? 'amber' : 'dim' },
+  { key: 'grow', sec: 'food', label: 'Grow', title: 'Turns until the city grows, as on the city screen. –: not growing. max: food box full, waiting for an Aqueduct or Hospital', val: (c) => c.grow === null ? 9998 : (c.grow === 'max' ? 9999 : c.grow),
     show: (c) => c.grow === null ? '–' : c.grow, cls: (c) => c.grow === null ? (c.foodNet < 0 ? 'red' : 'dim') : (c.grow === 'max' ? 'amber' : '') },
-  { key: 'foodNet', sec: 'food', label: 'Food', val: (c) => c.foodNet, show: (c) => (c.foodNet > 0 ? '+' : '') + c.foodNet, cls: (c) => c.foodNet < 0 ? 'red' : '', total: true },
-  { key: 'box', sec: 'food', label: 'Box', val: (c) => c.storedFood / c.foodBox, show: (c) => `${c.storedFood}/${c.foodBox}`, csv: (c) => `${c.storedFood}/${c.foodBox}` },
+  { key: 'foodNet', sec: 'food', label: 'Food', title: 'Net food per turn', val: (c) => c.foodNet, show: (c) => (c.foodNet > 0 ? '+' : '') + c.foodNet, cls: (c) => c.foodNet < 0 ? 'red' : '', total: true },
+  { key: 'box', sec: 'food', label: 'Box', title: 'Food stored / food needed to grow', val: (c) => c.storedFood / c.foodBox, show: (c) => `${c.storedFood}/${c.foodBox}`, csv: (c) => `${c.storedFood}/${c.foodBox}` },
   { key: 'shields', sec: 'shields', label: 'Shields', val: (c) => c.shields, total: true, title: 'Raw shields from tiles, before waste' },
-  { key: 'waste', sec: 'shields', label: 'Waste', val: (c) => wi (c).waste, show: (c) => arrow (c.waste, wi (c).waste), cls: (c) => wiCls (c, 'waste') || (c.waste ? 'amber' : 'dim'), total: true },
+  { key: 'waste', sec: 'shields', label: 'Waste', title: 'Shields lost to waste', val: (c) => wi (c).waste, show: (c) => arrow (c.waste, wi (c).waste), cls: (c) => wiCls (c, 'waste') || (c.waste ? 'amber' : 'dim'), total: true },
   { key: 'wastePct', sec: 'shields', label: 'Waste %', val: (c) => wi (c).wastePct, show: (c) => arrow (c.wastePct, wi (c).wastePct, '%'), cls: (c) => wiCls (c, 'wastePct') || pctClass (c.wastePct),
     title: 'Share of the city\'s shields lost to waste', ratio: ['waste', 'shieldsGross'] },
   { key: 'netShields', sec: 'shields', label: 'Net Shields', val: (c) => c.shields - wi (c).waste, show: (c) => arrow (c.shields - c.waste, c.shields - wi (c).waste),
@@ -282,9 +329,9 @@ const BASE_COLUMNS = [
   { key: 'ch', sec: 'corr', label: 'CH', chk: 'ch', model: true, title: 'Courthouse (tick to try it)' },
   { key: 'ps', sec: 'corr', label: 'PS', chk: 'ps', model: true, title: 'Police Station (tick to try it)' },
   { key: 'commerce', sec: 'commerce', label: 'Commerce', val: (c) => c.commerce, total: true, title: 'Raw commerce from tiles, before corruption' },
-  { key: 'corruption', sec: 'commerce', label: 'Corrupt', val: (c) => wi (c).corruption, show: (c) => (c.modelOff ? '~' : '') + arrow (c.corruption, wi (c).corruption), cls: (c) => wiCls (c, 'corruption') || (c.corruption ? 'amber' : 'dim'), total: true },
+  { key: 'corruption', sec: 'commerce', label: 'Corrupt', title: 'Commerce lost to corruption. ~: the corruption model doesn\'t match the game here', val: (c) => wi (c).corruption, show: (c) => (c.modelOff ? '~' : '') + arrow (c.corruption, wi (c).corruption), cls: (c) => wiCls (c, 'corruption') || (c.corruption ? 'amber' : 'dim'), total: true },
   { key: 'corruptionPct', sec: 'commerce', label: 'Corrupt %', val: (c) => wi (c).corruptionPct, show: (c) => arrow (c.corruptionPct, wi (c).corruptionPct, '%') + uncapped (c).text, tip: (c) => uncapped (c).tip, cls: (c) => wiCls (c, 'corruptionPct') || pctClass (c.corruptionPct),
-    title: 'Share of the city\'s commerce lost to corruption', ratio: ['corruption', 'commerce'] },
+    title: 'Share of the city\'s commerce lost to corruption. Over the cap, brackets show the uncapped parts: distance to the palace + city rank', ratio: ['corruption', 'commerce'] },
   { key: 'netCommerce', sec: 'commerce', label: 'Net Commerce', val: (c) => c.commerce - wi (c).corruption, show: (c) => arrow (c.commerce - c.corruption, c.commerce - wi (c).corruption),
     cls: (c) => wiCls (c, 'corruption') ? (wi (c).corruption < c.corruption ? 'better changed' : 'worse changed') : '', total: true, title: 'Commerce after corruption' },
   { key: 'chEffect', sec: 'corr', label: 'CH Effect', model: true, val: (c) => effectOf (c, 'ch').value, show: (c) => effectOf (c, 'ch').text,
@@ -293,14 +340,14 @@ const BASE_COLUMNS = [
   { key: 'psEffect', sec: 'corr', label: 'PS Effect', model: true, val: (c) => effectOf (c, 'ps').value, show: (c) => effectOf (c, 'ps').text,
     cls: (c) => effectOf (c, 'ps').value > 0 ? 'green' : 'dim', csv: (c) => effectOf (c, 'ps').text,
     title: 'What building a Police Station would gain this city per turn: commerce kept (after its Library, Marketplace etc.) and shields kept' },
-  { key: 'gold', sec: 'output', label: 'Gold', val: (c) => wi (c).gold, show: (c) => arrow (c.gold, wi (c).gold), cls: (c) => wiCls (c, 'gold', true), total: true },
-  { key: 'luxury', sec: 'output', label: 'Lux', val: (c) => wi (c).luxury, show: (c) => arrow (c.luxury, wi (c).luxury), cls: (c) => wiCls (c, 'luxury', true), total: true },
-  { key: 'science', sec: 'output', label: 'Sci', val: (c) => wi (c).science, show: (c) => arrow (c.science, wi (c).science), cls: (c) => wiCls (c, 'science', true), total: true },
+  { key: 'gold', sec: 'output', label: 'Gold', title: 'Gold after Marketplace etc.', val: (c) => wi (c).gold, show: (c) => arrow (c.gold, wi (c).gold), cls: (c) => wiCls (c, 'gold', true), total: true },
+  { key: 'luxury', sec: 'output', label: 'Lux', title: 'Luxury after Marketplace etc.', val: (c) => wi (c).luxury, show: (c) => arrow (c.luxury, wi (c).luxury), cls: (c) => wiCls (c, 'luxury', true), total: true },
+  { key: 'science', sec: 'output', label: 'Sci', title: 'Science after Library etc.', val: (c) => wi (c).science, show: (c) => arrow (c.science, wi (c).science), cls: (c) => wiCls (c, 'science', true), total: true },
   { key: 'upkeep', sec: 'other', label: 'Upkeep', val: (c) => wi (c).upkeep, show: (c) => arrow (c.upkeep, wi (c).upkeep), cls: (c) => wiCls (c, 'upkeep'), total: true, title: 'Building maintenance per turn' },
   { key: 'culture', sec: 'other', label: 'Culture', val: (c) => c.culture, total: true, title: 'Culture per turn' },
-  { key: 'status', sec: 'other', label: 'Status', l: true, val: (c) => c.disorder ? 2 : (c.celebrating ? 1 : 0),
+  { key: 'status', sec: 'other', label: 'Status', title: 'In disorder, or celebrating (We Love the King Day)', l: true, val: (c) => c.disorder ? 2 : (c.celebrating ? 1 : 0),
     show: (c) => c.disorder ? 'Disorder' : (c.celebrating ? 'Celebrating' : ''), cls: (c) => c.disorder ? 'red' : 'green' },
-  { key: 'build', sec: 'build', label: 'Production', l: true, val: (c) => c.buildName, show: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : ''),
+  { key: 'build', sec: 'build', label: 'Production', title: 'What the city builds, and turns to finish', l: true, val: (c) => c.buildName, show: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : ''),
     csv: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : '') },
 ];
 let state = { result: null, sortKey: 'size', sortDir: -1, fileName: '', loadedAt: null, rules: null, toggles: {} };
@@ -940,7 +987,7 @@ function render () {
   warnCache.clear ();
   const res = state.result;
   if (! res || ! res.ok) return;
-  $('drop').hidden = true; $('tablewrap').hidden = false; $('legend').hidden = false; $('csv').disabled = false;
+  $('drop').hidden = true; $('tablewrap').hidden = false; $('csv').disabled = false;
   $('title').textContent = `${state.fileName} · turn ${res.turn} · ${res.cities.length} ${res.cities.length === 1 ? 'city' : 'cities'}`;
 
   renderSummary (res);
@@ -1237,6 +1284,21 @@ try {
   }
 } catch (e) { /* ignore */ }
 $('problems').addEventListener ('change', render);
+
+// Help: the column list comes from each column's own tooltip, so it always matches the table
+function renderHelpColumns () {
+  const dl = $('helpcols'); dl.textContent = '';
+  const seen = new Set ();
+  for (const col of COLUMNS) {
+    if (! col.title || seen.has (col.title)) continue;
+    seen.add (col.title);
+    dl.appendChild (Object.assign (document.createElement ('dt'), { textContent: col.label }));
+    dl.appendChild (Object.assign (document.createElement ('dd'), { textContent: col.title }));
+  }
+}
+$('helpbtn').addEventListener ('click', () => { renderHelpColumns (); $('help').showModal (); $('help').scrollTop = 0; });
+$('helpclose').addEventListener ('click', () => $('help').close ());
+$('help').addEventListener ('click', (e) => { if (e.target === $('help')) $('help').close (); }); // click outside closes
 
 // Theme: Auto follows the system setting; Light and Dark are fixed and remembered in this browser
 const THEMES = ['auto', 'light', 'dark'], THEME_LABEL = { auto: '◐ Auto', light: '☀ Light', dark: '☾ Dark' };
