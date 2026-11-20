@@ -113,6 +113,20 @@ summary { cursor: pointer; color: var(--muted); }
 .kv.three > span.h { color: var(--gold); font-size: 12px; text-align: right; }
 .kv > span.v, .kv.three > span:not(.k) { text-align: right; }
 #helpbtn { margin-left: auto; }
+.ms { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; margin: 6px 0; }
+.ms-met { border-left: 4px solid var(--green); } .ms-missed { border-left: 4px solid var(--red); } .ms-progress { border-left: 4px solid var(--accent); }
+.mshead { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 4px; }
+.mshead b { flex: 1; }
+.msbadge { font-weight: 600; font-size: 12.5px; }
+.msrow { display: grid; grid-template-columns: 1.2em minmax(160px, max-content) 1fr; gap: 8px; padding: 1px 0; }
+.msedrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 3px 0; }
+.msedit input[type=text] { flex: 1; min-width: 160px; }
+.msfoot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+.msflag { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; fill: var(--muted); }
+.msflag.met { stroke: var(--green); fill: var(--green); } .msflag.missed { stroke: var(--red); fill: var(--red); }
+text.msflag { stroke: none; font-size: 11px; }
+.mstarget path { stroke: var(--panel); stroke-width: 2; }
+.mstarget.s1 path { fill: var(--s1); } .mstarget.s2 path { fill: var(--s2); } .mstarget.s3 path { fill: var(--s3); }
 .diplowrap { overflow-x: auto; margin-top: 8px; }
 table.diplo th { position: static; cursor: default; }
 table.diplo th:first-child, table.diplo td:first-child { position: static; }
@@ -225,6 +239,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <h3>Panels</h3>
       <dl>
         <dt>Summary cards</dt><dd>Your whole empire. Point at a line to see how it's worked out.</dd>
+        <dt>Milestones</dt><dd>Targets to reach by a turn, per game: ✓ met, in progress, or ✗ missed. Edit, add or delete them; the defaults are only starting points. In History, ⚑ marks a deadline and ◆ a target.</dd>
         <dt>History</dt><dd>Each save you open stores its turn. Pick a chart and a city; the dashed line is the turn you have loaded. <b>Add saves…</b> adds older saves at once.</dd>
         <dt>Diplomacy</dt><dd>Civilizations you've met: government, cities, culture against yours, war, embassy, alliances against you.</dd>
         <dt>Diagnostics</dt><dd>What the page read from your files. <b>Download debug report</b> if something looks wrong.</dd>
@@ -283,6 +298,15 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
   </div>
 
   <section class="summary" id="summary" aria-label="Empire summary" hidden></section>
+
+  <details id="milestones" class="hist" hidden>
+    <summary>Milestones <span id="mscount"></span></summary>
+    <div class="histbar">
+      <button id="msadd" type="button">Add milestone</button>
+      <button id="msreset" type="button" title="Replace this game's milestones with the default ones">Restore defaults</button>
+    </div>
+    <div id="mslist"></div>
+  </details>
 
   <details id="history" class="hist" hidden>
     <summary>History <span id="histcount"></span></summary>
@@ -1449,9 +1473,18 @@ function metricsOf (list) {
   };
 }
 function snapshotOf (res, fileName) {
+  const rules = res.rules, totals = metricsOf (res.cities);
+  // Empire-only figures for milestones (turns stored before these existed don't have them)
+  if (res.knownTechs && rules) { totals.techs = res.knownTechs.size; totals.techNames = [...res.knownTechs].map ((k) => (rules.techs[k] || {}).name).filter (Boolean); }
+  if (res.myCulture) totals.cultureTotal = res.myCulture.total;
+  if (rules && rules.governments[res.government]) totals.government = rules.governments[res.government].name;
+  if (rules) {
+    totals.buildings = {};
+    for (const c of res.cities) if (c.buildings) for (const k of c.buildings) { const n = (rules.buildings[k] || {}).name; if (n) totals.buildings[n] = (totals.buildings[n] || 0) + 1; }
+  }
   return { game: gameIdOf (res), turn: res.turn, savedAt: Date.now (), fileName,
-           civ: res.rules && res.rules.civs[res.playerRace] ? res.rules.civs[res.playerRace].noun : '',
-           totals: metricsOf (res.cities),
+           civ: rules && rules.civs[res.playerRace] ? rules.civs[res.playerRace].noun : '',
+           totals,
            cities: res.cities.map ((c) => ({ id: c.id, name: c.name, ...metricsOf ([c]) })) };
 }
 async function recordTurn (res, fileName) {
@@ -1461,14 +1494,16 @@ async function recordTurn (res, fileName) {
 
 const pct = (a, b) => b ? Math.round (1000 * a / b) / 10 : 0;
 const HIST_CHARTS = [
-  { key: 'commerce', name: 'Commerce', series: [['Commerce', (m) => m.commerce], ['Net commerce', (m) => m.commerce - m.corruption]] },
-  { key: 'shields', name: 'Shields', series: [['Shields', (m) => m.shields], ['Net shields', (m) => m.shields - m.waste]] },
-  { key: 'output', name: 'Science, gold, luxury', series: [['Science', (m) => m.science], ['Gold', (m) => m.gold], ['Luxury', (m) => m.luxury]] },
-  { key: 'losses', name: 'Corruption % and waste %', unit: '%', series: [['Corruption %', (m) => pct (m.corruption, m.commerce)], ['Waste %', (m) => pct (m.waste, m.shields)]] },
-  { key: 'food', name: 'Food surplus', series: [['Surplus', (m) => m.foodSurplus], ['Wasted at size limit', (m) => m.foodWasted]] },
-  { key: 'citizens', name: 'Citizens', series: [['Citizens', (m) => m.citizens]] },
-  { key: 'cities', name: 'Cities', empireOnly: true, series: [['Cities', (m) => m.cities]] },
-  { key: 'culture', name: 'Culture per turn', series: [['Culture', (m) => m.culture]] }
+  // Each series: name, value, and the milestone metric it shows (for target points)
+  { key: 'commerce', name: 'Commerce', series: [['Commerce', (m) => m.commerce], ['Net commerce', (m) => m.commerce - m.corruption, 'netCommerce']] },
+  { key: 'shields', name: 'Shields', series: [['Shields', (m) => m.shields], ['Net shields', (m) => m.shields - m.waste, 'netShields']] },
+  { key: 'output', name: 'Science, gold, luxury', series: [['Science', (m) => m.science, 'science'], ['Gold', (m) => m.gold], ['Luxury', (m) => m.luxury]] },
+  { key: 'losses', name: 'Corruption % and waste %', unit: '%', series: [['Corruption %', (m) => pct (m.corruption, m.commerce), 'corruptionPct'], ['Waste %', (m) => pct (m.waste, m.shields), 'wastePct']] },
+  { key: 'food', name: 'Food surplus', series: [['Surplus', (m) => m.foodSurplus, 'foodSurplus'], ['Wasted at size limit', (m) => m.foodWasted, 'foodWasted']] },
+  { key: 'citizens', name: 'Citizens', series: [['Citizens', (m) => m.citizens, 'citizens']] },
+  { key: 'cities', name: 'Cities', empireOnly: true, series: [['Cities', (m) => m.cities, 'cities']] },
+  { key: 'culture', name: 'Culture per turn', series: [['Culture', (m) => m.culture, 'culture']] },
+  { key: 'techs', name: 'Techs known', empireOnly: true, series: [['Techs', (m) => m.techs ?? null, 'techs']] }
 ];
 let histSnaps = [];
 function setHistStatus (s) { $('histstatus').textContent = s; }
@@ -1490,6 +1525,7 @@ async function refreshHistory () {
     sel.appendChild (Object.assign (document.createElement ('option'), { value: id, textContent: name })));
   sel.value = names.has (+keep) ? keep : '';
   drawHistory ();
+  renderMilestones (); // history decides whether past deadlines were met
 }
 
 function niceStep (max, ticks) {
@@ -1501,7 +1537,7 @@ function drawHistory () {
   box.textContent = ''; legend.textContent = '';
   const chart = HIST_CHARTS.find ((c) => c.key === $('histchart').value) || HIST_CHARTS[0];
   const cityId = $('histcity').value === '' ? null : +$('histcity').value;
-  $('histchart').querySelector ('option[value="cities"]').disabled = cityId !== null;
+  for (const c of HIST_CHARTS) if (c.empireOnly) $('histchart').querySelector (`option[value="${c.key}"]`).disabled = cityId !== null;
   const points = histSnaps.map ((s) => ({ turn: s.turn, m: cityId === null ? s.totals : (s.cities.find ((c) => c.id === cityId) || null) })).filter ((p) => p.m);
   const loaded = state.result && state.result.turn;
   if (histSnaps.length < 2)
@@ -1509,7 +1545,8 @@ function drawHistory () {
       textContent: 'One turn stored so far. Each save you open adds its turn. Use Add saves… for older saves, or Watch autosave folder to add every turn as you play.' }));
   if (! points.length) return;
 
-  const series = chart.series.map (([name, f], k) => ({ name, k, values: points.map ((p) => ({ turn: p.turn, v: f (p.m) })) }));
+  const series = chart.series.map (([name, f], k) => ({ name, k, values: points.map ((p) => ({ turn: p.turn, v: f (p.m) })).filter ((p) => p.v !== null && p.v !== undefined) }));
+  const marks = cityId === null ? milestoneMarks (chart) : [];
   if (series.length > 1) for (const s of series) {
     const item = document.createElement ('span'); item.className = 'histkey';
     item.appendChild (Object.assign (document.createElement ('i'), { className: 's' + (s.k + 1) }));
@@ -1518,9 +1555,12 @@ function drawHistory () {
 
   const W = Math.max (320, box.clientWidth || 800), H = 260, L = 46, R = 120, T = 22, B = 28;
   const turns = points.map ((p) => p.turn);
+  // The axis reaches forward to deadlines of targets this chart shows, so a target ahead is visible
   let t0 = Math.min (...turns, loaded ?? Infinity), t1 = Math.max (...turns, loaded ?? -Infinity);
+  const aimed = marks.filter ((m) => m.targets.length && m.ms.turn >= t0);
+  t1 = Math.max (t1, ...aimed.map ((m) => m.ms.turn));
   if (t0 === t1) { t0 -= 1; t1 += 1; }
-  const vmax = Math.max (1, ...series.flatMap ((s) => s.values.map ((p) => p.v)));
+  const vmax = Math.max (1, ...series.flatMap ((s) => s.values.map ((p) => p.v)), ...aimed.flatMap ((m) => m.targets.map ((x) => +x.t.value)));
   const step = niceStep (vmax, 4), ymax = chart.unit === '%' ? Math.min (100, Math.ceil (vmax / step) * step) || 100 : Math.ceil (vmax / step) * step;
   const x = (t) => L + (W - L - R) * (t - t0) / (t1 - t0), y = (v) => T + (H - T - B) * (1 - v / ymax);
   const NS = 'http://www.w3.org/2000/svg', svg = document.createElementNS (NS, 'svg');
@@ -1541,9 +1581,23 @@ function drawHistory () {
     mk ('line', { x1: x (loaded), x2: x (loaded), y1: T - 6, y2: H - B, class: 'hloaded' });
     mk ('text', { x: x (loaded), y: T - 10, class: 'haxis hloadedlabel', 'text-anchor': x (loaded) > W - R - 60 ? 'end' : 'middle' }).textContent = `Loaded: turn ${loaded}`;
   }
+  // Milestones: a flag on each deadline in range; a ◆ at each target this chart shows
+  for (const m of marks) {
+    if (m.ms.turn < t0 || m.ms.turn > t1) continue;
+    const cls = { met: 'msflag met', missed: 'msflag missed' }[m.status] || 'msflag';
+    mk ('line', { x1: x (m.ms.turn), x2: x (m.ms.turn), y1: T, y2: H - B, class: cls });
+    const lbl = mk ('text', { x: x (m.ms.turn) + 3, y: H - B - 4, class: 'haxis ' + cls });
+    lbl.textContent = `⚑ ${m.ms.name}`;
+    for (const x0 of m.targets) {
+      const g = mk ('g', { class: 'mstarget s' + (x0.k + 1) });
+      mk ('path', { d: `M${x (m.ms.turn)},${y (+x0.t.value) - 6} l6,6 l-6,6 l-6,-6 z` }, g);
+      mk ('title', {}, g).textContent = `${m.ms.name}, turn ${m.ms.turn}: ${targetText (x0.t)}`;
+    }
+  }
   // Lines, markers when there are few points, direct labels at the right end
   const ends = [];
   for (const s of series) {
+    if (! s.values.length) continue;
     const d = s.values.map ((p, i) => `${i ? 'L' : 'M'}${x (p.turn).toFixed (1)},${y (p.v).toFixed (1)}`).join (' ');
     mk ('path', { d, class: 'hline s' + (s.k + 1) });
     if (s.values.length <= 40) for (const p of s.values) mk ('circle', { cx: x (p.turn), cy: y (p.v), r: 4, class: 'hdot s' + (s.k + 1) });
@@ -1568,7 +1622,9 @@ function drawHistory () {
     tip.textContent = '';
     tip.appendChild (Object.assign (document.createElement ('b'), { textContent: `Turn ${best.turn}${best.turn === loaded ? ' (loaded)' : ''}` }));
     for (const s of series) {
-      const row = document.createElement ('div'), v = s.values.find ((p) => p.turn === best.turn).v;
+      const hit = s.values.find ((p) => p.turn === best.turn);
+      if (! hit) continue;
+      const row = document.createElement ('div'), v = hit.v;
       row.appendChild (Object.assign (document.createElement ('i'), { className: 's' + (s.k + 1) }));
       row.appendChild (document.createTextNode (`${s.name}: ${v.toLocaleString ()}${chart.unit || ''}`));
       tip.appendChild (row);
@@ -1611,6 +1667,8 @@ $('histclear').addEventListener ('click', async () => {
 // Open or closed is remembered in this browser
 try { $('history').open = localStorage.getItem ('civ3viewer.historyOpen') === '1'; } catch (e) { /* ignore */ }
 try { $('diplomacy').open = localStorage.getItem ('civ3viewer.diplomacyOpen') === '1'; } catch (e) { /* ignore */ }
+try { $('milestones').open = localStorage.getItem ('civ3viewer.milestonesOpen') !== '0'; } catch (e) { /* ignore */ }
+$('milestones').addEventListener ('toggle', () => { try { localStorage.setItem ('civ3viewer.milestonesOpen', $('milestones').open ? '1' : '0'); } catch (e) { /* ignore */ } });
 $('diplomacy').addEventListener ('toggle', () => { try { localStorage.setItem ('civ3viewer.diplomacyOpen', $('diplomacy').open ? '1' : '0'); } catch (e) { /* ignore */ } });
 $('history').addEventListener ('toggle', () => {
   try { localStorage.setItem ('civ3viewer.historyOpen', $('history').open ? '1' : '0'); } catch (e) { /* ignore */ }
@@ -1796,6 +1854,186 @@ function renderDiplomacy (res) {
   }
 }
 
+// ---------- milestones: targets to reach by a turn, kept per game in this browser ----------
+// A metric reads a snapshot (the loaded save or a stored history turn); null: that turn didn't store it.
+const MS_METRICS = [
+  { key: 'cities', label: 'Cities', get: (s) => s.totals.cities },
+  { key: 'citizens', label: 'Citizens', get: (s) => s.totals.citizens },
+  { key: 'citiesSize', label: 'Cities of size at least', param: 'size', get: (s, p) => s.cities.filter ((c) => c.citizens >= +p).length },
+  { key: 'netShields', label: 'Net shields', get: (s) => s.totals.shields - s.totals.waste },
+  { key: 'netCommerce', label: 'Net commerce', get: (s) => s.totals.commerce - s.totals.corruption },
+  { key: 'science', label: 'Science', get: (s) => s.totals.science },
+  { key: 'goldNet', label: 'Gold after upkeep', get: (s) => s.totals.gold - s.totals.upkeep },
+  { key: 'corruptionPct', label: 'Corruption %', cmp: '<=', unit: '%', get: (s) => pct (s.totals.corruption, s.totals.commerce) },
+  { key: 'wastePct', label: 'Waste %', cmp: '<=', unit: '%', get: (s) => pct (s.totals.waste, s.totals.shields) },
+  { key: 'foodSurplus', label: 'Food surplus', get: (s) => s.totals.foodSurplus },
+  { key: 'foodWasted', label: 'Food wasted', cmp: '<=', get: (s) => s.totals.foodWasted },
+  { key: 'culture', label: 'Culture per turn', get: (s) => s.totals.culture },
+  { key: 'cultureTotal', label: 'Total culture', get: (s) => s.totals.cultureTotal ?? null },
+  { key: 'techs', label: 'Techs known', get: (s) => s.totals.techs ?? null },
+  { key: 'hasTech', label: 'Has tech', param: 'tech', yes: true, get: (s, p) => s.totals.techNames ? (s.totals.techNames.includes (p) ? 1 : 0) : null },
+  { key: 'building', label: 'Cities with', param: 'building', get: (s, p) => s.totals.buildings ? (s.totals.buildings[p] || 0) : null },
+  { key: 'government', label: 'Government is', param: 'government', yes: true, get: (s, p) => s.totals.government ? (s.totals.government === p ? 1 : 0) : null }
+];
+const msMetric = (key) => MS_METRICS.find ((m) => m.key === key);
+// Starting points for a Standard map; every number and building can be changed
+const DEFAULT_MILESTONES = [
+  { name: 'Land grab', turn: 50, targets: [{ metric: 'cities', cmp: '>=', value: 10 }, { metric: 'citizens', cmp: '>=', value: 30 }] },
+  { name: 'Better government', turn: 80, targets: [{ metric: 'government', param: 'Republic' }, { metric: 'techs', cmp: '>=', value: 15 }] },
+  { name: 'Core infrastructure', turn: 120, targets: [{ metric: 'building', param: 'Library', cmp: '>=', value: 10 }, { metric: 'building', param: 'Marketplace', cmp: '>=', value: 8 },
+    { metric: 'citiesSize', param: 7, cmp: '>=', value: 6 }, { metric: 'netCommerce', cmp: '>=', value: 250 }] },
+  { name: 'Strong economy', turn: 180, targets: [{ metric: 'science', cmp: '>=', value: 400 }, { metric: 'netShields', cmp: '>=', value: 250 },
+    { metric: 'techs', cmp: '>=', value: 40 }, { metric: 'corruptionPct', cmp: '<=', value: 40 }] }
+];
+function loadMilestoneStore () { try { return JSON.parse (localStorage.getItem ('civ3viewer.milestones') || '{}') || {}; } catch (e) { return {}; } }
+function saveMilestoneStore (st) { try { localStorage.setItem ('civ3viewer.milestones', JSON.stringify (st)); } catch (e) { /* ignore */ } }
+const freshDefaults = () => JSON.parse (JSON.stringify (DEFAULT_MILESTONES)).map ((m, i) => ({ id: 'd' + i, ...m }));
+function gameMilestones () {
+  const st = loadMilestoneStore (), id = state.result && gameIdOf (state.result);
+  if (! id) return [];
+  if (! st[id]) { st[id] = freshDefaults (); saveMilestoneStore (st); }
+  return st[id];
+}
+function setGameMilestones (list) { const st = loadMilestoneStore (); st[gameIdOf (state.result)] = list; saveMilestoneStore (st); }
+
+function targetText (t) {
+  const m = msMetric (t.metric); if (! m) return '?';
+  if (m.yes) return `${m.label} ${t.param}`;
+  return `${m.label}${m.param ? ' ' + t.param : ''} ${t.cmp === '<=' ? '≤' : '≥'} ${t.value}${m.unit || ''}`;
+}
+function targetValue (t, snap) { const m = msMetric (t.metric); return m ? m.get (snap, t.param) : null; }
+function targetMet (t, v) { if (v === null || v === undefined) return null; const m = msMetric (t.metric); return m.yes ? v === 1 : (t.cmp === '<=' ? v <= +t.value : v >= +t.value); }
+function firstMetTurn (t) { for (const s of histSnaps) if (targetMet (t, targetValue (t, s))) return s.turn; return null; }
+function hasDataBy (t, turn) { return histSnaps.some ((s) => s.turn <= turn && targetValue (t, s) !== null); }
+
+// Status of one milestone against the loaded save and the stored history
+function milestoneStatus (ms) {
+  const now = snapshotOf (state.result, ''), turn = state.result.turn, before = turn <= ms.turn;
+  const rows = ms.targets.map ((t) => {
+    const v = targetValue (t, now), metNow = targetMet (t, v), first = firstMetTurn (t);
+    let ok, note;
+    if (before) { ok = metNow; note = metNow ? 'met' : (metNow === null ? 'not in this save' : 'not yet'); }
+    else if (first !== null && first <= ms.turn) { ok = true; note = `met by turn ${first}`; }
+    // Past the deadline with no stored turn up to it: whether it was met in time is unknown
+    else if (! hasDataBy (t, ms.turn)) { ok = null; note = metNow ? `met now; no history up to turn ${ms.turn}` : `no history up to turn ${ms.turn}`; }
+    else if (first !== null) { ok = false; note = `met late, turn ${first}`; }
+    else { ok = false; note = 'not met'; }
+    return { t, v, ok, note };
+  });
+  const all = rows.every ((r) => r.ok === true), anyUnknown = rows.some ((r) => r.ok === null);
+  const status = all ? 'met' : (before ? 'progress' : (anyUnknown && ! rows.some ((r) => r.ok === false) ? 'unknown' : 'missed'));
+  return { rows, status, before, left: ms.turn - turn };
+}
+
+function renderMilestones () {
+  const box = $('mslist'), res = state.result;
+  $('milestones').hidden = ! res || ! res.ok || ! gameIdOf (res);
+  if ($('milestones').hidden) return;
+  const list = gameMilestones ().slice ().sort ((a, b) => a.turn - b.turn);
+  box.textContent = '';
+  const el = (tag, props = {}, kids = []) => { const e = Object.assign (document.createElement (tag), props); for (const k of kids) e.append (k); return e; };
+  let met = 0;
+  for (const ms of list) {
+    if (state.msEdit === ms.id) { box.append (milestoneEditor (ms)); continue; }
+    const st = milestoneStatus (ms);
+    if (st.status === 'met') met++;
+    const badge = { met: ['✓ Met', 'green'], progress: [st.left ? `In progress · ${st.left} ${st.left === 1 ? 'turn' : 'turns'} left` : 'In progress · deadline this turn', ''], missed: ['✗ Missed', 'red'], unknown: ['? No history', 'dim'] }[st.status];
+    const head = el ('div', { className: 'mshead' }, [
+      el ('span', { className: 'msbadge ' + badge[1], textContent: badge[0] }),
+      el ('b', { textContent: `Turn ${ms.turn} · ${ms.name}` }),
+      el ('button', { type: 'button', className: 'mini', textContent: 'Edit', onclick: () => { state.msEdit = ms.id; renderMilestones (); } }),
+      el ('button', { type: 'button', className: 'mini', textContent: '×', title: 'Delete this milestone',
+        onclick: () => { if (confirm (`Delete "${ms.name}"?`)) { setGameMilestones (gameMilestones ().filter ((x) => x.id !== ms.id)); refreshMilestoneViews (); } } })
+    ]);
+    const rows = st.rows.map ((r) => el ('div', { className: 'msrow' }, [
+      el ('span', { className: r.ok === true ? 'green' : (r.ok === false ? (st.before ? 'amber' : 'red') : 'dim'), textContent: r.ok === true ? '✓' : (r.ok === false ? (st.before ? '…' : '✗') : '?') }),
+      el ('span', { textContent: targetText (r.t) }),
+      el ('span', { className: 'dim', textContent: (r.v === null ? '–' : `now ${msMetric (r.t.metric).yes ? (r.v ? 'yes' : 'no') : r.v.toLocaleString () + (msMetric (r.t.metric).unit || '')}`) + ` · ${r.note}` })
+    ]));
+    box.append (el ('div', { className: 'ms ms-' + st.status }, [head, ...rows]));
+  }
+  if (! list.length) box.append (el ('p', { className: 'histnote', textContent: 'No milestones. Add one, or restore the defaults.' }));
+  $('mscount').textContent = list.length ? `(${met} of ${list.length} met)` : '';
+}
+
+function milestoneEditor (ms) {
+  const res = state.result, rules = res.rules;
+  const draft = JSON.parse (JSON.stringify (ms));
+  const el = (tag, props = {}, kids = []) => { const e = Object.assign (document.createElement (tag), props); for (const k of kids) e.append (k); return e; };
+  const opts = (sel, pairs, value) => { for (const [v, t] of pairs) sel.append (el ('option', { value: v, textContent: t })); sel.value = value; return sel; };
+  const paramChoices = (kind) => {
+    if (! rules) return [];
+    if (kind === 'building') return rules.buildings.filter ((b) => ! b.spaceshipPart && ! b.capitalization).map ((b) => [b.name, b.name]);
+    if (kind === 'tech') return rules.techs.map ((t) => [t.name, t.name]);
+    if (kind === 'government') return rules.governments.map ((g) => [g.name, g.name]);
+    return null;
+  };
+  const wrap = el ('div', { className: 'ms msedit' });
+  const name = el ('input', { type: 'text', value: draft.name, maxLength: 40, ariaLabel: 'Milestone name' });
+  const turn = el ('input', { type: 'number', value: draft.turn, min: 1, max: 999, className: 'num', ariaLabel: 'Deadline turn' });
+  wrap.append (el ('div', { className: 'mshead' }, ['Turn ', turn, ' ', name]));
+  const rowsBox = el ('div');
+  const drawRows = () => {
+    rowsBox.textContent = '';
+    draft.targets.forEach ((t, i) => {
+      const m = msMetric (t.metric);
+      const metric = opts (el ('select', { ariaLabel: 'Metric' }), MS_METRICS.map ((x) => [x.key, x.label]), t.metric);
+      metric.addEventListener ('change', () => {
+        const nm = msMetric (metric.value);
+        draft.targets[i] = { metric: nm.key, cmp: nm.cmp || '>=', value: nm.yes ? undefined : 1,
+          param: nm.param === 'size' ? 7 : ((paramChoices (nm.param) || [])[0] || [undefined])[0] };
+        drawRows ();
+      });
+      const row = el ('div', { className: 'msrow msedrow' }, [metric]);
+      if (m.param === 'size') {
+        const p = el ('input', { type: 'number', min: 1, max: 99, value: t.param, className: 'num', ariaLabel: 'City size' });
+        p.addEventListener ('input', () => { t.param = +p.value; }); row.append (p);
+      } else if (m.param) {
+        const choices = paramChoices (m.param);
+        if (choices && choices.length) { const p = opts (el ('select', { ariaLabel: m.label }), choices, t.param); p.addEventListener ('change', () => { t.param = p.value; }); row.append (p); }
+        else row.append (el ('span', { className: 'dim', textContent: 'load the rules to choose' }));
+      }
+      if (! m.yes) {
+        const cmp = opts (el ('select', { ariaLabel: 'At least or at most' }), [['>=', 'at least'], ['<=', 'at most']], t.cmp || '>=');
+        cmp.addEventListener ('change', () => { t.cmp = cmp.value; });
+        const v = el ('input', { type: 'number', value: t.value, className: 'num', ariaLabel: 'Target', step: 'any' });
+        v.addEventListener ('input', () => { t.value = v.value === '' ? 0 : +v.value; });
+        row.append (cmp, v, m.unit || '');
+      }
+      row.append (el ('button', { type: 'button', className: 'mini', textContent: '×', title: 'Remove this target', onclick: () => { draft.targets.splice (i, 1); drawRows (); } }));
+      rowsBox.append (row);
+    });
+  };
+  drawRows ();
+  wrap.append (rowsBox, el ('div', { className: 'msfoot' }, [
+    el ('button', { type: 'button', textContent: 'Add target', disabled: false, onclick: () => { if (draft.targets.length < 6) { draft.targets.push ({ metric: 'cities', cmp: '>=', value: 10 }); drawRows (); } } }),
+    el ('button', { type: 'button', textContent: 'Cancel', onclick: () => { state.msEdit = null; if (ms.isNew) setGameMilestones (gameMilestones ().filter ((x) => x.id !== ms.id)); refreshMilestoneViews (); } }),
+    el ('button', { type: 'button', className: 'primary', textContent: 'Save', onclick: () => {
+      draft.name = name.value.trim () || 'Milestone'; draft.turn = Math.max (1, Math.round (+turn.value) || 1); delete draft.isNew;
+      setGameMilestones (gameMilestones ().map ((x) => x.id === ms.id ? draft : x)); state.msEdit = null; refreshMilestoneViews ();
+    } })
+  ]));
+  return wrap;
+}
+function refreshMilestoneViews () { renderMilestones (); if ($('history').open) drawHistory (); }
+
+// Milestone marks for one history chart: a flag on each deadline in range, and target points for this chart's metrics
+function milestoneMarks (chart) {
+  if (! state.result || ! gameIdOf (state.result)) return [];
+  return gameMilestones ().map ((ms) => ({ ms, status: milestoneStatus (ms).status,
+    targets: ms.targets.map ((t) => ({ t, k: chart.series.findIndex ((s) => s[2] === t.metric) })).filter ((x) => x.k >= 0 && ! msMetric (x.t.metric).param) }));
+}
+
+$('msadd').addEventListener ('click', () => {
+  const id = 'm' + Date.now (), turn = (state.result.turn || 0) + 20;
+  setGameMilestones ([...gameMilestones (), { id, isNew: true, name: 'New milestone', turn, targets: [{ metric: 'cities', cmp: '>=', value: state.result.cities.length + 2 }] }]);
+  state.msEdit = id; $('milestones').open = true; renderMilestones ();
+});
+$('msreset').addEventListener ('click', () => {
+  if (! confirm ('Replace this game\'s milestones with the defaults?')) return;
+  setGameMilestones (freshDefaults ()); state.msEdit = null; refreshMilestoneViews ();
+});
+
 // Empire summary: every city, the game's own figures (what-ifs not included)
 function renderSummary (res) {
   const cs = res.cities, sum = (f) => cs.reduce ((n, c) => n + f (c), 0);
@@ -1860,6 +2098,7 @@ function render () {
 
   renderSummary (res);
   renderDiplomacy (res);
+  renderMilestones ();
   const COLS = visibleColumns ();
   renderViewPicker ();
   const nTicks = tickCount ();
