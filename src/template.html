@@ -192,7 +192,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Filter cities</dt><dd>Type part of a city name.</dd>
         <dt>Problems only</dt><dd>Cities in disorder or close to it, starving, or with resisters.</dd>
         <dt>Needs attention</dt><dd>Cities missing a building their tier expects.</dd>
-        <dt>Filters</dt><dd>A filter box under each column. Numbers: <code>&gt;50</code>, <code>&lt;=10</code>, <code>6</code>, <code>5-20</code>. Text: part of it, <code>!</code> to exclude. Each view keeps its filters.</dd>
+        <dt>Filters</dt><dd>A filter box under each column. Numbers: <code>&gt;50</code>, <code>&lt;=10</code>, <code>6</code>, <code>5-20</code>. Text: part of it, <code>!</code> to exclude. Filters use the real numbers, so a what-if tick doesn't hide a city. Each view keeps its filters.</dd>
         <dt>Export CSV</dt><dd>The table as a spreadsheet file.</dd>
         <dt>Reset what-ifs</dt><dd>Undo every tick you changed.</dd>
         <dt><span class="chip">◐ Auto</span></dt><dd>Theme: Auto (your system), Light or Dark.</dd>
@@ -465,7 +465,12 @@ function evaluate (c, ticks) {
   out.value = (out.gold - c.gold) + (out.science - c.science) + (out.luxury - c.luxury) + (c.waste - out.waste) - (out.upkeep - c.upkeep);
   return out;
 }
-function wi (c) { return evaluate (c, null); }
+// The city's values with your what-if ticks; while filtering, its real values (filters pick cities by what they are)
+function wi (c) {
+  if (! state.realValues) return evaluate (c, null);
+  const real = {}; for (const k of tickKeysFor (c)) real[k] = hasNow (c, k);
+  return evaluate (c, real);
+}
 
 // What adding one building would do to the city as it is now (ignoring your ticks)
 function effectOf (c, key) {
@@ -965,11 +970,15 @@ function activeFilters (cols) {
   return cols.filter ((col) => f[col.key] !== undefined && f[col.key] !== '');
 }
 function passesFilters (c, cols) {
+  state.realValues = true;
+  try { return passesRealFilters (c, cols); } finally { state.realValues = false; }
+}
+function passesRealFilters (c, cols) {
   const f = viewFilters ();
   for (const col of cols) {
     const expr = f[col.key];
     if (expr === undefined || expr === '') continue;
-    if (col.chk) { if (ticked (c, col.chk) !== (expr === 'yes')) return false; continue; }
+    if (col.chk) { if (hasNow (c, col.chk) !== (expr === 'yes')) return false; continue; }
     const p = parseFilter (expr), v = col.val (c);
     if (p.num && ! col.l && typeof v === 'number') { if (! p.num (v)) return false; continue; }
     // Text columns, and text typed in a number column (e.g. "max" in Grow): match the shown text
