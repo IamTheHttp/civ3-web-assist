@@ -1719,7 +1719,8 @@ function renderDiplomacy (res) {
       [! p.alive ? 'Destroyed' : (p.atWar ? 'At war' : 'Peace'), 'l ' + (! p.alive ? 'dim' : (p.atWar ? 'red' : ''))],
       [p.warDeclarations || '', p.warDeclarations ? 'amber' : ''],
       [p.embassy ? 'Yes' : '', 'l'],
-      [p.alliedAgainstYou.map ((k) => byId[k] || `player ${k}`).join (', '), 'l ' + (p.alliedAgainstYou.length ? 'red' : '')]
+      // Only civilizations you have met are named; others aren't shown at all
+      [p.alliedAgainstYou.filter ((k) => byId[k]).map ((k) => byId[k]).join (', '), 'l ' + (p.alliedAgainstYou.some ((k) => byId[k]) ? 'red' : '')]
     ];
     for (const [text, cls] of cells) tr.appendChild (Object.assign (document.createElement ('td'), { textContent: text, className: cls || '' }));
     if (! p.alive) tr.classList.add ('dim');
