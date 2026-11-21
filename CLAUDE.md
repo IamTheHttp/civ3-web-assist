@@ -97,10 +97,14 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
 - Wants concise UI text, strong contrast colours, no side-scrolling, customizable views.
 
 ## Open items
-- Communism/Anarchy corruption is unverified.
+- Communism corruption is unverified (Anarchy: confirmed in-game).
+- Tile yields don't model railroads, farmland, Golden Age or Colossus-type wonders (none on the tested save, so any city
+  with them shows in Diagnostics as not reproduced). From the exe so far: a mined tile with a railroad +1 shield and an
+  irrigated one +1 food, both with a tech from the rules (+536 of the rules data); Golden Age (LEAD +40 = end turn) +1
+  shield and +1 commerce on a tile that has some; wonders with flag 32 (`Leader_count_wonders_with_flag`) + commerce on a
+  tile that has some. Verify each on a save that has it.
 - The model assumes every city is connected to the capital by trade (not read from the save; otherwise distance × 5/4;
   mismatches show "~").
 
 ## Ideas (not started)
-- **Unit targets for milestones.** Workers and military units need the save's UNIT records (or the LEAD unit counts),
-  which the viewer doesn't read yet; check them against a real save first.
+- **Unit targets for milestones.** The viewer reads UNIT records (checked against LEAD +376/+380); milestones could use them.
