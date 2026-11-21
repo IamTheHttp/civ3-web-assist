@@ -663,7 +663,7 @@ const Civ3Parse = (() => {
 				let agg = (civA.aggression || 0) + tdiv (result.difficultyId, 2) - tdiv (rules.difficulties.length, 6);
 				agg = Math.max (-2, Math.min (2, agg));
 				let s = add (agg, 'aggression');
-				s += add (4 * m (0), 'war declarations');
+				s += add (4 * m (0), `you declared war on them${m (0) > 1 ? ` ×${m (0)}` : ''}`);
 				s += add (Math.min (4 * m (1), 8), 'deals broken');
 				s += add (Math.min (8 * m (2), 16), 'alliances broken');
 				s += add (Math.min (2 * m (3), 4), 'treaties broken by war');
@@ -733,7 +733,6 @@ const Civ3Parse = (() => {
 					government: (rules.governments[i32 (o + 140)] || {}).name || '?', cities,
 					culture: cult ? i32 (cult + 12) : null,
 					atWar: b[mine + 3356 + id] !== 0, embassy: b[mine + 3388 + id] !== 0,
-					warDeclarations: i32 (mine + 412 + 76 * id), // times this player declared war on you
 					alliedAgainstYou, yourAllies,
 					// Treaty bits (LEAD +3868): bit1 right of passage (checked in-game: Japan and France, both ways); other bits unknown
 					rightOfPassage: ((i32 (mine + 3868 + 4 * id) >>> 1) & 1) === 1,

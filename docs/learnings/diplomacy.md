@@ -1,6 +1,7 @@
 # Diplomacy data
 
-- Read and shown: government, cities, total culture and ratio to yours, at war, war declarations on you, embassy,
+- Read and shown: attitude (with its reasons, such as your war declarations on them), government, cities, total culture and
+  ratio to yours, at war, embassy,
   right of passage, your allies against them, alliances against you (offsets in `CLAUDE.md`). Only civilizations with contact are listed; unmet allies aren't named.
 - **Attitude** (GOG `Leader_get_attitude_toward` 0x440100), AI A toward player T, lower is better. Matches the diplomacy
   screen for Japan, France (Gracious), America, Ottomans (Furious). Sum of:

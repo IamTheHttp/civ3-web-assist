@@ -293,7 +293,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Milestones</dt><dd>Targets to reach by a turn, per game: ✓ met, in progress, or ✗ missed. Edit, add or delete them; the defaults are only starting points. In History, ⚑ marks a deadline and ◆ a target.</dd>
         <dt>History</dt><dd>Each save you open stores its turn. Pick a chart and a city; the dashed line is the turn you have loaded. <b>Add saves…</b> adds older saves at once.</dd>
         <dt>Governments</dt><dd>Your empire's totals under each government, with your slider (or the tried one). Click a row to try it in the table.</dd>
-        <dt>Diplomacy</dt><dd>Civilizations you've met: their attitude toward you (point at it for the reasons), government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you.</dd>
+        <dt>Diplomacy</dt><dd>Civilizations you've met: their attitude toward you (point at it for the reasons, such as your war declarations on them), government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you.</dd>
         <dt>Diagnostics</dt><dd>What the page read from your files. <b>Download debug report</b> if something looks wrong.</dd>
       </dl>
 
@@ -403,7 +403,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <th class="l">Government</th><th>Cities</th>
       <th title="Their total culture">Culture</th>
       <th title="Their total culture ÷ yours. 0.5× = half of yours; above 1×, they have more culture than you, which raises the culture-flip risk in your cities near them">Culture ratio</th>
-      <th class="l">Status</th><th title="Times they declared war on you">War declarations</th><th class="l" title="You have an embassy with them">Embassy</th>
+      <th class="l">Status</th><th class="l" title="You have an embassy with them">Embassy</th>
       <th class="l" title="Your units may move through their territory">Right of passage</th>
       <th class="l" title="Civilizations allied with you against them">Your allies against them</th>
       <th class="l">Allied against you with</th>
@@ -1245,7 +1245,7 @@ const Civ3Parse = (() => {
 				let agg = (civA.aggression || 0) + tdiv (result.difficultyId, 2) - tdiv (rules.difficulties.length, 6);
 				agg = Math.max (-2, Math.min (2, agg));
 				let s = add (agg, 'aggression');
-				s += add (4 * m (0), 'war declarations');
+				s += add (4 * m (0), `you declared war on them${m (0) > 1 ? ` ×${m (0)}` : ''}`);
 				s += add (Math.min (4 * m (1), 8), 'deals broken');
 				s += add (Math.min (8 * m (2), 16), 'alliances broken');
 				s += add (Math.min (2 * m (3), 4), 'treaties broken by war');
@@ -1315,7 +1315,6 @@ const Civ3Parse = (() => {
 					government: (rules.governments[i32 (o + 140)] || {}).name || '?', cities,
 					culture: cult ? i32 (cult + 12) : null,
 					atWar: b[mine + 3356 + id] !== 0, embassy: b[mine + 3388 + id] !== 0,
-					warDeclarations: i32 (mine + 412 + 76 * id), // times this player declared war on you
 					alliedAgainstYou, yourAllies,
 					// Treaty bits (LEAD +3868): bit1 right of passage (checked in-game: Japan and France, both ways); other bits unknown
 					rightOfPassage: ((i32 (mine + 3868 + 4 * id) >>> 1) & 1) === 1,
@@ -2478,7 +2477,6 @@ function renderDiplomacy (res) {
       [p.culture ?? '?'],
       [ratio === null ? '?' : ratio.toFixed (2) + '×', ratio > 1 ? 'amber' : ''],
       [! p.alive ? 'Destroyed' : (p.atWar ? 'At war' : 'Peace'), 'l ' + (! p.alive ? 'dim' : (p.atWar ? 'red' : ''))],
-      [p.warDeclarations || '', p.warDeclarations ? 'amber' : ''],
       [p.embassy ? 'Yes' : '', 'l'],
       [p.rightOfPassage ? 'Yes' : '', 'l'],
       [p.yourAllies.filter ((k) => byId[k]).map ((k) => byId[k]).join (', '), 'l ' + (p.yourAllies.some ((k) => byId[k]) ? 'green' : '')],
