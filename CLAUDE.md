@@ -25,8 +25,8 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
 - Other civs' cities: every CITY record passes the same self-checks as the player's (68/68 in the Maya save).
 - Corruption is applied to **raw** commerce; then the slider split (`City_recompute_commerce` 0x4B07C0: luxury and science
   rounded, halves up; luxury cut if the two exceed the net; gold gets the rest); then building bonuses **add** (+50% each,
-  +100% for research-doubling wonders), floored. Reproduces gold/sci/lux exactly in 40/42 cities; the other 2 are
-  calibrated per city (the capital has +10 commerce not in its record; Memphis +1 gold from Wealth). Checked in-game at
+  +100% for research-doubling wonders), floored. Reproduces gold/sci/lux exactly in 41/42 cities; Memphis is calibrated
+  (+1 gold from Wealth). Checked in-game at
   40% sci / 40% gold / 20% lux in 3 cities (Cobá: gold 13, sci 12, lux 4 with a Marketplace: no luxury bonus).
 - Slider rate limit: GOVT +520 (OpenCiv3 `ScienceRateCap`, tenths) is 10 for every government in the default rules; the player
   confirmed 100% gold is possible under every government. The Effect columns use the save's slider, or the "Try slider" one.
@@ -48,6 +48,10 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   The Domestic Advisor (F1) reconciles line by line: "From cities" 1169 = gold 144 + science 582 + corruption 443 (the game
   lists corruption as income and again as an expense), taxman +2, other civs +6, interest 0 = income 1177; science 582,
   entertainment 0, corruption 443, maintenance 103, unit costs 16; net +33.
+- Tourist attractions (exe 0x4B0710): a building with BLDG +248 bit 17 (default rules: 18 wonders) older than 1000 years
+  adds commerce before corruption: <1500 → 2, <1750 → 4, <1875 → 6, <2000 → 8, <2250 → 10, <2500 → 12, else 14. Age =
+  current year − its BINF year. Year from the GAME calendar (start −4000; periods 25/25/40/50/100/100/100 turns at
+  50/40/25/20/10/5/2 years): turn 194 = 790 AD. Chichén Itza: +10 (Mausoleum 6 + Zeus 4), the commerce the save omits.
 - Specialist output is stored separately (fields 528/532/536) and is NOT in the city's gold/sci/lux.
 - Difficulty optimal-cities % (DIFF +108): Chieftain 100, Warlord 95, Regent 90, Monarch 85, Emperor 80, Demigod 70,
   Deity 60, Sid 50. Difficulty corruption % (DIFF +116): 100 at every level in the default rules.

@@ -489,7 +489,8 @@ const BASE_COLUMNS = [
     cls: (c) => { const v = wi (c).shields - wi (c).waste, n = c.shields - c.waste; return v === n ? '' : (v > n ? 'better changed' : 'worse changed'); }, total: true, title: 'Shields after waste' },
   { key: 'ch', sec: 'corr', label: 'CH', chk: 'ch', model: true, title: 'Courthouse (tick to try it)' },
   { key: 'ps', sec: 'corr', label: 'PS', chk: 'ps', model: true, title: 'Police Station (tick to try it)' },
-  { key: 'commerce', sec: 'commerce', label: 'Commerce', val: (c) => wi (c).commerce, show: (c) => arrow (c.commerce, wi (c).commerce), cls: (c) => wiCls (c, 'commerce', true), total: true, title: 'Raw commerce from tiles, before corruption' },
+  { key: 'commerce', sec: 'commerce', label: 'Commerce', val: (c) => wi (c).commerce, show: (c) => arrow (c.commerce, wi (c).commerce), cls: (c) => wiCls (c, 'commerce', true), tip: (c) => c.touristCommerce ? `${c.tileCommerce} from tiles + ${c.touristCommerce} from tourist attractions (wonders over 1000 years old)` : '',
+    total: true, title: 'Raw commerce: from tiles, plus tourist attractions (wonders over 1000 years old), before corruption' },
   { key: 'corruption', sec: 'commerce', label: 'Corrupt', title: 'Commerce lost to corruption. ~: the game\'s corruption rule doesn\'t match here (the city may not be connected to the capital)', val: (c) => wi (c).corruption, show: (c) => (c.modelOff ? '~' : '') + arrow (c.corruption, wi (c).corruption), cls: (c) => wiCls (c, 'corruption') || (c.corruption ? 'amber' : 'dim'), total: true },
   { key: 'corruptionPct', sec: 'commerce', label: 'Corrupt %', val: (c) => wi (c).corruptionPct, show: (c) => arrow (c.corruptionPct, wi (c).corruptionPct, '%') + uncapped (c).text, tip: (c) => uncapped (c).tip, cls: (c) => wiCls (c, 'corruptionPct') || pctClass (c.corruptionPct),
     title: 'Share of the city\'s commerce lost to corruption. Over the cap, brackets show the uncapped parts: distance to the palace + city rank', ratio: ['corruption', 'commerce'] },
@@ -1801,7 +1802,7 @@ function renderSummary (res) {
   $('summary').innerHTML =
     (whatIf ? `<p class="histnote">${note}Changed figures show now → then.</p>` : '') +
     card ('Economy', `All cities. ${note}`,
-      row ('Commerce', both ('commerce'), 'Raw commerce from tiles, before corruption') +
+      row ('Commerce', both ('commerce'), 'Raw commerce from tiles' + (cs.some ((c) => c.touristCommerce) ? `, including ${cs.reduce ((n, c) => n + c.touristCommerce, 0)} from tourist attractions` : '') + ', before corruption') +
       row ('Corruption', both ('corruption') + pctBoth ('corruption', 'commerce'), 'Commerce lost to corruption') +
       row ('Net commerce', both ('netCommerce'), 'Commerce after corruption: what the slider splits') +
       '<hr>' +

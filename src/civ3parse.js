@@ -52,6 +52,7 @@ const Civ3Parse = (() => {
 		const bldg = sec ('BLDG'), tech = sec ('TECH'), terr = sec ('TERR'), good = sec ('GOOD'), prto = sec ('PRTO'), rule = sec ('RULE'), govt = sec ('GOVT'), diff = sec ('DIFF'),
 		      wsiz = sec ('WSIZ'), race = sec ('RACE');
 		if (! bldg || ! govt || ! diff || ! wsiz) return null;
+		const game = sec ('GAME');
 		const r = {
 			buildings: bldg.map ((e) => ({
 				name: readAscii (b, e + 68, 32), cost: i32 (e + 148), upkeep: i32 (e + 172), requires: i32 (e + 144),
@@ -65,6 +66,8 @@ const Civ3Parse = (() => {
 				nearWater: ((b[e + 237] >> 6) & 1) !== 0, nearRiver: ((b[e + 237] >> 7) & 1) !== 0, coastal: (b[e + 240] & 1) !== 0,
 				wonder: (b[e + 240] & 0b1100) !== 0,
 				// +1 food / shield / commerce on water tiles of a large water body (Harbor, Offshore Platform, Commercial Dock)
+				// Tourist attraction (+248 bit 17): commerce once the building is over 1000 years old
+				touristAttraction: ((b[e + 250] >> 1) & 1) !== 0,
 				foodWater: (b[e + 239] & 1) !== 0, shieldsWater: ((b[e + 238] >> 7) & 1) !== 0, commerceWater: ((b[e + 239] >> 1) & 1) !== 0 })),
 			// TERR: name after a bitmap of possible resources (one bit each, rounded up to bytes)
 			terrains: terr ? terr.map ((e) => readAscii (b, e + 8 + Math.ceil (i32 (e + 4) / 8), 32)) : [],
@@ -84,7 +87,8 @@ const Civ3Parse = (() => {
 				freeUnits: i32 (e + 540), freePerSize: [i32 (e + 544), i32 (e + 548), i32 (e + 552)], unitCost: i32 (e + 556) })),
 			difficulties: diff.map ((e) => ({ name: readAscii (b, e + 4, 64), costFactor: i32 (e + 104), optimalPercent: i32 (e + 108), corruptionPercent: i32 (e + 116) })),
 			worldSizes: wsiz.map ((e) => ({ optimalCities: i32 (e + 4) })),
-			civs: [], maxTown: 6, maxCity: 12
+			civs: [], maxTown: 6, maxCity: 12,
+			calendar: game ? calendarOf (b, game[0]) : null
 		};
 		if (rule) {
 			const t = i32 (rule[0] + 288), c = i32 (rule[0] + 292);
@@ -99,6 +103,21 @@ const Civ3Parse = (() => {
 		}
 		return r;
 	}
+
+	// Calendar (BIQ GAME, OpenCiv3 Game.cs): base time unit (0 years), start year, then 7 periods: turns, and time units per
+	// turn. After the 4th int comes one int per playable civilization.
+	function calendarOf (b, e) {
+		const dv = new DataView (b.buffer, b.byteOffset, b.byteLength), i32 = (o) => dv.getInt32 (o, true);
+		const n = i32 (e + 12), g = (n > 0 && n < 64 ? 4 * n : 0), f = (k) => i32 (e + k + g);
+		return { unit: f (40), start: f (52), turns: [0, 1, 2, 3, 4, 5, 6].map ((j) => f (64 + 4 * j)), perTurn: [0, 1, 2, 3, 4, 5, 6].map ((j) => f (92 + 4 * j)) };
+	}
+	function yearAt (cal, turn) {
+		let y = cal.start, t = turn;
+		for (let j = 0; j < 7 && t > 0; j++) { const k = Math.min (t, cal.turns[j]); y += k * cal.perTurn[j]; t -= k; }
+		return y;
+	}
+	// Tourist attraction commerce by age in years (GOG 0x4B0710)
+	const touristCommerce = (age) => age <= 1000 ? 0 : age < 1500 ? 2 : age < 1750 ? 4 : age < 1875 ? 6 : age < 2000 ? 8 : age < 2250 ? 10 : age < 2500 ? 12 : 14;
 
 	function parseRulesFile (fileBytes) {
 		const diag = [];
@@ -198,6 +217,12 @@ const Civ3Parse = (() => {
 		result.numberOfCities = i32 (gameOff + 36);
 		result.player = player;
 		result.accelerated = accelerated;
+		// The current year: from the save's own scenario calendar, else the rules file's (years only)
+		{
+			const sg = readBiqSection (b, 'GAME', BIQ_START, scenarioTo, []);
+			const cal = sg ? calendarOf (b, sg[0]) : (rules && rules.calendar);
+			result.year = cal && cal.unit === 0 ? yearAt (cal, result.turn) : null;
+		}
 		result.cultureFlips = cultureFlips;
 		diag.push (`GAME at byte ${gameOff}: turn ${result.turn}, ${result.numberOfCities} cities in the world, human player ${player}${accelerated ? ', accelerated production' : ''}`);
 		if (player < 0) { diag.push ('No human player found'); return result; }
@@ -269,6 +294,13 @@ const Civ3Parse = (() => {
 			}
 			found++;
 			const owner = u8 (off + 16);
+			// Tourist attractions: commerce from wonders over 1000 years old (GOG 0x4B0710), by the year in the city's building
+			// history (BINF entry: year, builder, culture). The game adds it to the tiles' commerce before corruption.
+			let tourist = 0;
+			if (buildings && rules && result.year !== null) {
+				const now = result.year === 0 ? 1 : result.year;
+				for (const k of buildings) if (rules.buildings[k] && rules.buildings[k].touristAttraction) tourist += touristCommerce (now - i32 (binf + 12 + 12 * k));
+			}
 			// Totals per civilization (every owner), for the History comparison. Same fields as the player's cities;
 			// specialists' output added as in the player's totals. A city counts as checked when its commerce split,
 			// shields and food add up.
@@ -276,7 +308,7 @@ const Civ3Parse = (() => {
 				const t = civTotals[owner] || (civTotals[owner] = { cities: 0, citizens: 0, commerce: 0, corruption: 0, shields: 0, waste: 0,
 					gold: 0, science: 0, luxury: 0, upkeep: 0, culture: 0, foodSurplus: 0, checked: 0 });
 				const gold = i32 (off + 524), sci = i32 (off + 520), lux = i32 (off + 516), sh = i32 (off + 364), wa = i32 (off + 496), net = i32 (off + 504);
-				t.cities++; t.citizens += count; t.commerce += i32 (off + 368); t.corruption += i32 (off + 500); t.shields += sh; t.waste += wa;
+				t.cities++; t.citizens += count; t.commerce += i32 (off + 368) + tourist; t.corruption += i32 (off + 500); t.shields += sh; t.waste += wa;
 				t.gold += gold + i32 (off + 536); t.science += sci + i32 (off + 532); t.luxury += lux + i32 (off + 528);
 				t.upkeep += i32 (off + 20); t.culture += i32 (off + 220); t.foodSurplus += Math.max (0, net);
 				if (gold + sci + lux === i32 (off + 512) && sh - wa === i32 (off + 508) && i32 (off + 360) - i32 (off + 492) === net) t.checked++;
@@ -297,7 +329,7 @@ const Civ3Parse = (() => {
 				storedFood: i32 (off + 40),
 				foodTiles: i32 (off + 360), foodEaten: i32 (off + 492), foodNet: i32 (off + 504),
 				shields: i32 (off + 364), waste: i32 (off + 496), shieldsStored: i32 (off + 44),
-				commerce: i32 (off + 368), corruption: i32 (off + 500),
+				commerce: i32 (off + 368) + tourist, tileCommerce: i32 (off + 368), touristCommerce: tourist, corruption: i32 (off + 500),
 				luxury: i32 (off + 516), science: i32 (off + 520), gold: i32 (off + 524),
 				upkeep: i32 (off + 20), culture: i32 (off + 220), pollution: i32 (off + 48),
 				buildType: i32 (off + 56), buildId: i32 (off + 52),
@@ -340,6 +372,10 @@ const Civ3Parse = (() => {
 		}
 		for (const c of result.cities) c.foreign = c.size - (c.nationalities[playerRace] || 0);
 		result.playerRace = playerRace;
+
+		const tourists = result.cities.filter ((c) => c.touristCommerce);
+		diag.push (`Year ${result.year === null ? '?' : (result.year < 0 ? -result.year + ' BC' : result.year + ' AD')}; tourist attractions: ` +
+		           (tourists.length ? tourists.map ((c) => `${c.name} +${c.touristCommerce} commerce`).join (', ') : 'none'));
 
 		// Commerce replay, verified on a real save (your slider + 4 sample cities, then all cities): commerce left after
 		// corruption is split by the slider (luxury and science rounded to the nearest coin, gold gets the rest), then each
@@ -542,7 +578,7 @@ const Civ3Parse = (() => {
 							const tiles = worked[c.id] || [];
 							c.tileYields = rules.governments.map ((g) => tiles.reduce ((a, o) => { const y = yieldOf (c, o, g); return { food: a.food + y.food, shields: a.shields + y.shields, commerce: a.commerce + y.commerce }; }, { food: 0, shields: 0, commerce: 0 }));
 							const now = c.tileYields[government];
-							c.tilesOk = !! now && now.food === c.foodTiles && now.shields === c.shields && now.commerce === c.commerce;
+							c.tilesOk = !! now && now.food === c.foodTiles && now.shields === c.shields && now.commerce === c.tileCommerce;
 							if (c.tilesOk) ok++; else off.push (c.name);
 						}
 						result.tileYields = true;
