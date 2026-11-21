@@ -1719,7 +1719,7 @@ function renderGovernments (res) {
   if (sec.hidden || ! panelOpen ('governments')) return;
   const rates = triedRates (), tried = triedGov ();
   const cols = [['Government', 'l'], ['Commerce'], ['Corrupt %'], ['Net commerce'], ['Shields'], ['Waste %'], ['Net shields'], ['Food'], ['Sci'], ['Lux'], ['Gold'],
-                ['Buildings', '', 'Building upkeep'], ['Units', '', 'Unit support in gold'], ['Net gold', '', 'Gold − building upkeep − unit support: below 0, your treasury shrinks each turn']];
+                ['Buildings', '', 'Building upkeep'], ['Units', '', 'Unit support in gold'], ['Net gold', '', 'Gold + gold from deals − building upkeep − unit support: below 0, your treasury shrinks each turn']];
   const head = $('govhead'); head.textContent = '';
   for (const [t, cl, tip] of cols) head.appendChild (Object.assign (document.createElement ('th'), { textContent: t, className: cl || '', title: tip || '' }));
   const body = $('govrows'); body.textContent = '';
@@ -1732,7 +1732,8 @@ function renderGovernments (res) {
       t.gold += e.gold + c.specialistOutput.gold; t.science += e.science + c.specialistOutput.science; t.luxury += e.luxury + c.specialistOutput.luxury; t.upkeep += e.upkeep;
     }
     const pc = (a, b) => b ? Math.round (100 * a / b) + '%' : '–', sg = (v) => (v > 0 ? '+' : '') + v;
-    const units = res.unitSupport ? res.unitSupport (k) : 0, net = t.gold - t.upkeep - units;
+    const deals = res.goldDeals ? res.goldDeals.incoming - res.goldDeals.outgoing : 0;
+    const units = res.unitSupport ? res.unitSupport (k) : 0, net = t.gold + deals - t.upkeep - units;
     const cells = [g.name + (k === res.government ? ' (yours)' : ''), t.commerce, pc (t.corruption, t.commerce), t.commerce - t.corruption, t.shields, pc (t.waste, t.shields),
                    t.shields - t.waste, sg (t.food), t.science, t.luxury, t.gold, t.upkeep, res.unitSupport ? units : '?', sg (net)];
     const tr = document.createElement ('tr');
@@ -1745,6 +1746,7 @@ function renderGovernments (res) {
   });
   $('govnote').textContent = `With ${rates ? 'the tried slider' : 'your slider'} (${sliderText (rates || res.rates)}) and your buildings. Included: the tiles' food, shields and commerce ` +
     '(trade bonus, tile penalty), corruption and waste, building upkeep, unit support (your units today, free units by city size). ' +
+    (res.goldDeals && res.goldDeals.incoming - res.goldDeals.outgoing ? `Net gold includes ${res.goldDeals.incoming - res.goldDeals.outgoing > 0 ? '+' : ''}${res.goldDeals.incoming - res.goldDeals.outgoing} gold per turn from deals. ` : '') +
     'Not included: war weariness, happiness, hurrying. ' +
     'Communism and Anarchy corruption come from the game\'s code but weren\'t checked against a save; under Anarchy the game wastes every shield and coin. ' +
     'Gold, science and luxury include specialists.';
@@ -1788,7 +1790,8 @@ function renderSummary (res) {
   const card = (title, tip, body, three) => `<div class="card"><h2 title="${tip}">${title}</h2><div class="kv${three ? ' three' : ''}">${body}</div></div>`;
   const note = whatIf ? `With your what-ifs${triedGov () !== null ? `: ${govName (triedGov ())}` : ''}${triedRates () ? `, slider ${sliderText (triedRates ())}` : ''}${tickCount () ? `, ${tickCount ()} building tick(s)` : ''}. ` : '';
   // N and T for derived figures
-  for (const st of [N, T]) { st.goldNet = st.gold - st.upkeep - st.units; st.total = st.luxury + st.science + st.gold; st.mult = st.netCommerce ? st.afterBonus / st.netCommerce : 0;
+  const deals = res.goldDeals ? res.goldDeals.incoming - res.goldDeals.outgoing : 0;
+  for (const st of [N, T]) { st.deals = deals; st.goldNet = st.gold + deals - st.upkeep - st.units; st.total = st.luxury + st.science + st.gold; st.mult = st.netCommerce ? st.afterBonus / st.netCommerce : 0;
     st.prodUsable = st.foodUsable + st.netShields + st.netCommerce; st.prodAll = st.food + st.shields + st.commerce; st.modProd = st.foodUsable + st.netShields + st.afterBonus; st.surplus = st.usableSurplus + st.wasted; }
   const sg = (v) => (v > 0 ? '+' : '') + fmt (v);
   $('summary').innerHTML =
@@ -1801,10 +1804,11 @@ function renderSummary (res) {
       row ('Luxury' + slider ('luxury'), both ('luxury'), `Luxury after Marketplace etc.${N.specLux ? `, including ${N.specLux} from entertainers` : ''}`) +
       row ('Science' + slider ('science'), both ('science'), `Science after Library etc.${N.specSci ? `, including ${N.specSci} from scientists` : ''}`) +
       row ('Gold' + slider ('tax'), both ('gold'), `Gold after Marketplace etc.${N.specGold ? ` (including ${N.specGold} from tax collectors)` : ''}`) +
+      (deals ? row ('From deals', sg (deals), `Gold per turn from other civilizations${res.goldDeals.from.length ? ': ' + res.goldDeals.from.join (', ') : ''}${res.goldDeals.outgoing ? `; you pay ${res.goldDeals.outgoing}` : ''}`) : '') +
       row ('Building upkeep', both ('upkeep', (v) => '−' + fmt (v)), 'Maintenance of your buildings') +
       (res.unitSupport ? row ('Unit support', both ('units', (v) => '−' + fmt (v)),
         `${res.units.total} units, ${res.units.free} of them free of support (other nationality or no support needed); the government gives free units per town and city, each further unit costs gold`) : '') +
-      row ('<b>Net gold</b>', `<b>${both ('goldNet', sg)}</b>`, `Gold − building upkeep${res.unitSupport ? ' − unit support' : ''}: below 0, your treasury shrinks each turn`) +
+      row ('<b>Net gold</b>', `<b>${both ('goldNet', sg)}</b>`, `Gold${deals ? ' + deals' : ''} − building upkeep${res.unitSupport ? ' − unit support' : ''}, as in the Domestic Advisor: below 0, your treasury shrinks each turn`) +
       '<hr>' +
       row ('Total', `${both ('total')} · ×${both ('mult', (v) => v ? v.toFixed (2) : '–')}`,
         'Luxury + science + gold, before upkeep. ×: commerce after Library, Marketplace etc. ÷ net commerce: how much each coin of net commerce becomes.' +

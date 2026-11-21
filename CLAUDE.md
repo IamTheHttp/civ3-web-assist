@@ -40,6 +40,9 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   + per town / city / metropolis +544/+548/+552 (+540 = −1: no unit costs). The game's income (0x55DD50) adds it to building
   upkeep. Maya, Republic: 141 units − 49 of another nationality = 92 counted, 84 allowed, 8 × 2 = 16 gold; the in-game
   Military Advisor shows 92 units and 84 allowed.
+- Net gold per turn = cities' gold (incl. tax collectors) + gold per turn from deals (each other player's LEAD +3612 +
+  4 × your player; exe 0x55DD50) − building upkeep − unit support. Maya: 146 + 6 (French) − 103 − 16 = 33, as the Domestic
+  Advisor shows. Interest (Wall Street-type, 5% of the treasury, at most 50) is in the exe but not transcribed.
 - Specialist output is stored separately (fields 528/532/536) and is NOT in the city's gold/sci/lux.
 - Difficulty optimal-cities % (DIFF +108): Chieftain 100, Warlord 95, Regent 90, Monarch 85, Emperor 80, Demigod 70,
   Deity 60, Sid 50. Difficulty corruption % (DIFF +116): 100 at every level in the default rules.

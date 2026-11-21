@@ -656,7 +656,18 @@ const Civ3Parse = (() => {
 				byType[t ? t.name : '?'] = (byType[t ? t.name : '?'] || 0) + 1;
 				if (i32 (o + 32) !== playerRace || ! (t && t.requiresSupport)) free++;
 			}
-			const myLead = findAll (b, 'LEAD', gameOff).find ((o) => i32 (o + 4) > 4300 && i32 (o + 8) === player);
+			const leadsAll = findAll (b, 'LEAD', gameOff).filter ((o) => i32 (o + 4) > 4300);
+			const myLead = leadsAll.find ((o) => i32 (o + 8) === player);
+			// Gold per turn from deals (GOG income 0x55DD50 adds, from every other player, its LEAD +3612 + 4 x your player
+			// number; in memory the leader +3632 table). What you pay others: your own row (not on the tested save).
+			result.goldDeals = { incoming: 0, outgoing: 0, from: [] };
+			for (const o of leadsAll) {
+				const id = i32 (o + 8);
+				if (id <= 0 || id >= 32 || id === player) continue;
+				const v = i32 (o + 3612 + 4 * player), name = (rules.civs[i32 (o + 12)] || {}).noun || `Player ${id}`;
+				if (v > 0) { result.goldDeals.incoming += v; result.goldDeals.from.push (`${name} ${v}`); }
+				if (myLead) { const w = i32 (myLead + 3612 + 4 * id); if (w > 0) result.goldDeals.outgoing += w; }
+			}
 			const leadCount = myLead ? i32 (myLead + 376) : null;
 			result.units = { total, free, byType, leadCount };
 			const classes = [0, 0, 0];
@@ -668,6 +679,7 @@ const Civ3Parse = (() => {
 				return Math.max (0, total - allowed - free) * gv.unitCost;
 			};
 			const list = Object.entries (byType).sort ((x, y) => y[1] - x[1]).map (([n, k]) => `${n} ${k}`).join (', ');
+			diag.push (`Gold per turn from deals: +${result.goldDeals.incoming}${result.goldDeals.from.length ? ` (${result.goldDeals.from.join (', ')})` : ''}, paid: ${result.goldDeals.outgoing}`);
 			diag.push (`Your units: ${total}${leadCount !== null ? ` (the game counts ${leadCount})` : ''}, ${free} free of support (other nationality or no support needed): ${list}. ` +
 			           (rules.governments[government] ? `Unit support under ${rules.governments[government].name}: ${result.unitSupport (government)} gold` : ''));
 		}
