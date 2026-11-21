@@ -68,6 +68,9 @@ label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--mu
 .sliderbox { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--muted); border: 1px solid transparent; border-radius: 4px; padding: 1px 4px; }
 .sliderbox.whatif { border-color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); }
 .sliderbox select { padding: 2px 4px; }
+#govrows tr { cursor: pointer; }
+#govrows tr.yours td:first-child { font-weight: 600; }
+#govrows tr.tried { background: color-mix(in srgb, var(--amber) 18%, transparent); }
 .sliderbox select:disabled { opacity: .7; }
 .status { color: var(--muted); flex-basis: 100%; order: 99; min-height: 1.4em; } /* own line: long messages don't push the controls around */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -228,6 +231,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <button type="button" data-open="milestones">Milestones <span class="navsub" id="mscount"></span></button>
     <button type="button" data-open="history">History <span class="navsub" id="histcount"></span></button>
     <button type="button" data-open="diplomacy">Diplomacy <span class="navsub" id="diplocount"></span></button>
+    <button type="button" data-open="governments">Governments</button>
     <button type="button" data-open="tiers">Tiers</button>
     <button type="button" data-open="diagnostics">Diagnostics</button>
   </nav>
@@ -265,8 +269,9 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Needs attention</dt><dd>Cities missing a building their tier expects.</dd>
         <dt>Clear filters</dt><dd>Shows when a column is filtered; removes every filter in this view.</dd>
         <dt>Export CSV</dt><dd>The table as a spreadsheet file.</dd>
+        <dt>Try government</dt><dd>Your cities under another government: the tiles' food, shields and commerce (Republic and Democracy add +1 commerce on tiles with commerce; Despotism and Anarchy take 1 off a yield above 2), corruption and waste, and building upkeep. Unit support, war weariness and happiness aren't included. The Governments panel compares them all.</dd>
         <dt>Try slider</dt><dd>Off: gold, science, luxury and the Effect columns use the slider from your save. On: they use the slider you set, for example 50% science and 50% gold, so a Marketplace isn't judged by a low gold rate. Happy and unhappy citizens aren't recalculated.</dd>
-        <dt>Reset what-ifs</dt><dd>Undo every tick you changed and turn Try slider off.</dd>
+        <dt>Reset what-ifs</dt><dd>Undo every tick you changed, and go back to your government and slider.</dd>
         <dt><span class="chip">◐ Auto</span></dt><dd>Theme: Auto (your system), Light or Dark.</dd>
       </dl>
 
@@ -287,6 +292,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Summary cards</dt><dd>Your whole empire. Point at a line to see how it's worked out.</dd>
         <dt>Milestones</dt><dd>Targets to reach by a turn, per game: ✓ met, in progress, or ✗ missed. Edit, add or delete them; the defaults are only starting points. In History, ⚑ marks a deadline and ◆ a target.</dd>
         <dt>History</dt><dd>Each save you open stores its turn. Pick a chart and a city; the dashed line is the turn you have loaded. <b>Add saves…</b> adds older saves at once.</dd>
+        <dt>Governments</dt><dd>Your empire's totals under each government, with your slider (or the tried one). Click a row to try it in the table.</dd>
         <dt>Diplomacy</dt><dd>Civilizations you've met: government, cities, culture against yours, war, embassy, alliances against you.</dd>
         <dt>Diagnostics</dt><dd>What the page read from your files. <b>Download debug report</b> if something looks wrong.</dd>
       </dl>
@@ -309,6 +315,11 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <label class="chk" title="Cities missing a building their tier expects (see Tiers)"><input id="attnonly" type="checkbox"> <span id="attnlabel">Needs attention</span></label>
     <button id="clearfilters" type="button" hidden title="Remove every column filter in this view">Clear filters</button>
     <button id="csv" type="button" disabled>Export CSV</button>
+    <span class="sliderbox" id="govbox" hidden
+      title="Your cities under another government: tile yields (trade bonus, tile penalty), corruption and waste, building upkeep. Unit support, war weariness and happiness are not included">
+      <label class="chk" for="govsel">Try government</label>
+      <select id="govsel" aria-label="Try government"></select>
+    </span>
     <span class="sliderbox" id="sliderbox" hidden
       title="Gold, science and luxury, and the Effect columns, use the slider from your save. Tick to try another one; happy and unhappy citizens are not recalculated">
       <label class="chk"><input id="slideron" type="checkbox"> Try slider</label>
@@ -409,6 +420,13 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     </div>
     <div id="viewcols" class="vecols"></div>
   </div>
+    </div>
+    <div class="panel" data-panel="governments" hidden>
+      <p class="panelnote" hidden>Open a save to see this.</p>
+  <section id="governments" hidden>
+    <div class="diplowrap"><table class="diplo"><thead><tr id="govhead"></tr></thead><tbody id="govrows"></tbody></table></div>
+    <p class="histnote" id="govnote"></p>
+  </section>
     </div>
     <div class="panel" data-panel="tiers" hidden>
       <p class="panelnote" hidden>Open a save to see this.</p>
@@ -609,7 +627,7 @@ const Civ3Parse = (() => {
 		const dv = new DataView (b.buffer, b.byteOffset, b.byteLength);
 		const i32 = (o) => dv.getInt32 (o, true);
 		const sec = (name) => readBiqSection (b, name, from, to, diag);
-		const bldg = sec ('BLDG'), tech = sec ('TECH'), terr = sec ('TERR'), prto = sec ('PRTO'), rule = sec ('RULE'), govt = sec ('GOVT'), diff = sec ('DIFF'),
+		const bldg = sec ('BLDG'), tech = sec ('TECH'), terr = sec ('TERR'), good = sec ('GOOD'), prto = sec ('PRTO'), rule = sec ('RULE'), govt = sec ('GOVT'), diff = sec ('DIFF'),
 		      wsiz = sec ('WSIZ'), race = sec ('RACE');
 		if (! bldg || ! govt || ! diff || ! wsiz) return null;
 		const r = {
@@ -623,12 +641,22 @@ const Civ3Parse = (() => {
 				// Placement (same source): must be near water / a river, or coastal
 				spaceshipPart: i32 (e + 216) >= 0, requiredAdvance: i32 (e + 220),
 				nearWater: ((b[e + 237] >> 6) & 1) !== 0, nearRiver: ((b[e + 237] >> 7) & 1) !== 0, coastal: (b[e + 240] & 1) !== 0,
-				wonder: (b[e + 240] & 0b1100) !== 0 })),
+				wonder: (b[e + 240] & 0b1100) !== 0,
+				// +1 food / shield / commerce on water tiles of a large water body (Harbor, Offshore Platform, Commercial Dock)
+				foodWater: (b[e + 239] & 1) !== 0, shieldsWater: ((b[e + 238] >> 7) & 1) !== 0, commerceWater: ((b[e + 239] >> 1) & 1) !== 0 })),
 			// TERR: name after a bitmap of possible resources (one bit each, rounded up to bytes)
 			terrains: terr ? terr.map ((e) => readAscii (b, e + 8 + Math.ceil (i32 (e + 4) / 8), 32)) : [],
+			// Yields (OpenCiv3 Terr.cs): after the name and civilopedia entry
+			terrainYields: terr ? terr.map ((e) => { const t = e + 8 + Math.ceil (i32 (e + 4) / 8);
+				return { irrigation: i32 (t + 64), mining: i32 (t + 68), road: i32 (t + 72), food: i32 (t + 84), shields: i32 (t + 88), commerce: i32 (t + 92) }; }) : [],
+			// Resources (OpenCiv3 Good.cs): prerequisite tech and the yield they add
+			goods: good ? good.map ((e) => ({ name: readAscii (b, e + 4, 24), prereq: i32 (e + 76), food: i32 (e + 80), shields: i32 (e + 84), commerce: i32 (e + 88) })) : [],
 			techs: tech ? tech.map ((e) => ({ name: readAscii (b, e + 4, 32) })) : [],
 			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84) })) : [],
-			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380) })),
+			// OpenCiv3 Govt.cs: +12 buildings need maintenance, +20 tile penalty (-1 on a yield above 2), +24 trade bonus
+			// (+1 commerce on a tile with commerce)
+			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380), maintenance: i32 (e + 12) !== 0,
+				tilePenalty: i32 (e + 20) !== 0, tradeBonus: i32 (e + 24) !== 0 })),
 			difficulties: diff.map ((e) => ({ name: readAscii (b, e + 4, 64), costFactor: i32 (e + 104), optimalPercent: i32 (e + 108), corruptionPercent: i32 (e + 116) })),
 			worldSizes: wsiz.map ((e) => ({ optimalCities: i32 (e + 4) })),
 			civs: [], maxTown: 6, maxCity: 12
@@ -640,7 +668,9 @@ const Civ3Parse = (() => {
 		if (race) for (const e of race) {
 			// City and great-leader name lists, and 4 eras x 520 bytes of artwork paths, come before the fixed fields
 			const n = i32 (e + 4), m = i32 (e + 8 + 24 * n), shift = 24 * n + 32 * m;
-			r.civs.push ({ noun: readAscii (b, e + 180 + shift, 40), commercial: (b[e + 272 + 2080 + shift] & 2) !== 0 });
+			const traits = b[e + 272 + 2080 + shift];
+			r.civs.push ({ noun: readAscii (b, e + 180 + shift, 40), commercial: (traits & 2) !== 0, industrious: (traits & 32) !== 0,
+			               agricultural: (traits & 64) !== 0, seafaring: (traits & 128) !== 0 });
 		}
 		return r;
 	}
@@ -965,14 +995,18 @@ const Civ3Parse = (() => {
 				const ocn = sizeRow.optimalCities, lvl = gov.corruption;
 				const palaceWonders = result.cities.reduce ((n, c) => n + fpLike.filter ((k) => has (c, k)).length, 0);
 				const commercial = civ ? civ.commercial : false;
-				// Leader_get_optimal_city_number for a human player
-				let nopt = ocn + tdiv (palaceWonders * ocn * 3, lvl === 5 ? 1 : 8);
-				if (commercial) nopt += tdiv (ocn, 4);
-				nopt += [tdiv (ocn, 8), tdiv (ocn, 8), tdiv (ocn, 16), 0, 0, 2 * ocn][lvl] || 0;
-				nopt = tdiv (nopt * diffRow.optimalPercent, 100);
-				const m = { maxD: tdiv (world.width + world.height, 4), ocn, nopt, govLevel: lvl, cityCount: result.cities.length,
-				            commercial, palaceWonders, corruptionPct: diffRow.corruptionPercent ?? 100, dist,
-				            fpCities: result.cities.filter ((c) => fpLike.some ((k) => has (c, k))) };
+				// Leader_get_optimal_city_number for a human player, at a government's corruption level
+				const modelAt = (lvl) => {
+					let nopt = ocn + tdiv (palaceWonders * ocn * 3, lvl === 5 ? 1 : 8);
+					if (commercial) nopt += tdiv (ocn, 4);
+					nopt += [tdiv (ocn, 8), tdiv (ocn, 8), tdiv (ocn, 16), 0, 0, 2 * ocn][lvl] || 0;
+					nopt = tdiv (nopt * diffRow.optimalPercent, 100);
+					return { maxD: tdiv (world.width + world.height, 4), ocn, nopt, govLevel: lvl, cityCount: result.cities.length,
+					         commercial, palaceWonders, corruptionPct: diffRow.corruptionPercent ?? 100, dist,
+					         fpCities: result.cities.filter ((c) => fpLike.some ((k) => has (c, k))) };
+				};
+				const m = modelAt (lvl), byLevel = {};
+				const mAt = (g) => { const l = rules.governments[g].corruption; return byLevel[l] || (byLevel[l] = modelAt (l)); };
 				const courthouse = reducing.find ((k) => /courthouse/i.test (rules.buildings[k].name)), police = reducing.find ((k) => /police/i.test (rules.buildings[k].name));
 				for (const c of result.cities) {
 					c.isCapital = c === capital;
@@ -988,6 +1022,8 @@ const Civ3Parse = (() => {
 				}
 				result.model = { m, courthouse, police, reducing, match, checked,
 				                 lostFor: (c, ni, forWaste) => corruptedYield (m, c, ni, forWaste ? c.shields : c.commerce, forWaste).lost,
+				                 // Coins or shields lost from yield Y under government g (an index into the rules' governments)
+				                 lostAt: (c, ni, forWaste, Y, g) => corruptedYield (mAt (g), c, ni, Y, forWaste).lost,
 				                 partsFor: (c, ni, forWaste) => corruptionParts (m, c, ni, forWaste, forWaste ? c.shields : c.commerce) };
 				diag.push (`Corruption model (the game's own rule): ${gov.name} (${['minimal', 'nuisance', 'problematic', 'rampant', 'catastrophic', 'communal'][gov.corruption] || '?'}), ` +
 				           `${diffRow.name}, ${civ ? civ.noun : '?'}${m.commercial ? ' (Commercial)' : ''}, optimal cities ${m.ocn} -> ${m.nopt} for you, ` +
@@ -1021,6 +1057,67 @@ const Civ3Parse = (() => {
 						c.freshWater = c.river || c.lake;
 					}
 					result.tiles = true;
+
+					// Worked tiles and their yields under every government, transcribed from the game (GOG
+					// Map_calc_food_yield_at 0x5D7180, Map_calc_shield_yield_at 0x5D75F0, Map_calc_commerce_yield_at 0x5D7AD0).
+					// A tile is worked by the city whose id is at tile +104 (OpenCiv3 CityIDOfCitizen); the city tile is one of
+					// them. Checked on a save: the sums reproduce every city's food, shields and commerce from tiles. Not on that
+					// save, so not checked: pollution (-1 on each yield), Commercial and Seafaring city tiles. Not transcribed:
+					// railroads and farmland (+1 with a tech), Golden Age (+1), Colossus-type wonders; a city that has them won't
+					// reproduce, and Diagnostics names it.
+					const ty = rules.terrainYields, goods = rules.goods, civ = rules.civs[playerRace] || {};
+					if (ty.length && rules.governments.every ((g) => g.tilePenalty !== undefined)) {
+						const worked = {};
+						for (let k = 0; k < count; k++) { const o = first + 212 * k, id = i16 (o + 104); if (id >= 0) (worked[id] = worked[id] || []).push (o); }
+						const CITY_FOOD = 2; // the game reads a global (0x9C72B4); 2 reproduces the default rules
+						const flagCount = (c, f) => { let n = 0; for (const k of c.buildings || []) if (rules.buildings[k] && rules.buildings[k][f]) n++; return n; };
+						const bigSeaNear = (c) => around.some (([dx, dy]) => { const o = tile (c.x + dx, c.y + dy); return o >= 0 && isWater (o) && bodySize[bodyOf (o)] > 20; });
+						const yieldOf = (c, o, g) => {
+							const t = b[o + 57] >> 4, T = ty[t] || { irrigation: 0, mining: 0, road: 0, food: 0, shields: 0, commerce: 0 }, f2 = b[o + 52];
+							const road = f2 & 1, mine = f2 & 4, irrigated = f2 & 8, polluted = f2 & 64, river = b[o + 8] !== 0;
+							const water = isWater (o), bigWater = water && bodySize[bodyOf (o)] > 20, isCity = i16 (o + 30) === c.id;
+							const res = i32 (o + 12), gd = res >= 0 ? goods[res] : null;
+							const gOk = gd && (gd.prereq < 0 || (result.knownTechs && result.knownTechs.has (gd.prereq)));
+							const cls = c.size > maxCity ? 2 : (c.size > maxTown ? 1 : 0);
+							let food = T.food; if (food > 0 && polluted) food--;
+							if (irrigated || isCity) { food += T.irrigation; if (t === 0 && civ.agricultural) food++; } // a city tile counts as irrigated
+							if (gOk) food += gd.food;
+							if (water) food += bigWater ? flagCount (c, 'foodWater') : 1; // +1 on a lake (20 tiles or fewer)
+							if (isCity) food = CITY_FOOD + (civ.agricultural ? 1 : 0);
+							if (g.tilePenalty && ! (civ.agricultural && isCity && river) && food > 2) food--;
+							let sh = T.shields; if (sh > 0 && polluted) sh--;
+							if (mine) sh += T.mining;
+							if (gOk) sh += gd.shields;
+							if (t === 2 && (b[o + 62] & 1)) sh++; // grassland bonus shield
+							if (bigWater) sh += flagCount (c, 'shieldsWater');
+							if (isCity) { sh += cls === 1 ? 1 : (cls === 2 ? (civ.industrious ? 3 : 2) : 0); if (sh < 1) sh = 1; }
+							if (g.tilePenalty && sh > 2) sh--;
+							let com = T.commerce; if (com > 0 && polluted) com--;
+							if (road || isCity) com += T.road;
+							if (gOk) com += gd.commerce;
+							if (river) com++;
+							if (bigWater) com += flagCount (c, 'commerceWater');
+							if (isCity) {
+								com += cls === 1 ? (civ.commercial ? 3 : 1) : (cls === 2 ? (civ.commercial ? 5 : 2) : 0);
+								com = Math.max (com, c.id === capitalId ? 4 : 1);
+								if (civ.seafaring && bigSeaNear (c)) com++;
+							}
+							if (g.tradeBonus && com > 0) com++;
+							if (g.tilePenalty && com > 2) com--;
+							return { food: Math.max (0, food), shields: Math.max (0, sh), commerce: Math.max (0, com) };
+						};
+						let ok = 0;
+						const off = [];
+						for (const c of result.cities) {
+							const tiles = worked[c.id] || [];
+							c.tileYields = rules.governments.map ((g) => tiles.reduce ((a, o) => { const y = yieldOf (c, o, g); return { food: a.food + y.food, shields: a.shields + y.shields, commerce: a.commerce + y.commerce }; }, { food: 0, shields: 0, commerce: 0 }));
+							const now = c.tileYields[government];
+							c.tilesOk = !! now && now.food === c.foodTiles && now.shields === c.shields && now.commerce === c.commerce;
+							if (c.tilesOk) ok++; else off.push (c.name);
+						}
+						result.tileYields = true;
+						diag.push (`Tile yields (the game's rule): worked tiles reproduce food, shields and commerce in ${ok}/${result.cities.length} cities` + (off.length ? `; not in ${off.join (', ')}` : ''));
+					}
 					diag.push (`Map tiles: city tiles match ${matched}/${result.cities.length}; ${result.cities.filter ((c) => c.coastal).length} coastal cities, ` +
 					           `fresh water: ${result.cities.filter ((c) => c.river).length} by a river, ${result.cities.filter ((c) => c.lake && ! c.river).length} by a lake`);
 				} else diag.push (`Map tiles: city tiles match only ${matched}/${result.cities.length}; not used`);
@@ -1156,24 +1253,25 @@ const BASE_COLUMNS = [
     show: (c) => (c.entertainers + c.scientists + c.taxmen) ? `${c.entertainers}/${c.scientists}/${c.taxmen}` : '0',
     cls: (c) => (c.entertainers + c.scientists + c.taxmen) ? '' : 'dim', title: 'Entertainers / scientists / taxmen' },
   { key: 'foreign', sec: 'mood', label: 'Foreign', title: 'Citizens of another nationality: culture-flip risk', val: (c) => c.foreign, cls: (c) => c.foreign ? 'amber' : 'dim' },
-  { key: 'grow', sec: 'food', label: 'Grow', title: 'Turns until the city grows, as on the city screen. –: not growing. max: food box full, waiting for an Aqueduct or Hospital', val: (c) => c.grow === null ? 9998 : (c.grow === 'max' ? 9999 : c.grow),
-    show: (c) => c.grow === null ? '–' : c.grow, cls: (c) => c.grow === null ? (c.foodNet < 0 ? 'red' : 'dim') : (c.grow === 'max' ? 'amber' : '') },
-  { key: 'foodNet', sec: 'food', label: 'Food', title: 'Net food per turn', val: (c) => c.foodNet, show: (c) => (c.foodNet > 0 ? '+' : '') + c.foodNet, cls: (c) => c.foodNet < 0 ? 'red' : '', total: true },
+  { key: 'grow', sec: 'food', label: 'Grow', title: 'Turns until the city grows, as on the city screen. –: not growing. max: food box full, waiting for an Aqueduct or Hospital', val: (c) => { const g = wi (c).grow; return g === null ? 9998 : (g === 'max' ? 9999 : g); },
+    show: (c) => { const t = (g) => g === null ? '–' : g; return arrow (t (c.grow), t (wi (c).grow)); }, cls: (c) => { const e = wi (c); return e.grow !== c.grow ? 'changed' : (e.grow === null ? (e.foodNet < 0 ? 'red' : 'dim') : (e.grow === 'max' ? 'amber' : '')); } },
+  { key: 'foodNet', sec: 'food', label: 'Food', title: 'Net food per turn', val: (c) => wi (c).foodNet, show: (c) => { const s = (v) => (v > 0 ? '+' : '') + v; return arrow (s (c.foodNet), s (wi (c).foodNet)); },
+    cls: (c) => wiCls (c, 'foodNet', true) || (c.foodNet < 0 ? 'red' : ''), total: true },
   { key: 'box', sec: 'food', label: 'Box', title: 'Food stored / food needed to grow', val: (c) => c.storedFood / c.foodBox, show: (c) => `${c.storedFood}/${c.foodBox}`, csv: (c) => `${c.storedFood}/${c.foodBox}` },
-  { key: 'shields', sec: 'shields', label: 'Shields', val: (c) => c.shields, total: true, title: 'Raw shields from tiles, before waste' },
+  { key: 'shields', sec: 'shields', label: 'Shields', val: (c) => wi (c).shields, show: (c) => arrow (c.shields, wi (c).shields), cls: (c) => wiCls (c, 'shields', true), total: true, title: 'Raw shields from tiles, before waste' },
   { key: 'waste', sec: 'shields', label: 'Waste', title: 'Shields lost to waste', val: (c) => wi (c).waste, show: (c) => arrow (c.waste, wi (c).waste), cls: (c) => wiCls (c, 'waste') || (c.waste ? 'amber' : 'dim'), total: true },
   { key: 'wastePct', sec: 'shields', label: 'Waste %', val: (c) => wi (c).wastePct, show: (c) => arrow (c.wastePct, wi (c).wastePct, '%'), cls: (c) => wiCls (c, 'wastePct') || pctClass (c.wastePct),
     title: 'Share of the city\'s shields lost to waste', ratio: ['waste', 'shieldsGross'] },
-  { key: 'netShields', sec: 'shields', label: 'Net Shields', val: (c) => c.shields - wi (c).waste, show: (c) => arrow (c.shields - c.waste, c.shields - wi (c).waste),
-    cls: (c) => wiCls (c, 'waste') ? (wi (c).waste < c.waste ? 'better changed' : 'worse changed') : '', total: true, title: 'Shields after waste' },
+  { key: 'netShields', sec: 'shields', label: 'Net Shields', val: (c) => wi (c).shields - wi (c).waste, show: (c) => arrow (c.shields - c.waste, wi (c).shields - wi (c).waste),
+    cls: (c) => { const v = wi (c).shields - wi (c).waste, n = c.shields - c.waste; return v === n ? '' : (v > n ? 'better changed' : 'worse changed'); }, total: true, title: 'Shields after waste' },
   { key: 'ch', sec: 'corr', label: 'CH', chk: 'ch', model: true, title: 'Courthouse (tick to try it)' },
   { key: 'ps', sec: 'corr', label: 'PS', chk: 'ps', model: true, title: 'Police Station (tick to try it)' },
-  { key: 'commerce', sec: 'commerce', label: 'Commerce', val: (c) => c.commerce, total: true, title: 'Raw commerce from tiles, before corruption' },
+  { key: 'commerce', sec: 'commerce', label: 'Commerce', val: (c) => wi (c).commerce, show: (c) => arrow (c.commerce, wi (c).commerce), cls: (c) => wiCls (c, 'commerce', true), total: true, title: 'Raw commerce from tiles, before corruption' },
   { key: 'corruption', sec: 'commerce', label: 'Corrupt', title: 'Commerce lost to corruption. ~: the game\'s corruption rule doesn\'t match here (the city may not be connected to the capital)', val: (c) => wi (c).corruption, show: (c) => (c.modelOff ? '~' : '') + arrow (c.corruption, wi (c).corruption), cls: (c) => wiCls (c, 'corruption') || (c.corruption ? 'amber' : 'dim'), total: true },
   { key: 'corruptionPct', sec: 'commerce', label: 'Corrupt %', val: (c) => wi (c).corruptionPct, show: (c) => arrow (c.corruptionPct, wi (c).corruptionPct, '%') + uncapped (c).text, tip: (c) => uncapped (c).tip, cls: (c) => wiCls (c, 'corruptionPct') || pctClass (c.corruptionPct),
     title: 'Share of the city\'s commerce lost to corruption. Over the cap, brackets show the uncapped parts: distance to the palace + city rank', ratio: ['corruption', 'commerce'] },
-  { key: 'netCommerce', sec: 'commerce', label: 'Net Commerce', val: (c) => c.commerce - wi (c).corruption, show: (c) => arrow (c.commerce - c.corruption, c.commerce - wi (c).corruption),
-    cls: (c) => wiCls (c, 'corruption') ? (wi (c).corruption < c.corruption ? 'better changed' : 'worse changed') : '', total: true, title: 'Commerce after corruption' },
+  { key: 'netCommerce', sec: 'commerce', label: 'Net Commerce', val: (c) => wi (c).commerce - wi (c).corruption, show: (c) => arrow (c.commerce - c.corruption, wi (c).commerce - wi (c).corruption),
+    cls: (c) => { const v = wi (c).commerce - wi (c).corruption, n = c.commerce - c.corruption; return v === n ? '' : (v > n ? 'better changed' : 'worse changed'); }, total: true, title: 'Commerce after corruption' },
   effectColumn ('ch', { key: 'chEffect', sec: 'corr', label: 'CH Effect', model: true,
     title: 'What a Courthouse would gain this city per turn (science, gold and luxury from the commerce kept, after its Library, Marketplace etc.; shields kept; upkeep), and the turns until it pays back its cost. Uses your slider, or the one in Try slider. Sorts fastest payback first' }),
   effectColumn ('ps', { key: 'psEffect', sec: 'corr', label: 'PS Effect', model: true,
@@ -1259,6 +1357,36 @@ function loadSlider () {
   return { science: 5, tax: 5, luxury: 0 };
 }
 state.slider = { on: false, rates: loadSlider () };
+// ---------- tried government: an empire-wide what-if ----------
+state.govTry = null;
+// The tried government (an index into the rules' governments) when it differs from yours; null: yours
+function triedGov () {
+  const res = state.result;
+  return state.govTry !== null && res && res.tileYields && res.model && state.govTry !== res.government ? state.govTry : null;
+}
+function govName (g) { const x = state.result && state.result.rules && state.result.rules.governments[g]; return x ? x.name : '?'; }
+function syncGov () {
+  const res = state.result, box = $('govbox'), sel = $('govsel');
+  box.hidden = ! (res && res.tileYields && res.model);
+  if (box.hidden) return;
+  const names = res.rules.governments.map ((g, k) => k === res.government ? `${g.name} (yours)` : g.name).join ('|');
+  if (sel.dataset.names !== names) {
+    sel.textContent = '';
+    res.rules.governments.forEach ((g, k) => sel.appendChild (Object.assign (document.createElement ('option'), { value: k, textContent: k === res.government ? `${g.name} (yours)` : g.name })));
+    sel.dataset.names = names;
+  }
+  const g = triedGov ();
+  sel.value = g === null ? res.government : g;
+  box.classList.toggle ('whatif', g !== null);
+}
+// Turns to grow with a different net food, as the parser works it out
+function growOf (c, foodNet) {
+  if (foodNet <= 0) return null;
+  const needed = c.foodBox - c.storedFood, caps = state.result.sizeCaps;
+  if (needed <= 0) return caps && (c.size === caps.maxTown || c.size === caps.maxCity) ? 'max' : 1;
+  return Math.ceil (needed / foodNet);
+}
+
 // The tried slider while it is on; null: the save's slider
 function triedRates () { return state.slider.on && econOn () ? state.slider.rates : null; }
 function sliderText (r) { return `${r.science * 10}% sci / ${r.tax * 10}% gold / ${r.luxury * 10}% lux`; }
@@ -1284,11 +1412,11 @@ function syncSlider () {
 
 // Values for the city with the given ticks (or its current ticks) and slider (null: the save's), anchored to the
 // game's own numbers: only the changes come from the corruption model and the commerce replay.
-function evaluate (c, ticks, rates) {
+function evaluate (c, ticks, rates, gov = null) {
   const res = state.result, m = res.model, econ = res.econ, rules = res.rules;
   const now = { corruption: c.corruption, waste: c.waste, corruptionPct: c.corruptionPct, wastePct: c.wastePct,
                 gold: c.gold, science: c.science, luxury: c.luxury, upkeep: c.upkeep, value: 0, changed: false,
-                ni: c.reducers ? c.reducers.length : 0 };
+                ni: c.reducers ? c.reducers.length : 0, commerce: c.commerce, shields: c.shields, foodNet: c.foodNet, grow: c.grow };
   if (! rules || ! c.buildings) return now;
   const want = (key) => (ticks && key in ticks) ? ticks[key] : ticked (c, key);
   const set = new Set (c.buildings);
@@ -1301,26 +1429,39 @@ function evaluate (c, ticks, rates) {
     const up = (rules.buildings[id] || {}).upkeep || 0;
     if (w) { set.add (id); upkeep += up; } else { set.delete (id); upkeep -= up; }
   }
-  if (! changed && ! rates) return now;
+  if (gov !== null && ! c.tileYields) gov = null;
+  if (! changed && ! rates && gov === null) return now;
   const out = { ...now, upkeep, changed: true };
 
-  // Corruption and waste: Courthouse / Police Station
-  if (m && ! c.isCapital) {
-    const niNow = c.reducers.length, niNew = m.reducing.filter ((k) => set.has (k)).length;
+  // Another government: the tiles' yields change (trade bonus, tile penalty); anchored to the game's own figures
+  if (gov !== null) {
+    const a = c.tileYields[gov], b = c.tileYields[res.government];
+    out.commerce = Math.max (0, c.commerce + a.commerce - b.commerce);
+    out.shields = Math.max (0, c.shields + a.shields - b.shields);
+    out.foodNet = c.foodNet + a.food - b.food;
+    out.grow = growOf (c, out.foodNet);
+    if (! rules.governments[gov].maintenance) out.upkeep = 0;
+  }
+  // Corruption and waste: Courthouse / Police Station, and the government's corruption level
+  if (m) {
+    const niNow = c.reducers.length, niNew = c.isCapital ? niNow : m.reducing.filter ((k) => set.has (k)).length;
     out.ni = niNew;
-    if (niNow !== niNew) {
+    if (niNow !== niNew || gov !== null) {
       // Anchored to the game's own figures: only the change comes from the model
-      out.corruption = Math.max (0, Math.min (c.commerce, c.corruption + m.lostFor (c, niNew, false) - m.lostFor (c, niNow, false)));
-      out.waste = Math.max (0, Math.min (c.shields, c.waste + m.lostFor (c, niNew, true) - m.lostFor (c, niNow, true)));
-      out.corruptionPct = c.commerce > 0 ? Math.round (100 * out.corruption / c.commerce) : 0;
-      out.wastePct = c.shields > 0 ? Math.round (100 * out.waste / c.shields) : 0;
+      const g = gov === null ? res.government : gov;
+      out.corruption = Math.max (0, Math.min (out.commerce, c.corruption + m.lostAt (c, niNew, false, out.commerce, g) - m.lostAt (c, niNow, false, c.commerce, res.government)));
+      out.waste = Math.max (0, Math.min (out.shields, c.waste + m.lostAt (c, niNew, true, out.shields, g) - m.lostAt (c, niNow, true, c.shields, res.government)));
+      out.corruptionPct = out.commerce > 0 ? Math.round (100 * out.corruption / out.commerce) : 0;
+      out.wastePct = out.shields > 0 ? Math.round (100 * out.waste / out.shields) : 0;
     }
   }
   // Gold / science / luxury: replay the slider split and building bonuses with the new commerce and buildings
   if (econ && c.econ) {
-    const net = c.econ.net + (c.corruption - out.corruption);
+    const net = Math.max (0, c.econ.net + (out.commerce - out.corruption) - (c.commerce - c.corruption));
     const o = econ.replay (net, set, rates || res.rates), off = c.econ.offset;
     out.gold = o.gold + off.gold; out.science = o.science + off.science; out.luxury = o.luxury + off.luxury;
+    // Anarchy: the game loses every coin, calibrated ones too
+    if (gov !== null && rules.governments[gov].corruption === 4) out.gold = out.science = out.luxury = 0;
   }
   out.value = (out.gold - c.gold) + (out.science - c.science) + (out.luxury - c.luxury) + (c.waste - out.waste) - (out.upkeep - c.upkeep);
   return out;
@@ -1328,7 +1469,7 @@ function evaluate (c, ticks, rates) {
 // The city's values with your what-if ticks and tried slider; while filtering and sorting, its real values (filters
 // pick cities by what they are)
 function wi (c) {
-  if (! state.realValues) return evaluate (c, null, triedRates ());
+  if (! state.realValues) return evaluate (c, null, triedRates (), triedGov ());
   const real = {}; for (const k of tickKeysFor (c)) real[k] = hasNow (c, k);
   return evaluate (c, real, null);
 }
@@ -1340,17 +1481,18 @@ function effectOf (c, key) {
   const id = buildingIdOf (c, key);
   if (! res || ! res.rules || id === undefined) return { value: -1e9, text: '' };
   if ((key === 'ch' || key === 'ps') && c.isCapital) return { value: -1e9, text: 'capital' };
+  if ((key === 'ch' || key === 'ps') && triedGov () !== null && res.rules.governments[triedGov ()].corruption === 4) return { value: -1e9, text: 'Anarchy' };
   if (hasNow (c, key)) return { value: -1e8, text: 'has one' };
   const bd = res.rules.buildings[id];
   if (bd && bd.requires >= 0 && ! c.buildings.has (bd.requires))
     return { value: -1e7, text: `needs ${res.rules.buildings[bd.requires] ? res.rules.buildings[bd.requires].name : '?'}` };
-  const rates = triedRates (), real = {};
+  const rates = triedRates (), gov = triedGov (), real = {};
   for (const k of tickKeysFor (c)) real[k] = hasNow (c, k);
-  const base = evaluate (c, real, rates), e = evaluate (c, { ...real, [key]: true }, rates);
+  const base = evaluate (c, real, rates, gov), e = evaluate (c, { ...real, [key]: true }, rates, gov);
   const parts = [], sign = (v) => (v > 0 ? '+' : '') + v;
   const dg = e.gold - base.gold, ds = e.science - base.science, dl = e.luxury - base.luxury, dsh = base.waste - e.waste, du = e.upkeep - base.upkeep;
   const gain = e.value - base.value;
-  const at = res.rates ? ` At ${rates ? 'the tried slider' : 'your slider'}: ${sliderText (rates || res.rates)}.` : '';
+  const at = (res.rates ? ` At ${rates ? 'the tried slider' : 'your slider'}: ${sliderText (rates || res.rates)}.` : '') + (gov !== null ? ` Under ${govName (gov)} (tried).` : '');
   if (key === 'ch' || key === 'ps') {
     // What the commerce kept turns into (after Library, Marketplace etc.), and the shields kept
     if (ds) parts.push (`${sign (ds)} sci`);
@@ -1413,7 +1555,7 @@ function rebuildColumns () {
 // Corruption above the cap: the formula's distance and rank parts, shown when their sum is over the cap
 function uncapped (c) {
   const res = state.result, none = { text: '', tip: '' };
-  if (! res || ! res.model || c.isCapital || c.modelOff) return none;
+  if (! res || ! res.model || c.isCapital || c.modelOff || triedGov () !== null) return none; // the parts are for your own government
   const p = res.model.partsFor (c, wi (c).ni, false);
   if (! p || p.dist + p.rank <= p.cap + 1e-9) return none;
   const pc = (x) => Math.round (100 * x), d = pc (p.dist), k = pc (p.rank);
@@ -2314,8 +2456,8 @@ $('msreset').addEventListener ('click', () => {
 });
 
 // ---------- side menu and drawer: one panel at a time, beside the table ----------
-const PANEL_TITLES = { summary: 'Summary', milestones: 'Milestones', history: 'History', diplomacy: 'Diplomacy', columns: 'Columns', tiers: 'Tiers', diagnostics: 'Diagnostics' };
-const PANEL_CONTENT = { summary: 'summary', milestones: 'milestones', history: 'history', diplomacy: 'diplomacy', columns: 'viewedit', tiers: 'attnedit', diagnostics: 'diagnostics' };
+const PANEL_TITLES = { summary: 'Summary', milestones: 'Milestones', history: 'History', diplomacy: 'Diplomacy', governments: 'Governments', columns: 'Columns', tiers: 'Tiers', diagnostics: 'Diagnostics' };
+const PANEL_CONTENT = { summary: 'summary', milestones: 'milestones', history: 'history', diplomacy: 'diplomacy', governments: 'governments', columns: 'viewedit', tiers: 'attnedit', diagnostics: 'diagnostics' };
 function panelOpen (key) { return ! $('drawer').hidden && state.panel === key; }
 function openPanel (key) {
   if (panelOpen (key)) { closePanel (); return; }
@@ -2330,6 +2472,7 @@ function openPanel (key) {
   if (key === 'tiers') renderAttentionEditor ();
   syncPanelNote ();
   if (key === 'history') drawHistory ();
+  if (key === 'governments' && state.result && state.result.ok) renderGovernments (state.result);
   fitTable ();
 }
 function closePanel () {
@@ -2342,11 +2485,46 @@ function closePanel () {
 function syncPanelNote () {
   const key = state.panel; if (! key) return;
   const content = $(PANEL_CONTENT[key]), note = document.querySelector (`.panel[data-panel="${key}"] .panelnote`);
-  if (note) note.hidden = ! (content.hidden && ['summary', 'milestones', 'history', 'diplomacy'].includes (key));
+  if (note) note.hidden = ! (content.hidden && ['summary', 'milestones', 'history', 'diplomacy', 'governments'].includes (key));
 }
 for (const b of document.querySelectorAll ('#sidenav button')) b.addEventListener ('click', () => openPanel (b.dataset.open));
 $('drawerclose').addEventListener ('click', closePanel);
 document.addEventListener ('keydown', (e) => { if (e.key === 'Escape' && ! $('drawer').hidden && $('fmenu').hidden && ! $('help').open) closePanel (); });
+
+// Governments: the empire's totals under each one, with the slider in use; your own buildings (ticks not included)
+function renderGovernments (res) {
+  const sec = $('governments');
+  sec.hidden = ! (res.tileYields && res.model && res.rules);
+  if (sec.hidden || ! panelOpen ('governments')) return;
+  const rates = triedRates (), tried = triedGov ();
+  const cols = [['Government', 'l'], ['Commerce'], ['Corrupt %'], ['Net commerce'], ['Shields'], ['Waste %'], ['Net shields'], ['Food'], ['Gold'], ['Sci'], ['Lux'], ['Upkeep'], ['Gold − upkeep']];
+  const head = $('govhead'); head.textContent = '';
+  for (const [t, cl] of cols) head.appendChild (Object.assign (document.createElement ('th'), { textContent: t, className: cl || '' }));
+  const body = $('govrows'); body.textContent = '';
+  res.rules.governments.forEach ((g, k) => {
+    const t = { commerce: 0, corruption: 0, shields: 0, waste: 0, food: 0, gold: 0, science: 0, luxury: 0, upkeep: 0 };
+    for (const c of res.cities) {
+      const real = {}; for (const key of tickKeysFor (c)) real[key] = hasNow (c, key);
+      const e = evaluate (c, real, rates, k === res.government ? null : k);
+      t.commerce += e.commerce; t.corruption += e.corruption; t.shields += e.shields; t.waste += e.waste; t.food += e.foodNet;
+      t.gold += e.gold + c.specialistOutput.gold; t.science += e.science + c.specialistOutput.science; t.luxury += e.luxury + c.specialistOutput.luxury; t.upkeep += e.upkeep;
+    }
+    const pc = (a, b) => b ? Math.round (100 * a / b) + '%' : '–', sg = (v) => (v > 0 ? '+' : '') + v;
+    const cells = [g.name + (k === res.government ? ' (yours)' : ''), t.commerce, pc (t.corruption, t.commerce), t.commerce - t.corruption, t.shields, pc (t.waste, t.shields),
+                   t.shields - t.waste, sg (t.food), t.gold, t.science, t.luxury, t.upkeep, sg (t.gold - t.upkeep)];
+    const tr = document.createElement ('tr');
+    cells.forEach ((v, i) => tr.appendChild (Object.assign (document.createElement ('td'), { textContent: v, className: cols[i][1] || '' })));
+    if (k === res.government) tr.classList.add ('yours');
+    if (k === tried) tr.classList.add ('tried');
+    tr.title = k === res.government ? 'Your government: the game\'s own figures' : `Click to try ${g.name} in the table`;
+    tr.addEventListener ('click', () => { state.govTry = k; render (); });
+    body.appendChild (tr);
+  });
+  $('govnote').textContent = `With ${rates ? 'the tried slider' : 'your slider'} (${sliderText (rates || res.rates)}) and your buildings. Included: the tiles' food, shields and commerce ` +
+    '(trade bonus, tile penalty), corruption and waste, building upkeep. Not included: unit support, war weariness, happiness, hurrying. ' +
+    'Communism and Anarchy corruption come from the game\'s code but weren\'t checked against a save; under Anarchy the game wastes every shield and coin. ' +
+    'Gold, science and luxury include specialists.';
+}
 
 // Empire summary: every city, the game's own figures (what-ifs not included)
 function renderSummary (res) {
@@ -2416,8 +2594,8 @@ function render () {
   syncPanelNote ();
   const COLS = visibleColumns ();
   renderViewPicker ();
-  syncSlider ();
-  const nTicks = tickCount () + (triedRates () ? 1 : 0);
+  syncSlider (); syncGov (); renderGovernments (res);
+  const nTicks = tickCount () + (triedRates () ? 1 : 0) + (triedGov () !== null ? 1 : 0);
   $('resetwhatif').hidden = nTicks === 0;
   $('resetwhatif').textContent = `Reset what-ifs (${nTicks})`;
   const head = $('headrow'); head.textContent = '';
@@ -2535,12 +2713,12 @@ function render () {
     else if (col.chk) td.className += ' chk';
     else if (col.key === 'chEffect' || col.key === 'psEffect' || col.key.startsWith ('be:') || col.key === 'status' || col.key === 'build') td.textContent = '';
     else if (col.ratio) {
-      const num = list.reduce ((s, c) => s + wi (c)[col.ratio[0]], 0), den = list.reduce ((s, c) => s + (col.ratio[1] === 'shieldsGross' ? c.shields : c[col.ratio[1]]), 0);
+      const num = list.reduce ((s, c) => s + wi (c)[col.ratio[0]], 0), den = list.reduce ((s, c) => s + (col.ratio[1] === 'shieldsGross' ? wi (c).shields : wi (c)[col.ratio[1]]), 0);
       td.textContent = den > 0 ? Math.round (100 * num / den) + '%' : '0%';
     }
     else if (['size', 'happy', 'content', 'unhappy', 'resisters', 'foreign'].includes (col.key) || col.total)
       td.textContent = list.reduce ((s, c) => s + col.val (c), 0);
-    if (! col.chk && ['waste', 'corruption', 'gold', 'science', 'luxury', 'upkeep'].includes (col.key)) {
+    if (! col.chk && ['waste', 'corruption', 'gold', 'science', 'luxury', 'upkeep', 'shields', 'commerce', 'foodNet'].includes (col.key)) {
       const now = list.reduce ((s, c) => s + c[col.key], 0), then = list.reduce ((s, c) => s + wi (c)[col.key], 0);
       td.textContent = arrow (now, then);
     }
@@ -2568,7 +2746,7 @@ function load (bytes, name) {
   try { res = Civ3Parse.parse (bytes, state.rules); }
   catch (e) { res = { ok: false, cities: [], diag: ['Error while reading: ' + e.message] }; }
   const gameId = gameIdOf (res);
-  if (gameId !== state.gameId) { state.toggles = {}; state.slider.on = false; } // a different game: what-ifs from the previous one don't apply
+  if (gameId !== state.gameId) { state.toggles = {}; state.slider.on = false; state.govTry = null; } // a different game: what-ifs from the previous one don't apply
   state.gameId = gameId;
   if (res.ok) {
     const live = new Set (res.cities.map ((c) => c.id + ':' + c.name));
@@ -2683,7 +2861,8 @@ $('viewreset').addEventListener ('click', () => {
   state.views = { views: JSON.parse (JSON.stringify (DEFAULT_VIEWS)), current: 0, seen: DEFAULT_VIEWS.map ((d) => d.name) }; saveViews (); renderViewEditor (); render (); renderViewPicker ();
 });
 renderViewPicker ();
-$('resetwhatif').addEventListener ('click', () => { state.toggles = {}; state.slider.on = false; render (); });
+$('resetwhatif').addEventListener ('click', () => { state.toggles = {}; state.slider.on = false; state.govTry = null; render (); });
+$('govsel').addEventListener ('change', () => { state.govTry = +$('govsel').value; render (); });
 for (const id of ['slsci', 'sltax', 'sllux'])
   for (let v = 0; v <= 10; v++) $(id).appendChild (Object.assign (document.createElement ('option'), { value: v, textContent: v * 10 + '%' }));
 $('slideron').addEventListener ('change', () => { state.slider.on = $('slideron').checked; render (); });

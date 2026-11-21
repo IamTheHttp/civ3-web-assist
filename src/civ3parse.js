@@ -49,7 +49,7 @@ const Civ3Parse = (() => {
 		const dv = new DataView (b.buffer, b.byteOffset, b.byteLength);
 		const i32 = (o) => dv.getInt32 (o, true);
 		const sec = (name) => readBiqSection (b, name, from, to, diag);
-		const bldg = sec ('BLDG'), tech = sec ('TECH'), terr = sec ('TERR'), prto = sec ('PRTO'), rule = sec ('RULE'), govt = sec ('GOVT'), diff = sec ('DIFF'),
+		const bldg = sec ('BLDG'), tech = sec ('TECH'), terr = sec ('TERR'), good = sec ('GOOD'), prto = sec ('PRTO'), rule = sec ('RULE'), govt = sec ('GOVT'), diff = sec ('DIFF'),
 		      wsiz = sec ('WSIZ'), race = sec ('RACE');
 		if (! bldg || ! govt || ! diff || ! wsiz) return null;
 		const r = {
@@ -63,12 +63,22 @@ const Civ3Parse = (() => {
 				// Placement (same source): must be near water / a river, or coastal
 				spaceshipPart: i32 (e + 216) >= 0, requiredAdvance: i32 (e + 220),
 				nearWater: ((b[e + 237] >> 6) & 1) !== 0, nearRiver: ((b[e + 237] >> 7) & 1) !== 0, coastal: (b[e + 240] & 1) !== 0,
-				wonder: (b[e + 240] & 0b1100) !== 0 })),
+				wonder: (b[e + 240] & 0b1100) !== 0,
+				// +1 food / shield / commerce on water tiles of a large water body (Harbor, Offshore Platform, Commercial Dock)
+				foodWater: (b[e + 239] & 1) !== 0, shieldsWater: ((b[e + 238] >> 7) & 1) !== 0, commerceWater: ((b[e + 239] >> 1) & 1) !== 0 })),
 			// TERR: name after a bitmap of possible resources (one bit each, rounded up to bytes)
 			terrains: terr ? terr.map ((e) => readAscii (b, e + 8 + Math.ceil (i32 (e + 4) / 8), 32)) : [],
+			// Yields (OpenCiv3 Terr.cs): after the name and civilopedia entry
+			terrainYields: terr ? terr.map ((e) => { const t = e + 8 + Math.ceil (i32 (e + 4) / 8);
+				return { irrigation: i32 (t + 64), mining: i32 (t + 68), road: i32 (t + 72), food: i32 (t + 84), shields: i32 (t + 88), commerce: i32 (t + 92) }; }) : [],
+			// Resources (OpenCiv3 Good.cs): prerequisite tech and the yield they add
+			goods: good ? good.map ((e) => ({ name: readAscii (b, e + 4, 24), prereq: i32 (e + 76), food: i32 (e + 80), shields: i32 (e + 84), commerce: i32 (e + 88) })) : [],
 			techs: tech ? tech.map ((e) => ({ name: readAscii (b, e + 4, 32) })) : [],
 			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84) })) : [],
-			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380) })),
+			// OpenCiv3 Govt.cs: +12 buildings need maintenance, +20 tile penalty (-1 on a yield above 2), +24 trade bonus
+			// (+1 commerce on a tile with commerce)
+			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380), maintenance: i32 (e + 12) !== 0,
+				tilePenalty: i32 (e + 20) !== 0, tradeBonus: i32 (e + 24) !== 0 })),
 			difficulties: diff.map ((e) => ({ name: readAscii (b, e + 4, 64), costFactor: i32 (e + 104), optimalPercent: i32 (e + 108), corruptionPercent: i32 (e + 116) })),
 			worldSizes: wsiz.map ((e) => ({ optimalCities: i32 (e + 4) })),
 			civs: [], maxTown: 6, maxCity: 12
@@ -80,7 +90,9 @@ const Civ3Parse = (() => {
 		if (race) for (const e of race) {
 			// City and great-leader name lists, and 4 eras x 520 bytes of artwork paths, come before the fixed fields
 			const n = i32 (e + 4), m = i32 (e + 8 + 24 * n), shift = 24 * n + 32 * m;
-			r.civs.push ({ noun: readAscii (b, e + 180 + shift, 40), commercial: (b[e + 272 + 2080 + shift] & 2) !== 0 });
+			const traits = b[e + 272 + 2080 + shift];
+			r.civs.push ({ noun: readAscii (b, e + 180 + shift, 40), commercial: (traits & 2) !== 0, industrious: (traits & 32) !== 0,
+			               agricultural: (traits & 64) !== 0, seafaring: (traits & 128) !== 0 });
 		}
 		return r;
 	}
@@ -405,14 +417,18 @@ const Civ3Parse = (() => {
 				const ocn = sizeRow.optimalCities, lvl = gov.corruption;
 				const palaceWonders = result.cities.reduce ((n, c) => n + fpLike.filter ((k) => has (c, k)).length, 0);
 				const commercial = civ ? civ.commercial : false;
-				// Leader_get_optimal_city_number for a human player
-				let nopt = ocn + tdiv (palaceWonders * ocn * 3, lvl === 5 ? 1 : 8);
-				if (commercial) nopt += tdiv (ocn, 4);
-				nopt += [tdiv (ocn, 8), tdiv (ocn, 8), tdiv (ocn, 16), 0, 0, 2 * ocn][lvl] || 0;
-				nopt = tdiv (nopt * diffRow.optimalPercent, 100);
-				const m = { maxD: tdiv (world.width + world.height, 4), ocn, nopt, govLevel: lvl, cityCount: result.cities.length,
-				            commercial, palaceWonders, corruptionPct: diffRow.corruptionPercent ?? 100, dist,
-				            fpCities: result.cities.filter ((c) => fpLike.some ((k) => has (c, k))) };
+				// Leader_get_optimal_city_number for a human player, at a government's corruption level
+				const modelAt = (lvl) => {
+					let nopt = ocn + tdiv (palaceWonders * ocn * 3, lvl === 5 ? 1 : 8);
+					if (commercial) nopt += tdiv (ocn, 4);
+					nopt += [tdiv (ocn, 8), tdiv (ocn, 8), tdiv (ocn, 16), 0, 0, 2 * ocn][lvl] || 0;
+					nopt = tdiv (nopt * diffRow.optimalPercent, 100);
+					return { maxD: tdiv (world.width + world.height, 4), ocn, nopt, govLevel: lvl, cityCount: result.cities.length,
+					         commercial, palaceWonders, corruptionPct: diffRow.corruptionPercent ?? 100, dist,
+					         fpCities: result.cities.filter ((c) => fpLike.some ((k) => has (c, k))) };
+				};
+				const m = modelAt (lvl), byLevel = {};
+				const mAt = (g) => { const l = rules.governments[g].corruption; return byLevel[l] || (byLevel[l] = modelAt (l)); };
 				const courthouse = reducing.find ((k) => /courthouse/i.test (rules.buildings[k].name)), police = reducing.find ((k) => /police/i.test (rules.buildings[k].name));
 				for (const c of result.cities) {
 					c.isCapital = c === capital;
@@ -428,6 +444,8 @@ const Civ3Parse = (() => {
 				}
 				result.model = { m, courthouse, police, reducing, match, checked,
 				                 lostFor: (c, ni, forWaste) => corruptedYield (m, c, ni, forWaste ? c.shields : c.commerce, forWaste).lost,
+				                 // Coins or shields lost from yield Y under government g (an index into the rules' governments)
+				                 lostAt: (c, ni, forWaste, Y, g) => corruptedYield (mAt (g), c, ni, Y, forWaste).lost,
 				                 partsFor: (c, ni, forWaste) => corruptionParts (m, c, ni, forWaste, forWaste ? c.shields : c.commerce) };
 				diag.push (`Corruption model (the game's own rule): ${gov.name} (${['minimal', 'nuisance', 'problematic', 'rampant', 'catastrophic', 'communal'][gov.corruption] || '?'}), ` +
 				           `${diffRow.name}, ${civ ? civ.noun : '?'}${m.commercial ? ' (Commercial)' : ''}, optimal cities ${m.ocn} -> ${m.nopt} for you, ` +
@@ -461,6 +479,67 @@ const Civ3Parse = (() => {
 						c.freshWater = c.river || c.lake;
 					}
 					result.tiles = true;
+
+					// Worked tiles and their yields under every government, transcribed from the game (GOG
+					// Map_calc_food_yield_at 0x5D7180, Map_calc_shield_yield_at 0x5D75F0, Map_calc_commerce_yield_at 0x5D7AD0).
+					// A tile is worked by the city whose id is at tile +104 (OpenCiv3 CityIDOfCitizen); the city tile is one of
+					// them. Checked on a save: the sums reproduce every city's food, shields and commerce from tiles. Not on that
+					// save, so not checked: pollution (-1 on each yield), Commercial and Seafaring city tiles. Not transcribed:
+					// railroads and farmland (+1 with a tech), Golden Age (+1), Colossus-type wonders; a city that has them won't
+					// reproduce, and Diagnostics names it.
+					const ty = rules.terrainYields, goods = rules.goods, civ = rules.civs[playerRace] || {};
+					if (ty.length && rules.governments.every ((g) => g.tilePenalty !== undefined)) {
+						const worked = {};
+						for (let k = 0; k < count; k++) { const o = first + 212 * k, id = i16 (o + 104); if (id >= 0) (worked[id] = worked[id] || []).push (o); }
+						const CITY_FOOD = 2; // the game reads a global (0x9C72B4); 2 reproduces the default rules
+						const flagCount = (c, f) => { let n = 0; for (const k of c.buildings || []) if (rules.buildings[k] && rules.buildings[k][f]) n++; return n; };
+						const bigSeaNear = (c) => around.some (([dx, dy]) => { const o = tile (c.x + dx, c.y + dy); return o >= 0 && isWater (o) && bodySize[bodyOf (o)] > 20; });
+						const yieldOf = (c, o, g) => {
+							const t = b[o + 57] >> 4, T = ty[t] || { irrigation: 0, mining: 0, road: 0, food: 0, shields: 0, commerce: 0 }, f2 = b[o + 52];
+							const road = f2 & 1, mine = f2 & 4, irrigated = f2 & 8, polluted = f2 & 64, river = b[o + 8] !== 0;
+							const water = isWater (o), bigWater = water && bodySize[bodyOf (o)] > 20, isCity = i16 (o + 30) === c.id;
+							const res = i32 (o + 12), gd = res >= 0 ? goods[res] : null;
+							const gOk = gd && (gd.prereq < 0 || (result.knownTechs && result.knownTechs.has (gd.prereq)));
+							const cls = c.size > maxCity ? 2 : (c.size > maxTown ? 1 : 0);
+							let food = T.food; if (food > 0 && polluted) food--;
+							if (irrigated || isCity) { food += T.irrigation; if (t === 0 && civ.agricultural) food++; } // a city tile counts as irrigated
+							if (gOk) food += gd.food;
+							if (water) food += bigWater ? flagCount (c, 'foodWater') : 1; // +1 on a lake (20 tiles or fewer)
+							if (isCity) food = CITY_FOOD + (civ.agricultural ? 1 : 0);
+							if (g.tilePenalty && ! (civ.agricultural && isCity && river) && food > 2) food--;
+							let sh = T.shields; if (sh > 0 && polluted) sh--;
+							if (mine) sh += T.mining;
+							if (gOk) sh += gd.shields;
+							if (t === 2 && (b[o + 62] & 1)) sh++; // grassland bonus shield
+							if (bigWater) sh += flagCount (c, 'shieldsWater');
+							if (isCity) { sh += cls === 1 ? 1 : (cls === 2 ? (civ.industrious ? 3 : 2) : 0); if (sh < 1) sh = 1; }
+							if (g.tilePenalty && sh > 2) sh--;
+							let com = T.commerce; if (com > 0 && polluted) com--;
+							if (road || isCity) com += T.road;
+							if (gOk) com += gd.commerce;
+							if (river) com++;
+							if (bigWater) com += flagCount (c, 'commerceWater');
+							if (isCity) {
+								com += cls === 1 ? (civ.commercial ? 3 : 1) : (cls === 2 ? (civ.commercial ? 5 : 2) : 0);
+								com = Math.max (com, c.id === capitalId ? 4 : 1);
+								if (civ.seafaring && bigSeaNear (c)) com++;
+							}
+							if (g.tradeBonus && com > 0) com++;
+							if (g.tilePenalty && com > 2) com--;
+							return { food: Math.max (0, food), shields: Math.max (0, sh), commerce: Math.max (0, com) };
+						};
+						let ok = 0;
+						const off = [];
+						for (const c of result.cities) {
+							const tiles = worked[c.id] || [];
+							c.tileYields = rules.governments.map ((g) => tiles.reduce ((a, o) => { const y = yieldOf (c, o, g); return { food: a.food + y.food, shields: a.shields + y.shields, commerce: a.commerce + y.commerce }; }, { food: 0, shields: 0, commerce: 0 }));
+							const now = c.tileYields[government];
+							c.tilesOk = !! now && now.food === c.foodTiles && now.shields === c.shields && now.commerce === c.commerce;
+							if (c.tilesOk) ok++; else off.push (c.name);
+						}
+						result.tileYields = true;
+						diag.push (`Tile yields (the game's rule): worked tiles reproduce food, shields and commerce in ${ok}/${result.cities.length} cities` + (off.length ? `; not in ${off.join (', ')}` : ''));
+					}
 					diag.push (`Map tiles: city tiles match ${matched}/${result.cities.length}; ${result.cities.filter ((c) => c.coastal).length} coastal cities, ` +
 					           `fresh water: ${result.cities.filter ((c) => c.river).length} by a river, ${result.cities.filter ((c) => c.lake && ! c.river).length} by a lake`);
 				} else diag.push (`Map tiles: city tiles match only ${matched}/${result.cities.length}; not used`);

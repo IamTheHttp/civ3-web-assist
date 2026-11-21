@@ -28,6 +28,12 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   in 40/42 cities; the other 2 are calibrated per city (the capital has +10 commerce not in its record; Memphis +1 gold from Wealth).
 - Slider rate limit: GOVT +520 (OpenCiv3 `ScienceRateCap`, tenths) is 10 for every government in the default rules; the player
   confirmed 100% gold is possible under every government. The Effect columns use the save's slider, or the "Try slider" one.
+- Tile yields: the game's rule (`Map_calc_food/shield/commerce_yield_at` 0x5D7180 / 0x5D75F0 / 0x5D7AD0) reproduces every
+  city's food, shields and commerce from its worked tiles in **42/42**. Worked tile: TILE +104 = city id (city tile included).
+  City tile: food 2 (+1 Agricultural), +1 shield and +1 commerce above the town limit, capital commerce at least 4.
+  GOVT +24 trade bonus (+1 commerce on a tile with commerce: Republic, Democracy), +20 tile penalty (−1 on a yield above 2:
+  Despotism, Anarchy), +12 building maintenance (none under Anarchy). Anarchy wastes every coin and shield (exe 0x4B1239;
+  the player confirmed). Railroad, farmland, Golden Age and Colossus-type wonders aren't transcribed (not on the save).
 - Specialist output is stored separately (fields 528/532/536) and is NOT in the city's gold/sci/lux.
 - Difficulty optimal-cities % (DIFF +108): Chieftain 100, Warlord 95, Regent 90, Monarch 85, Emperor 80, Demigod 70,
   Deity 60, Sid 50. Difficulty corruption % (DIFF +116): 100 at every level in the default rules.

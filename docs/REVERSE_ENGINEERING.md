@@ -15,6 +15,9 @@ Everything here was verified against the player's files unless marked *(inferred
   +516 luxury, +520 science, +524 gold, +528/+532/+536 specialist output (lux/sci/gold, separate from the city's figures),
   +552 citizen count. Fixed part 556 bytes.
 - **CTZN** × count, 308 bytes each: +272 type (0 happy, 1 content, 2 unhappy, 3 resister, 4 specialist), +292 specialist type (CTZN index in rules: 1 entertainer, 2 tax collector, 3 scientist…), +296 nationality = **civilization (RACE) index**, not player number.
+- **TILE** (212 bytes, first header length 36, row by row, W/2 per row): +8 river edges, +12 resource (GOOD index), +30 city id,
+  +34 continent/water body, +52 flags (bit0 road, 1 railroad, 2 mine, 3 irrigation, 6 pollution), +57 terrain (high nibble:
+  the terrain used for yields), +62 bit0 grassland bonus shield, +104 id of the city working the tile.
 - Then **BINF** (+8 count = number of building types, 12-byte history entries: year, builder civ, culture) and **BITM** (+8: 256-bit bitmap of buildings the city has **now**).
 - Self-checks that pass on real data: gold+lux+sci == +512 (42/42); raw shields − waste == +508 (42/42).
 
@@ -25,6 +28,9 @@ Sections: name(4) + count + entries each starting with their length. Offsets fro
   [2] bit3 capitalization (Wealth); [4] bits2-3 wonder/small wonder; [8] bit5 Forbidden-Palace-type; [12] bit4 doubles research.
   Default ids: Palace 0, Marketplace 4, Library 5, Courthouse 6, Bank 9, University 11, Research Lab 20, Police Station 28,
   Wealth 29, Forbidden Palace 56, Stock Exchange 76, Secret Police HQ 82. 83 buildings.
+- **TERR** (after a bitmap of possible resources, one bit each rounded up to bytes): +0 name, +64 irrigation, +68 mining,
+  +72 road bonus, +84 food, +88 shields, +92 commerce. **GOOD**: +4 name, +76 prerequisite tech, +80 food, +84 shields,
+  +88 commerce. BLDG flag bits: +238 bit7 shields on water, +239 bit0 food on water (Harbor), bit1 commerce on water.
 - **PRTO**: +8 name[32], +84 cost (plain shields). **GOVT**: +28 name, +380 corruption level (0 minimal, 1 nuisance,
   2 problematic, 3 rampant, 4 catastrophic, 5 communal), +396 number of governments, +516 required advance, +520 slider rate limit
   (tenths; 10 in every default government, matching the game). **DIFF**: +4 name, +108 optimal cities %. **WSIZ**: +4 optimal city number.
@@ -37,6 +43,13 @@ Sections: name(4) + count + entries each starting with their length. Offsets fro
 ## Formulas
 **Corruption/waste**: the rule in the game's code (`City_compute_corrupted_yield`), exact in 42/42 cities for both;
 see `docs/CORRUPTION.md`, which also lists how it differs from the community formula.
+
+**Tile yields** (the game's rule, 42/42): terrain + irrigation (a city tile counts as irrigated; irrigated desert +1 for
+Agricultural) / mine / road + river +1 commerce + resource (with its tech) + lake +1 food; on a large water body the city's
+water buildings. City tile: food set to 2 (+1 Agricultural); +1 shield and +1 commerce above the town limit (+2 above the
+city limit; Commercial +3/+5 commerce, Industrious +3 shields); at least 1 shield and 1 commerce (capital: 4). Then the
+government: trade bonus +1 commerce on a tile with commerce; tile penalty −1 on a yield above 2 (not food on an Agricultural
+river city tile). Never below 0.
 
 **Commerce replay**: net = raw − corruption (+ per-city calibration); lux = round(net·L/10), gold = round(net·T/10), sci = net − lux − gold;
 each × (1 + Σ bonuses) floored; +50% per Library/University/Research Lab (sci) or Marketplace/Bank/Stock Exchange (gold), +100% research-doubling wonders.

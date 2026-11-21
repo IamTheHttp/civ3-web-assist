@@ -1,8 +1,7 @@
 # Checked but not built
 
-- **Worked tiles without improvements:** feasible. TILE records hold improvements (road, mine, irrigation flags in the
-  second block) and, per OpenCiv3 `Tile.cs`, the city whose citizen works the tile (`CityIDOfCitizen`, in the fourth
-  block). Not yet verified against a save.
+- **Worked tiles without improvements:** feasible. Worked tiles (TILE +104) and their yields are verified (42/42); the
+  improvement flags are at TILE +52.
 - **Culture-flip chance:** needs tile ownership, each civ's culture, units in the city and foreign capitals; the
   community formula itself is unverified.
 - **Unit targets for milestones (workers, military units):** need UNIT records or the LEAD unit counts
