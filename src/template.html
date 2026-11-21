@@ -289,7 +289,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
 
       <h3>Panels</h3>
       <dl>
-        <dt>Summary cards</dt><dd>Your whole empire. Point at a line to see how it's worked out.</dd>
+        <dt>Summary cards</dt><dd>Your whole empire. Point at a line to see how it's worked out. With what-ifs (ticks, Try slider, Try government), changed figures show <i>now → then</i>.</dd>
         <dt>Milestones</dt><dd>Targets to reach by a turn, per game: ✓ met, in progress, or ✗ missed. Edit, add or delete them; the defaults are only starting points. In History, ⚑ marks a deadline and ◆ a target.</dd>
         <dt>History</dt><dd>Each save you open stores its turn. Pick a chart and a city; the dashed line is the turn you have loaded. <b>Add saves…</b> adds older saves at once.</dd>
         <dt>Governments</dt><dd>Your empire's totals under each government, with your slider (or the tried one). Click a row to try it in the table.</dd>
@@ -1747,58 +1747,77 @@ function renderGovernments (res) {
     'Gold, science and luxury include specialists.';
 }
 
-// Empire summary: every city, the game's own figures (what-ifs not included)
+// Empire summary: every city, the game's own figures; with what-ifs, "now → then"
 function renderSummary (res) {
-  const cs = res.cities, sum = (f) => cs.reduce ((n, c) => n + f (c), 0);
-  const citizens = sum ((c) => c.size), per = (x) => citizens ? (x / citizens).toFixed (1) : '–';
-  const commerce = sum ((c) => c.commerce), corruption = sum ((c) => c.corruption);
-  const shields = sum ((c) => c.shields), waste = sum ((c) => c.waste);
-  const spec = (k) => sum ((c) => c.specialistOutput[k]);
-  const gold = sum ((c) => c.gold) + spec ('gold'), science = sum ((c) => c.science) + spec ('science');
-  const luxury = sum ((c) => c.luxury) + spec ('luxury'), upkeep = sum ((c) => c.upkeep);
-  const growing = cs.filter ((c) => c.foodNet > 0 && ! c.growthBlocked), blocked = cs.filter ((c) => c.foodNet > 0 && c.growthBlocked);
-  const filling = cs.filter ((c) => c.atSizeLimit && ! c.growthBlocked && c.foodNet > 0);
-  const usableSurplus = growing.reduce ((n, c) => n + c.foodNet, 0), wasted = blocked.reduce ((n, c) => n + c.foodNet, 0);
-  const deficit = sum ((c) => Math.min (0, c.foodNet));
-  const food = sum ((c) => c.foodTiles), foodUsable = food - wasted;
-  const afterBonus = sum ((c) => c.gold + c.science + c.luxury), netCommerce = commerce - corruption;
-  const slider = (k) => res.rates ? ` <span class="dim">${res.rates[k] * 10}%</span>` : '';
-  const pct = (a, b) => b ? ` (${Math.round (100 * a / b)}%)` : '';
+  const cs = res.cities;
+  // The empire's figures from one value per city: the game's (real) or with your what-ifs
+  const stats = (val) => {
+    const sum = (f) => cs.reduce ((n, c) => n + f (c), 0), v = new Map (cs.map ((c) => [c, val (c)]));
+    const spec = (k) => sum ((c) => c.specialistOutput[k]);
+    const grows = (c) => v.get (c).foodNet > 0 && ! c.growthBlocked, blockedC = (c) => v.get (c).foodNet > 0 && c.growthBlocked;
+    const st = { citizens: sum ((c) => c.size), commerce: sum ((c) => v.get (c).commerce), corruption: sum ((c) => v.get (c).corruption),
+      shields: sum ((c) => v.get (c).shields), waste: sum ((c) => v.get (c).waste), specGold: spec ('gold'), specSci: spec ('science'), specLux: spec ('luxury'),
+      gold: sum ((c) => v.get (c).gold) + spec ('gold'), science: sum ((c) => v.get (c).science) + spec ('science'), luxury: sum ((c) => v.get (c).luxury) + spec ('luxury'),
+      upkeep: sum ((c) => v.get (c).upkeep), afterBonus: sum ((c) => v.get (c).gold + v.get (c).science + v.get (c).luxury),
+      usableSurplus: sum ((c) => grows (c) ? v.get (c).foodNet : 0), wasted: sum ((c) => blockedC (c) ? v.get (c).foodNet : 0),
+      blocked: cs.filter (blockedC).map ((c) => c.name), deficit: sum ((c) => Math.min (0, v.get (c).foodNet)),
+      filling: cs.filter ((c) => c.atSizeLimit && ! c.growthBlocked && v.get (c).foodNet > 0).map ((c) => c.name),
+      food: sum ((c) => c.foodTiles + v.get (c).foodNet - c.foodNet) };
+    st.netCommerce = st.commerce - st.corruption; st.netShields = st.shields - st.waste; st.foodUsable = st.food - st.wasted;
+    return st;
+  };
+  const N = stats ((c) => ({ commerce: c.commerce, corruption: c.corruption, shields: c.shields, waste: c.waste, foodNet: c.foodNet,
+                             gold: c.gold, science: c.science, luxury: c.luxury, upkeep: c.upkeep }));
+  const whatIf = tickCount () > 0 || !! triedRates () || triedGov () !== null;
+  const T = whatIf ? stats ((c) => wi (c)) : N;
   const fmt = (v) => v.toLocaleString ();
+  // "now → then" when a what-if changes it; f formats one value
+  const both = (k, f = fmt) => (N[k] === T[k] ? f (N[k]) : `${f (N[k])} → <span class="changed">${f (T[k])}</span>`);
+  const pctOf = (a, b) => b ? Math.round (100 * a / b) : 0;
+  const pctBoth = (a, b) => { const n = pctOf (N[a], N[b]), t = pctOf (T[a], T[b]); return n === t ? ` (${n}%)` : ` (${n}% → ${t}%)`; };
+  const per = (st, x) => st.citizens ? (st[x] / st.citizens).toFixed (1) : '–';
+  const perBoth = (x) => { const n = per (N, x), t = per (T, x); return n === t ? n : `${n} → <span class="changed">${t}</span>`; };
+  const rates = triedRates () || res.rates;
+  const slider = (k) => rates ? ` <span class="dim">${rates[k] * 10}%</span>` : '';
   const row = (k, v, tip) => { const t = tip ? ` title="${tip}"` : ''; return `<span class="k"${t}>${k}</span><span class="v"${t}>${v}</span>`; };
   const card = (title, tip, body, three) => `<div class="card"><h2 title="${tip}">${title}</h2><div class="kv${three ? ' three' : ''}">${body}</div></div>`;
-  const blockedNames = blocked.map ((c) => c.name).join (', ');
+  const note = whatIf ? `With your what-ifs${triedGov () !== null ? `: ${govName (triedGov ())}` : ''}${triedRates () ? `, slider ${sliderText (triedRates ())}` : ''}${tickCount () ? `, ${tickCount ()} building tick(s)` : ''}. ` : '';
+  // N and T for derived figures
+  for (const st of [N, T]) { st.goldNet = st.gold - st.upkeep; st.total = st.luxury + st.science + st.gold; st.mult = st.netCommerce ? st.afterBonus / st.netCommerce : 0;
+    st.prodUsable = st.foodUsable + st.netShields + st.netCommerce; st.prodAll = st.food + st.shields + st.commerce; st.modProd = st.foodUsable + st.netShields + st.afterBonus; st.surplus = st.usableSurplus + st.wasted; }
+  const sg = (v) => (v > 0 ? '+' : '') + fmt (v);
   $('summary').innerHTML =
-    card ('Economy', 'All cities, as the game reports them. What-ifs are not included.',
-      row ('Commerce', fmt (commerce), 'Raw commerce from tiles, before corruption') +
-      row ('Corruption', fmt (corruption) + pct (corruption, commerce), 'Commerce lost to corruption') +
-      row ('Net commerce', fmt (netCommerce), 'Commerce after corruption: what the slider splits') +
+    (whatIf ? `<p class="histnote">${note}Changed figures show now → then.</p>` : '') +
+    card ('Economy', `All cities. ${note}`,
+      row ('Commerce', both ('commerce'), 'Raw commerce from tiles, before corruption') +
+      row ('Corruption', both ('corruption') + pctBoth ('corruption', 'commerce'), 'Commerce lost to corruption') +
+      row ('Net commerce', both ('netCommerce'), 'Commerce after corruption: what the slider splits') +
       '<hr>' +
-      row ('Luxury' + slider ('luxury'), fmt (luxury), `Luxury after Marketplace etc.${spec ('luxury') ? `, including ${spec ('luxury')} from entertainers` : ''}`) +
-      row ('Science' + slider ('science'), fmt (science), `Science after Library etc.${spec ('science') ? `, including ${spec ('science')} from scientists` : ''}`) +
-      row ('Gold' + slider ('tax'), fmt (gold - upkeep),
-        `${gold} gold after Marketplace etc.${spec ('gold') ? ` (including ${spec ('gold')} from tax collectors)` : ''} − ${upkeep} building upkeep = ${gold - upkeep}. Unit support is not included.`) +
-      row ('Total', `${fmt (luxury + science + gold)} · ×${netCommerce ? (afterBonus / netCommerce).toFixed (2) : '–'}`,
-        `Luxury + science + gold, before upkeep. ×: commerce after Library, Marketplace etc. (${afterBonus}) ÷ net commerce (${netCommerce}): how much each coin of net commerce becomes.` +
-        (spec ('gold') + spec ('science') + spec ('luxury') ? ' Specialists\' output is left out of ×.' : ''))) +
-    card ('Production', 'All cities, as the game reports them.',
-      row ('Shields', fmt (shields), 'Raw shields from tiles, before waste') +
-      row ('Waste', fmt (waste) + pct (waste, shields), 'Shields lost to waste') +
-      row ('Net shields', fmt (shields - waste), 'Shields after waste')) +
-    card ('Food', 'Net food per turn, all cities.',
-      row ('Surplus', '+' + fmt (usableSurplus + wasted), 'Net food of all cities with a surplus') +
-      row ('Surplus that grows cities', '+' + fmt (usableSurplus), 'Surplus in cities that can grow') +
-      row ('Surplus wasted', '+' + fmt (wasted) + (blocked.length ? ` (${blocked.length})` : ''),
-          'Surplus in cities whose food box is full at their size limit (no Aqueduct / Hospital): it is lost.' + (blockedNames ? ` Cities: ${blockedNames}.` : '') +
-          (filling.length ? ` Also at a limit without the building, box still filling${res.tiles ? '' : ' (blocked unless fresh water)'}: ${filling.map ((c) => c.name).join (', ')}.` : '')) +
-      (deficit ? row ('Deficit', fmt (deficit), 'Food missing in starving cities') : '')) +
-    card ('Per citizen', `Averages over ${citizens} citizens (specialists included). Total: from tiles. Usable: after corruption, waste and wasted food.`,
+      row ('Luxury' + slider ('luxury'), both ('luxury'), `Luxury after Marketplace etc.${N.specLux ? `, including ${N.specLux} from entertainers` : ''}`) +
+      row ('Science' + slider ('science'), both ('science'), `Science after Library etc.${N.specSci ? `, including ${N.specSci} from scientists` : ''}`) +
+      row ('Gold' + slider ('tax'), both ('goldNet'),
+        `Gold after Marketplace etc.${N.specGold ? ` (including ${N.specGold} from tax collectors)` : ''} − building upkeep. Now: ${T.gold} − ${T.upkeep} = ${T.goldNet}. Unit support is not included.`) +
+      row ('Total', `${both ('total')} · ×${both ('mult', (v) => v ? v.toFixed (2) : '–')}`,
+        'Luxury + science + gold, before upkeep. ×: commerce after Library, Marketplace etc. ÷ net commerce: how much each coin of net commerce becomes.' +
+        (N.specGold + N.specSci + N.specLux ? ' Specialists\' output is left out of ×.' : ''))) +
+    card ('Production', `All cities. ${note}`,
+      row ('Shields', both ('shields'), 'Raw shields from tiles, before waste') +
+      row ('Waste', both ('waste') + pctBoth ('waste', 'shields'), 'Shields lost to waste') +
+      row ('Net shields', both ('netShields'), 'Shields after waste')) +
+    card ('Food', `Net food per turn, all cities. ${note}`,
+      row ('Surplus', both ('surplus', sg), 'Net food of all cities with a surplus') +
+      row ('Surplus that grows cities', both ('usableSurplus', sg), 'Surplus in cities that can grow') +
+      row ('Surplus wasted', both ('wasted', sg) + (T.blocked.length ? ` (${T.blocked.length})` : ''),
+          'Surplus in cities whose food box is full at their size limit (no Aqueduct / Hospital): it is lost.' + (T.blocked.length ? ` Cities: ${T.blocked.join (', ')}.` : '') +
+          (T.filling.length ? ` Also at a limit without the building, box still filling${res.tiles ? '' : ' (blocked unless fresh water)'}: ${T.filling.join (', ')}.` : '')) +
+      (N.deficit || T.deficit ? row ('Deficit', both ('deficit'), 'Food missing in starving cities') : '')) +
+    card ('Per citizen', `Averages over ${N.citizens} citizens (specialists included). Total: from tiles. Usable: after corruption, waste and wasted food. ${note}`,
       '<span class="h"></span><span class="h">Total</span><span class="h">Usable</span>' +
-      `<span class="k" title="Food from tiles; usable leaves out the wasted surplus">Food</span><span>${per (food)}</span><span>${per (foodUsable)}</span>` +
-      `<span class="k" title="Shields from tiles; usable is after waste">Shields</span><span>${per (shields)}</span><span>${per (shields - waste)}</span>` +
-      `<span class="k" title="Commerce from tiles; usable is after corruption">Commerce</span><span>${per (commerce)}</span><span>${per (commerce - corruption)}</span>` +
-      `<span class="k" title="Food + shields + commerce">Productivity</span><span>${per (food + shields + commerce)}</span><span>${per (foodUsable + shields - waste + commerce - corruption)}</span>` +
-      `<span class="k" title="Usable food + shields after waste + gold, science and luxury after Library, Marketplace etc. Specialists' output not included.">Modified productivity</span><span>–</span><span>${per (foodUsable + shields - waste + afterBonus)}</span>`, true);
+      `<span class="k" title="Food from tiles; usable leaves out the wasted surplus">Food</span><span>${perBoth ('food')}</span><span>${perBoth ('foodUsable')}</span>` +
+      `<span class="k" title="Shields from tiles; usable is after waste">Shields</span><span>${perBoth ('shields')}</span><span>${perBoth ('netShields')}</span>` +
+      `<span class="k" title="Commerce from tiles; usable is after corruption">Commerce</span><span>${perBoth ('commerce')}</span><span>${perBoth ('netCommerce')}</span>` +
+      `<span class="k" title="Food + shields + commerce">Productivity</span><span>${perBoth ('prodAll')}</span><span>${perBoth ('prodUsable')}</span>` +
+      `<span class="k" title="Usable food + shields after waste + gold, science and luxury after Library, Marketplace etc. Specialists' output not included.">Modified productivity</span><span>–</span><span>${perBoth ('modProd')}</span>`, true);
   $('summary').hidden = false;
 }
 
