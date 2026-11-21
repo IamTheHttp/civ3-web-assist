@@ -74,11 +74,14 @@ const Civ3Parse = (() => {
 			// Resources (OpenCiv3 Good.cs): prerequisite tech and the yield they add
 			goods: good ? good.map ((e) => ({ name: readAscii (b, e + 4, 24), prereq: i32 (e + 76), food: i32 (e + 80), shields: i32 (e + 84), commerce: i32 (e + 88) })) : [],
 			techs: tech ? tech.map ((e) => ({ name: readAscii (b, e + 4, 32) })) : [],
-			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84) })) : [],
+			// +208: the unit needs support (C3X UnitType.requires_support)
+			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84), requiresSupport: i32 (e + 208) !== 0 })) : [],
 			// OpenCiv3 Govt.cs: +12 buildings need maintenance, +20 tile penalty (-1 on a yield above 2), +24 trade bonus
 			// (+1 commerce on a tile with commerce)
 			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380), maintenance: i32 (e + 12) !== 0,
-				tilePenalty: i32 (e + 20) !== 0, tradeBonus: i32 (e + 24) !== 0 })),
+				tilePenalty: i32 (e + 20) !== 0, tradeBonus: i32 (e + 24) !== 0,
+				// Unit support: free units (-1: no unit costs), free units per town / city / metropolis, gold per further unit
+				freeUnits: i32 (e + 540), freePerSize: [i32 (e + 544), i32 (e + 548), i32 (e + 552)], unitCost: i32 (e + 556) })),
 			difficulties: diff.map ((e) => ({ name: readAscii (b, e + 4, 64), costFactor: i32 (e + 104), optimalPercent: i32 (e + 108), corruptionPercent: i32 (e + 116) })),
 			worldSizes: wsiz.map ((e) => ({ optimalCities: i32 (e + 4) })),
 			civs: [], maxTown: 6, maxCity: 12
@@ -636,6 +639,37 @@ const Civ3Parse = (() => {
 			result.difficultyName = diffRow ? diffRow.name : null;
 			diag.push (`Other civilizations: ${result.civs.length} with cities, ${cities} cities; commerce, shields and food add up in ${checked}/${cities}` +
 			           (diffRow ? `; AI cost factor ${diffRow.costFactor} (${diffRow.name}), yours 10` : ''));
+		}
+
+		// Your units (UNIT records, 472 bytes; OpenCiv3 Unit.cs: +28 owner, +32 nationality = civilization, +40 type) and their
+		// gold support, transcribed from the game (GOG Leader_sum_unit_maintenance 0x55D310, get_unit_support_info 0x53A960):
+		// units of another nationality and unit types that don't need support are free; the government gives free units per
+		// town, city and metropolis; each further unit costs its gold per unit. Checked: the count matches LEAD +376.
+		result.units = null; result.unitSupport = null;
+		if (rules && rules.units.length) {
+			const byType = {};
+			let total = 0, free = 0;
+			for (const o of findAll (b, 'UNIT', gameOff)) {
+				if (i32 (o + 4) !== 472 || i32 (o + 28) !== player) continue;
+				const t = rules.units[i32 (o + 40)];
+				total++;
+				byType[t ? t.name : '?'] = (byType[t ? t.name : '?'] || 0) + 1;
+				if (i32 (o + 32) !== playerRace || ! (t && t.requiresSupport)) free++;
+			}
+			const myLead = findAll (b, 'LEAD', gameOff).find ((o) => i32 (o + 4) > 4300 && i32 (o + 8) === player);
+			const leadCount = myLead ? i32 (myLead + 376) : null;
+			result.units = { total, free, byType, leadCount };
+			const classes = [0, 0, 0];
+			for (const c of result.cities) classes[c.size > maxCity ? 2 : (c.size > maxTown ? 1 : 0)]++;
+			result.unitSupport = (g) => {
+				const gv = rules.governments[g];
+				if (! gv || gv.freeUnits === undefined || gv.freeUnits < 0 || ! result.cities.length) return 0;
+				const allowed = gv.freeUnits + classes[0] * gv.freePerSize[0] + classes[1] * gv.freePerSize[1] + classes[2] * gv.freePerSize[2];
+				return Math.max (0, total - allowed - free) * gv.unitCost;
+			};
+			const list = Object.entries (byType).sort ((x, y) => y[1] - x[1]).map (([n, k]) => `${n} ${k}`).join (', ');
+			diag.push (`Your units: ${total}${leadCount !== null ? ` (the game counts ${leadCount})` : ''}, ${free} free of support (other nationality or no support needed): ${list}. ` +
+			           (rules.governments[government] ? `Unit support under ${rules.governments[government].name}: ${result.unitSupport (government)} gold` : ''));
 		}
 
 		const okFood = result.cities.filter ((c) => c.foodTiles - c.foodEaten === c.foodNet).length;

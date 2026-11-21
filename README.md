@@ -8,7 +8,7 @@ and shows all your cities in sortable, customizable views:
 - A "Try slider" what-if: judge Library, Marketplace and the other buildings at another science/gold/luxury split.
 - History of your empire per turn, with an optional comparison line: AI average, the strongest AI, or one civilization
   (adjusted for difficulty).
-- A "Try government" what-if and a Governments panel: your empire's tiles, corruption, waste and upkeep under each government.
+- A "Try government" what-if and a Governments panel: your empire's tiles, corruption, waste, upkeep, unit support and net gold under each government.
 - Growth, happiness, production, and saved custom views.
 
 Everything runs in your browser. The page uploads nothing.

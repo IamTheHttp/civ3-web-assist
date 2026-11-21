@@ -5,7 +5,7 @@ Everything here was verified against the player's files unless marked *(inferred
 ## Save file (SAV, after decompression; starts "CIV3")
 - Embedded scenario (BIQ) at byte 562, length at byte 38. With default rules it holds only VER# + GAME (8 KB) → names/rules come from `conquests.biq`.
 - **GAME** = first "GAME" after the embedded BIQ: +24 difficulty id, +36 number of cities, +64 turn, +80 human-players bitmap (player = lowest set bit ≥1), +17 flags byte (bit1 accelerated production, bit7 cultural conversions).
-- **LEAD** (per player; find the one with +8 == player): +12 civilization (RACE index), +24 capital city id, +140 government, +400/+404/+408 luxury/science/tax rate (tenths).
+- **LEAD** (per player; find the one with +8 == player): +12 civilization (RACE index), +24 capital city id, +40 Golden Age end turn (C3X), +140 government, +376 unit count, +380 military units, +400/+404/+408 luxury/science/tax rate (tenths).
 - **WRLD** (first block, length field 2): +22 height, +42 width, +174 world seed, +178 flags (bit0 wrap X, bit1 wrap Y), +238 world size id.
 - **CITY** record = "CITY" header with length **136** (other CITY headers aren't cities). Offsets from the header:
   +8 id, +12/+14 x/y (int16), +16 owner (byte), +20 building upkeep, +24 flags byte (bit0 disorder, bit1 celebrating),
@@ -18,6 +18,7 @@ Everything here was verified against the player's files unless marked *(inferred
 - **TILE** (212 bytes, first header length 36, row by row, W/2 per row): +8 river edges, +12 resource (GOOD index), +30 city id,
   +34 continent/water body, +52 flags (bit0 road, 1 railroad, 2 mine, 3 irrigation, 6 pollution), +57 terrain (high nibble:
   the terrain used for yields), +62 bit0 grassland bonus shield, +104 id of the city working the tile.
+- **UNIT** (length 472; OpenCiv3 Unit.cs): +28 owner (player), +32 nationality (civilization), +40 type (PRTO index).
 - Then **BINF** (+8 count = number of building types, 12-byte history entries: year, builder civ, culture) and **BITM** (+8: 256-bit bitmap of buildings the city has **now**).
 - Self-checks that pass on real data: gold+lux+sci == +512 (42/42); raw shields − waste == +508 (42/42).
 
@@ -31,7 +32,7 @@ Sections: name(4) + count + entries each starting with their length. Offsets fro
 - **TERR** (after a bitmap of possible resources, one bit each rounded up to bytes): +0 name, +64 irrigation, +68 mining,
   +72 road bonus, +84 food, +88 shields, +92 commerce. **GOOD**: +4 name, +76 prerequisite tech, +80 food, +84 shields,
   +88 commerce. BLDG flag bits: +238 bit7 shields on water, +239 bit0 food on water (Harbor), bit1 commerce on water.
-- **PRTO**: +8 name[32], +84 cost (plain shields). **GOVT**: +28 name, +380 corruption level (0 minimal, 1 nuisance,
+- **PRTO**: +8 name[32], +84 cost (plain shields), +208 needs support (C3X `UnitType.requires_support`). **GOVT**: +28 name, +380 corruption level (0 minimal, 1 nuisance,
   2 problematic, 3 rampant, 4 catastrophic, 5 communal), +396 number of governments, +516 required advance, +520 slider rate limit
   (tenths; 10 in every default government, matching the game). **DIFF**: +4 name, +108 optimal cities %. **WSIZ**: +4 optimal city number.
 - **RULE**: +288 max town size, +292 max city size (OpenCiv3's 248/252 are 40 bytes off).
@@ -50,6 +51,9 @@ water buildings. City tile: food set to 2 (+1 Agricultural); +1 shield and +1 co
 city limit; Commercial +3/+5 commerce, Industrious +3 shields); at least 1 shield and 1 commerce (capital: 4). Then the
 government: trade bonus +1 commerce on a tile with commerce; tile penalty −1 on a yield above 2 (not food on an Agricultural
 river city tile). Never below 0.
+
+**Unit support** (gold, the game's rule): max(0, units − free − units of another nationality − units of a type without
+support) × GOVT +556; free = GOVT +540 + Σ cities (+544 town, +548 city, +552 metropolis); GOVT +540 = −1: none (Anarchy).
 
 **Commerce replay**: net = raw − corruption (+ per-city calibration); lux = round(net·L/10), gold = round(net·T/10), sci = net − lux − gold;
 each × (1 + Σ bonuses) floored; +50% per Library/University/Research Lab (sci) or Marketplace/Bank/Stock Exchange (gold), +100% research-doubling wonders.

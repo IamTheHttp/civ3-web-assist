@@ -34,6 +34,12 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   GOVT +24 trade bonus (+1 commerce on a tile with commerce: Republic, Democracy), +20 tile penalty (−1 on a yield above 2:
   Despotism, Anarchy), +12 building maintenance (none under Anarchy). Anarchy wastes every coin and shield (exe 0x4B1239;
   the player confirmed). Railroad, farmland, Golden Age and Colossus-type wonders aren't transcribed (not on the save).
+- Units: UNIT records (length 472; +28 owner, +32 nationality = civ, +40 type) match LEAD +376 unit count for every player
+  (Maya 141; LEAD +380 military 77). Gold support (`Leader_sum_unit_maintenance` 0x55D310, `get_unit_support_info` 0x53A960):
+  (units − free − units of another nationality or a type without PRTO +208 support) × GOVT +556 gold; free = GOVT +540
+  + per town / city / metropolis +544/+548/+552 (+540 = −1: no unit costs). The game's income (0x55DD50) adds it to building
+  upkeep. Maya, Republic: 141 units − 49 of another nationality = 92 counted, 84 allowed, 8 × 2 = 16 gold; the in-game
+  Military Advisor shows 92 units and 84 allowed.
 - Specialist output is stored separately (fields 528/532/536) and is NOT in the city's gold/sci/lux.
 - Difficulty optimal-cities % (DIFF +108): Chieftain 100, Warlord 95, Regent 90, Monarch 85, Emperor 80, Demigod 70,
   Deity 60, Sid 50. Difficulty corruption % (DIFF +116): 100 at every level in the default rules.

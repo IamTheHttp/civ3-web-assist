@@ -6,4 +6,7 @@
   commerce but 371 net shields (Republic 452 / 269). Despotism's tile penalty cuts net food from +103 to +28.
 - Anarchy wastes every coin and shield: from the exe, and the player confirmed it in-game.
 - Communism (communal) corruption is from the exe, not checked against a save.
-- Not modelled: unit support, war weariness, happiness and martial law, hurrying.
+- Net gold = gold − building upkeep − unit support. Unit support uses today's units and city sizes. Verified: the
+  Military Advisor shows 92 units (141 − 49 of another nationality) and 84 allowed, as the viewer computes. Maya: Republic +27
+  (16 gold for units), Democracy −40 (no free units: 92 gold), Communism +10 (0 for units).
+- Not modelled: war weariness, happiness and martial law, hurrying.
