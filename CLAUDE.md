@@ -106,5 +106,9 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
 - The model assumes every city is connected to the capital by trade (not read from the save; otherwise distance × 5/4;
   mismatches show "~").
 
+- Attitude doesn't count resource deals (−5, helper 0x55E8E0: a table behind leader +5652, 96 bytes per entry, 3 per
+  player). Its save layout is unknown: it isn't in the data after each LEAD in the memory layout. To locate it: two saves of
+  one turn, before and after a single resource trade with one AI.
+
 ## Ideas (not started)
 - **Unit targets for milestones.** The viewer reads UNIT records (checked against LEAD +376/+380); milestones could use them.
