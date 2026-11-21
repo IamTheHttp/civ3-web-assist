@@ -342,7 +342,7 @@ const Civ3Parse = (() => {
 		result.playerRace = playerRace;
 
 		// Commerce replay, verified on a real save (your slider + 4 sample cities, then all cities): commerce left after
-		// corruption is split by the slider (luxury and gold rounded to the nearest coin, science gets the rest), then each
+		// corruption is split by the slider (luxury and science rounded to the nearest coin, gold gets the rest), then each
 		// share is multiplied by its buildings' bonuses added together (+50% each, +100% for research-doubling wonders),
 		// rounded down. Specialists' output is kept separately and isn't part of these figures.
 		result.econ = null;
@@ -359,7 +359,12 @@ const Civ3Parse = (() => {
 			};
 			// rates: a slider in tenths ({ luxury, science, tax }); the save's slider when not given
 			const replay = (net, set, rates = R) => {
-				const lux = Math.floor (net * rates.luxury / 10 + 0.5), gold = Math.floor (net * rates.tax / 10 + 0.5), sci = net - lux - gold;
+				// The game's split (GOG City_recompute_commerce 0x4B07C0): luxury and science rounded (halves up), luxury cut if
+				// the two exceed the net, gold gets the rest
+				const sci = tdiv (net * rates.science + 5, 10);
+				let lux = tdiv (net * rates.luxury + 5, 10);
+				if (lux + sci > net) lux = net - sci;
+				const gold = net - lux - sci;
 				const m = bonus (set);
 				return { gold: Math.floor (gold * m.gold + 1e-9), science: Math.floor (sci * m.sci + 1e-9), luxury: Math.floor (lux * m.lux + 1e-9) };
 			};

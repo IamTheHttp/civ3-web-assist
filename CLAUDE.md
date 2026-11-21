@@ -23,9 +23,11 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   (`Leader_get_food_cost_factor` 0x5660E0, `Leader_get_unit_cost` 0x56A210, building cost 0x569FE0, tech cost 0x569C10:
   unnamed in C3X, reads TECH +68 cost). History's AI comparison shows AI food, shields and science × 10 / factor.
 - Other civs' cities: every CITY record passes the same self-checks as the player's (68/68 in the Maya save).
-- Corruption is applied to **raw** commerce; then the slider split (lux and gold rounded to nearest, science gets the rest);
-  then building bonuses **add** (+50% each, +100% for research-doubling wonders), floored. Reproduces gold/sci/lux exactly
-  in 40/42 cities; the other 2 are calibrated per city (the capital has +10 commerce not in its record; Memphis +1 gold from Wealth).
+- Corruption is applied to **raw** commerce; then the slider split (`City_recompute_commerce` 0x4B07C0: luxury and science
+  rounded, halves up; luxury cut if the two exceed the net; gold gets the rest); then building bonuses **add** (+50% each,
+  +100% for research-doubling wonders), floored. Reproduces gold/sci/lux exactly in 40/42 cities; the other 2 are
+  calibrated per city (the capital has +10 commerce not in its record; Memphis +1 gold from Wealth). Checked in-game at
+  40% sci / 40% gold / 20% lux in 3 cities (Cobá: gold 13, sci 12, lux 4 with a Marketplace: no luxury bonus).
 - Slider rate limit: GOVT +520 (OpenCiv3 `ScienceRateCap`, tenths) is 10 for every government in the default rules; the player
   confirmed 100% gold is possible under every government. The Effect columns use the save's slider, or the "Try slider" one.
 - Tile yields: the game's rule (`Map_calc_food/shield/commerce_yield_at` 0x5D7180 / 0x5D75F0 / 0x5D7AD0) reproduces every
@@ -84,7 +86,6 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
 - Wants concise UI text, strong contrast colours, no side-scrolling, customizable views.
 
 ## Open items
-- Luxury multipliers are unverified (the player's lux slider is 0%).
 - Communism/Anarchy corruption is unverified.
 - The model assumes every city is connected to the capital by trade (not read from the save; otherwise distance × 5/4;
   mismatches show "~").

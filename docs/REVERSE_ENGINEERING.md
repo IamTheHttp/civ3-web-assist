@@ -55,7 +55,7 @@ river city tile). Never below 0.
 **Unit support** (gold, the game's rule): max(0, units − free − units of another nationality − units of a type without
 support) × GOVT +556; free = GOVT +540 + Σ cities (+544 town, +548 city, +552 metropolis); GOVT +540 = −1: none (Anarchy).
 
-**Commerce replay**: net = raw − corruption (+ per-city calibration); lux = round(net·L/10), gold = round(net·T/10), sci = net − lux − gold;
+**Commerce replay** (`City_recompute_commerce` 0x4B07C0): net = raw − corruption (+ per-city calibration); lux = round(net·L/10), sci = round(net·S/10) (halves up), lux = net − sci if lux + sci > net, gold = net − lux − sci;
 each × (1 + Σ bonuses) floored; +50% per Library/University/Research Lab (sci) or Marketplace/Bank/Stock Exchange (gold), +100% research-doubling wonders.
 
 **Culture flip** *(community, Apolyton 2002, not verified in-game)*: P = [(N+S)·C·H·R − T]/D per foreign civ;
