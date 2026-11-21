@@ -68,6 +68,9 @@ const Civ3Parse = (() => {
 				// +1 food / shield / commerce on water tiles of a large water body (Harbor, Offshore Platform, Commercial Dock)
 				// Tourist attraction (+248 bit 17): commerce once the building is over 1000 years old
 				touristAttraction: ((b[e + 250] >> 1) & 1) !== 0,
+				// Production (+208, quarters: Factory 2 = +50%), power plant (+237 bit 5: counts only with its required
+				// building, and only the best one), made obsolete by (+224, a tech)
+				production: i32 (e + 208), powerPlant: ((b[e + 237] >> 5) & 1) !== 0, obsoleteBy: i32 (e + 224),
 				foodWater: (b[e + 239] & 1) !== 0, shieldsWater: ((b[e + 238] >> 7) & 1) !== 0, commerceWater: ((b[e + 239] >> 1) & 1) !== 0 })),
 			// TERR: name after a bitmap of possible resources (one bit each, rounded up to bytes)
 			terrains: terr ? terr.map ((e) => readAscii (b, e + 8 + Math.ceil (i32 (e + 4) / 8), 32)) : [],
@@ -261,6 +264,22 @@ const Civ3Parse = (() => {
 		diag.push (world ? `Map ${world.width} x ${world.height}${world.wrapX ? ', wraps east-west' : ''}${world.wrapY ? ', wraps north-south' : ''}, world size #${world.sizeId}` : 'World map size not found');
 		diag.push (playerRace >= 0 ? `Your civilization is number ${playerRace}` : 'Your civilization was not found in the LEAD records; guessing it from your citizens');
 
+		// Shield multiplier in quarters (GOG City_recompute_production 0x4B05D0): 4 + the Production of every building in the
+		// city + the best power plant whose required building (Factory) is there; a building made obsolete by a known tech
+		// counts nothing. Shields = (raw - waste) x multiplier / 4, rounded down.
+		result.shieldMult = (set) => {
+			let base = 4, best = 0;
+			if (! rules || ! set) return base;
+			for (const k of set) {
+				const bd = rules.buildings[k];
+				if (! bd || ! bd.production) continue;
+				if (bd.obsoleteBy >= 0 && result.knownTechs && result.knownTechs.has (bd.obsoleteBy)) continue;
+				if (bd.powerPlant) { if (bd.requires < 0 || set.has (bd.requires)) best = Math.max (best, bd.production); }
+				else base += bd.production;
+			}
+			return base + best;
+		};
+
 		// Cities: a "CITY" header with length 136 starts a real city record (other CITY headers are something else)
 		const CITY_FIXED = 556, CTZN_SIZE = 308;
 		let found = 0, rejected = 0;
@@ -353,7 +372,8 @@ const Civ3Parse = (() => {
 			if (city.buildType === 1) { city.buildName = buildingName (city.buildId); city.buildCost = buildingCost (city.buildId); }
 			else if (city.buildType === 2) { city.buildName = unitName (city.buildId); city.buildCost = unitCost (city.buildId); }
 			else { city.buildName = city.buildType === 0 ? 'Wealth' : '?'; city.buildCost = null; }
-			const netShields = city.shields - city.waste;
+			city.production = Math.floor (Math.max (0, city.shields - city.waste) * result.shieldMult (city.buildings) / 4);
+			const netShields = city.production;
 			if (city.buildCost && netShields > 0) {
 				const cost = accelerated ? Math.ceil (city.buildCost / 2) : city.buildCost;
 				city.buildTurns = Math.max (1, Math.ceil ((cost - city.shieldsStored) / netShields));

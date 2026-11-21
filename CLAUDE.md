@@ -52,6 +52,10 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   adds commerce before corruption: <1500 → 2, <1750 → 4, <1875 → 6, <2000 → 8, <2250 → 10, <2500 → 12, else 14. Age =
   current year − its BINF year. Year from the GAME calendar (start −4000; periods 25/25/40/50/100/100/100 turns at
   50/40/25/20/10/5/2 years): turn 194 = 790 AD. Chichén Itza: +10 (Mausoleum 6 + Zeus 4), the commerce the save omits.
+- Production (`City_recompute_production` 0x4B05D0): shields = (raw − waste) × (4 + Σ BLDG +208 + best power plant) / 4,
+  floored. Power plants (BLDG +237 bit5) count only with their required building (Factory), only the best one; a building
+  obsolete by a known tech (+224) counts nothing. Default rules: Factory 2, Manufacturing Plant 2, Coal/Hydro/Solar 2,
+  Nuclear 4, Iron Works 4 (CivFanatics agrees: +50% each, Nuclear +100%). No city in the Maya save has one (not checked).
 - Specialist output is stored separately (fields 528/532/536) and is NOT in the city's gold/sci/lux.
 - Difficulty optimal-cities % (DIFF +108): Chieftain 100, Warlord 95, Regent 90, Monarch 85, Emperor 80, Demigod 70,
   Deity 60, Sid 50. Difficulty corruption % (DIFF +116): 100 at every level in the default rules.

@@ -12,5 +12,6 @@
 - **Building value apart from the slider:** a Library or Marketplace multiplies only its share of the slider, so the Effect
   columns can use a tried slider ("Try slider", default 50% science / 50% gold) instead of the save's. It is a what-if.
 - **What-ifs reach the Summary:** ticks, Try slider and Try government show now → then in the Summary cards too.
+- **All what-if tick columns side by side**, then all Effect columns.
 - **Signals over raw numbers:** payback turns for buildings; green / amber / grey.
 - Likes sane defaults that are editable (tiers, milestones, payback limits).

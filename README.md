@@ -4,7 +4,8 @@ An offline web page for **Civilization III: Complete**. It reads a save (`.SAV`)
 and shows all your cities in sortable, customizable views:
 
 - Corruption and waste per city, with Courthouse and Police Station what-ifs.
-- Library, Marketplace, University, Bank and other building what-ifs, with their effect on gold, science and upkeep.
+- Library, Marketplace, University, Bank, Factory, power plant and Manufacturing Plant what-ifs, with their effect on gold,
+  science, shields and upkeep.
 - A "Try slider" what-if: judge Library, Marketplace and the other buildings at another science/gold/luxury split.
 - History of your empire per turn, with an optional comparison line: AI average, the strongest AI, or one civilization
   (adjusted for difficulty).

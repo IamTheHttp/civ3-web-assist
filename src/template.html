@@ -279,7 +279,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <dl>
         <dt>Sort</dt><dd>Click a column name. Click again to reverse.</dd>
         <dt>▾ Filter</dt><dd>On each column, as in a spreadsheet: sort, a condition (greater than, between, contains…) or tick the values to keep. A blue ▾ marks a filtered column. Filters and sorting use the real numbers, so a what-if tick never hides or moves a city; each view keeps its own filters.</dd>
-        <dt>What-if ticks</dt><dd>Tick <b>CH</b>, <b>PS</b>, <b>Lib</b>, <b>Mkt</b>… to try a building. Changed numbers show <i>now → then</i>; an amber outline marks a tick that isn't real.</dd>
+        <dt>What-if ticks</dt><dd>Tick <b>CH</b>, <b>PS</b>, <b>Lib</b>, <b>Mkt</b>, <b>Fac</b>, <b>Power</b>, <b>Mfg</b>… to try a building (Power: Coal Plant; a city counts only its best power plant). Changed numbers show <i>now → then</i>; an amber outline marks a tick that isn't real.</dd>
         <dt>Effect columns</dt><dd>What one building would gain the city per turn, after upkeep, and how many turns until it pays back its cost: <span class="green">green</span> fast, <span class="amber">amber</span> slow, grey never. They sort fastest payback first. Set the limits in Tiers.</dd>
         <dt>Tier</dt><dd>Pick a tier to fix it for that city; <i>(auto)</i> follows corruption.</dd>
         <dt>Attention</dt><dd><span class="amber">Amber</span>: missing. <span class="green">Green</span>: being built now.</dd>
@@ -485,10 +485,9 @@ const BASE_COLUMNS = [
   { key: 'waste', sec: 'shields', label: 'Waste', title: 'Shields lost to waste', val: (c) => wi (c).waste, show: (c) => arrow (c.waste, wi (c).waste), cls: (c) => wiCls (c, 'waste') || (c.waste ? 'amber' : 'dim'), total: true },
   { key: 'wastePct', sec: 'shields', label: 'Waste %', val: (c) => wi (c).wastePct, show: (c) => arrow (c.wastePct, wi (c).wastePct, '%'), cls: (c) => wiCls (c, 'wastePct') || pctClass (c.wastePct),
     title: 'Share of the city\'s shields lost to waste', ratio: ['waste', 'shieldsGross'] },
-  { key: 'netShields', sec: 'shields', label: 'Net Shields', val: (c) => wi (c).shields - wi (c).waste, show: (c) => arrow (c.shields - c.waste, wi (c).shields - wi (c).waste),
-    cls: (c) => { const v = wi (c).shields - wi (c).waste, n = c.shields - c.waste; return v === n ? '' : (v > n ? 'better changed' : 'worse changed'); }, total: true, title: 'Shields after waste' },
-  { key: 'ch', sec: 'corr', label: 'CH', chk: 'ch', model: true, title: 'Courthouse (tick to try it)' },
-  { key: 'ps', sec: 'corr', label: 'PS', chk: 'ps', model: true, title: 'Police Station (tick to try it)' },
+  { key: 'netShields', sec: 'shields', label: 'Net Shields', val: (c) => wi (c).production, show: (c) => arrow (c.production, wi (c).production),
+    cls: (c) => { const v = wi (c).production, n = c.production; return v === n ? '' : (v > n ? 'better changed' : 'worse changed'); }, total: true,
+    title: 'Shields after waste, with Factory (+50%), power plant (+50%, Nuclear +100%) and Manufacturing Plant (+50%) bonuses' },
   { key: 'commerce', sec: 'commerce', label: 'Commerce', val: (c) => wi (c).commerce, show: (c) => arrow (c.commerce, wi (c).commerce), cls: (c) => wiCls (c, 'commerce', true), tip: (c) => c.touristCommerce ? `${c.tileCommerce} from tiles + ${c.touristCommerce} from tourist attractions (wonders over 1000 years old)` : '',
     total: true, title: 'Raw commerce: from tiles, plus tourist attractions (wonders over 1000 years old), before corruption' },
   { key: 'corruption', sec: 'commerce', label: 'Corrupt', title: 'Commerce lost to corruption. ~: the game\'s corruption rule doesn\'t match here (the city may not be connected to the capital)', val: (c) => wi (c).corruption, show: (c) => (c.modelOff ? '~' : '') + arrow (c.corruption, wi (c).corruption), cls: (c) => wiCls (c, 'corruption') || (c.corruption ? 'amber' : 'dim'), total: true },
@@ -496,10 +495,6 @@ const BASE_COLUMNS = [
     title: 'Share of the city\'s commerce lost to corruption. Over the cap, brackets show the uncapped parts: distance to the palace + city rank', ratio: ['corruption', 'commerce'] },
   { key: 'netCommerce', sec: 'commerce', label: 'Net Commerce', val: (c) => wi (c).commerce - wi (c).corruption, show: (c) => arrow (c.commerce - c.corruption, wi (c).commerce - wi (c).corruption),
     cls: (c) => { const v = wi (c).commerce - wi (c).corruption, n = c.commerce - c.corruption; return v === n ? '' : (v > n ? 'better changed' : 'worse changed'); }, total: true, title: 'Commerce after corruption' },
-  effectColumn ('ch', { key: 'chEffect', sec: 'corr', label: 'CH Effect', model: true,
-    title: 'What a Courthouse would gain this city per turn (science, gold and luxury from the commerce kept, after its Library, Marketplace etc.; shields kept; upkeep), and the turns until it pays back its cost. Uses your slider, or the one in Try slider. Sorts fastest payback first' }),
-  effectColumn ('ps', { key: 'psEffect', sec: 'corr', label: 'PS Effect', model: true,
-    title: 'What a Police Station would gain this city per turn, and the turns until it pays back its cost. Sorts fastest payback first' }),
   { key: 'gold', sec: 'output', label: 'Gold', title: 'Gold after Marketplace etc.', val: (c) => wi (c).gold, show: (c) => arrow (c.gold, wi (c).gold), cls: (c) => wiCls (c, 'gold', true), total: true },
   { key: 'luxury', sec: 'output', label: 'Lux', title: 'Luxury after Marketplace etc.', val: (c) => wi (c).luxury, show: (c) => arrow (c.luxury, wi (c).luxury), cls: (c) => wiCls (c, 'luxury', true), total: true },
   { key: 'science', sec: 'output', label: 'Sci', title: 'Science after Library etc.', val: (c) => wi (c).science, show: (c) => arrow (c.science, wi (c).science), cls: (c) => wiCls (c, 'science', true), total: true },
@@ -510,6 +505,17 @@ const BASE_COLUMNS = [
   { key: 'build', sec: 'build', label: 'Production', title: 'What the city builds, and turns to finish', l: true, val: (c) => c.buildName, show: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : ''),
     csv: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : '') },
 ];
+// Courthouse and Police Station: tick and Effect columns; placed with the other building columns in rebuildColumns
+const CHPS_TICKS = [
+  { key: 'ch', sec: 'bonus', label: 'CH', chk: 'ch', model: true, title: 'Courthouse (tick to try it)' },
+  { key: 'ps', sec: 'bonus', label: 'PS', chk: 'ps', model: true, title: 'Police Station (tick to try it)' },
+];
+const CHPS_EFFECTS = [
+  effectColumn ('ch', { key: 'chEffect', sec: 'bonusfx', label: 'CH Effect', model: true,
+    title: 'What a Courthouse would gain this city per turn (science, gold and luxury from the commerce kept, after its Library, Marketplace etc.; shields kept; upkeep), and the turns until it pays back its cost. Uses your slider, or the one in Try slider. Sorts fastest payback first' }),
+  effectColumn ('ps', { key: 'psEffect', sec: 'bonusfx', label: 'PS Effect', model: true,
+    title: 'What a Police Station would gain this city per turn, and the turns until it pays back its cost. Sorts fastest payback first' }),
+];
 let state = { result: null, sortKey: 'size', sortDir: -1, fileName: '', loadedAt: null, rules: null, toggles: {} };
 
 // ---------- views: named sets of columns, saved in this browser ----------
@@ -519,6 +525,8 @@ const DEFAULT_VIEWS = [
   { name: 'Corruption management', columns: ['name', 'size', 'shields', 'waste', 'wastePct', 'netShields', 'commerce', 'corruption', 'corruptionPct', 'netCommerce', 'ch', 'ps', 'chEffect', 'psEffect', 'upkeep', 'build'] },
   { name: 'Science & gold buildings', columns: ['name', 'size', 'commerce', 'corruptionPct', 'gold', 'science', 'bt:Library', 'bt:University', 'bt:Research Lab', 'bt:Marketplace', 'bt:Bank', 'bt:Stock Exchange',
     'be:Library', 'be:University', 'be:Research Lab', 'be:Marketplace', 'be:Bank', 'be:Stock Exchange', 'upkeep'] },
+  { name: 'Production buildings', columns: ['name', 'size', 'shields', 'waste', 'wastePct', 'netShields', 'bt:Factory', 'bt:Coal Plant', 'bt:Manufacturing Plant',
+    'be:Factory', 'be:Coal Plant', 'be:Manufacturing Plant', 'upkeep', 'build'] },
   { name: 'Attention', columns: ['name', 'size', 'tier', 'attention', 'corruptionPct', 'foodNet', 'grow', 'build'] },
   { name: 'All columns', columns: null },
 ];
@@ -640,7 +648,7 @@ function evaluate (c, ticks, rates, gov = null) {
   const res = state.result, m = res.model, econ = res.econ, rules = res.rules;
   const now = { corruption: c.corruption, waste: c.waste, corruptionPct: c.corruptionPct, wastePct: c.wastePct,
                 gold: c.gold, science: c.science, luxury: c.luxury, upkeep: c.upkeep, value: 0, changed: false,
-                ni: c.reducers ? c.reducers.length : 0, commerce: c.commerce, shields: c.shields, foodNet: c.foodNet, grow: c.grow };
+                ni: c.reducers ? c.reducers.length : 0, commerce: c.commerce, shields: c.shields, foodNet: c.foodNet, grow: c.grow, production: c.production };
   if (! rules || ! c.buildings) return now;
   const want = (key) => (ticks && key in ticks) ? ticks[key] : ticked (c, key);
   const set = new Set (c.buildings);
@@ -687,7 +695,9 @@ function evaluate (c, ticks, rates, gov = null) {
     // Anarchy: the game loses every coin, calibrated ones too
     if (gov !== null && rules.governments[gov].corruption === 4) out.gold = out.science = out.luxury = 0;
   }
-  out.value = (out.gold - c.gold) + (out.science - c.science) + (out.luxury - c.luxury) + (c.waste - out.waste) - (out.upkeep - c.upkeep);
+  // Shields after waste, with Factory and power plant bonuses (the game's multiplier, in quarters)
+  out.production = Math.floor (Math.max (0, out.shields - out.waste) * res.shieldMult (set) / 4);
+  out.value = (out.gold - c.gold) + (out.science - c.science) + (out.luxury - c.luxury) + (out.production - c.production) - (out.upkeep - c.upkeep);
   return out;
 }
 // The city's values with your what-if ticks and tried slider; while filtering and sorting, its real values (filters
@@ -714,7 +724,7 @@ function effectOf (c, key) {
   for (const k of tickKeysFor (c)) real[k] = hasNow (c, k);
   const base = evaluate (c, real, rates, gov), e = evaluate (c, { ...real, [key]: true }, rates, gov);
   const parts = [], sign = (v) => (v > 0 ? '+' : '') + v;
-  const dg = e.gold - base.gold, ds = e.science - base.science, dl = e.luxury - base.luxury, dsh = base.waste - e.waste, du = e.upkeep - base.upkeep;
+  const dg = e.gold - base.gold, ds = e.science - base.science, dl = e.luxury - base.luxury, dsh = e.production - base.production, du = e.upkeep - base.upkeep;
   const gain = e.value - base.value;
   const at = (res.rates ? ` At ${rates ? 'the tried slider' : 'your slider'}: ${sliderText (rates || res.rates)}.` : '') + (gov !== null ? ` Under ${govName (gov)} (tried).` : '');
   if (key === 'ch' || key === 'ps') {
@@ -729,6 +739,7 @@ function effectOf (c, key) {
     if (bd.science50 || bd.doublesScience || ds) parts.push (`${sign (ds)} sci`);
     if (bd.gold50 || dg) parts.push (`${sign (dg)} gold`);
     if (bd.luxury50 || dl) parts.push (`${sign (dl)} lux`);
+    if (bd.production || dsh) parts.push (`${sign (dsh)} shd`);
   }
   if (du) parts.push (`−${du} upk`);
   // Payback: build cost ÷ net gain per turn (gain = science, gold, luxury and shields kept, minus upkeep; counted 1:1)
@@ -755,24 +766,31 @@ function effectColumn (key, extra) {
 }
 
 // Commerce buildings from the rules that can be ticked: non-wonders that boost science, gold or luxury
+// Buildings that can be ticked: non-wonders that boost science, gold or luxury, then the production buildings (Factory,
+// Manufacturing Plant) and one power plant (the cheapest: Coal Plant; the others give the same +50%, Nuclear +100%, and a
+// city counts only its best one)
 function bonusBuildings () {
   const rules = state.result && state.result.rules;
   if (! rules) return [];
-  const short = { 'Library': 'Lib', 'University': 'Univ', 'Research Lab': 'Lab', 'Marketplace': 'Mkt', 'Bank': 'Bank', 'Stock Exchange': 'SE' };
-  return rules.buildings.map ((b, id) => ({ ...b, id })).filter ((b) => ! b.wonder && (b.science50 || b.gold50 || b.luxury50))
-    .map ((b) => ({ id: b.id, name: b.name, short: short[b.name] || b.name.slice (0, 5) }));
+  const short = { 'Library': 'Lib', 'University': 'Univ', 'Research Lab': 'Lab', 'Marketplace': 'Mkt', 'Bank': 'Bank', 'Stock Exchange': 'SE',
+                  'Factory': 'Fac', 'Manufacturing Plant': 'Mfg', 'Coal Plant': 'Power' };
+  const all = rules.buildings.map ((b, id) => ({ ...b, id })).filter ((b) => ! b.wonder);
+  const commerce = all.filter ((b) => b.science50 || b.gold50 || b.luxury50);
+  const production = all.filter ((b) => b.production > 0 && ! b.powerPlant);
+  const plant = all.filter ((b) => b.production > 0 && b.powerPlant).sort ((x, y) => x.cost - y.cost)[0];
+  return [...commerce, ...production, ...(plant ? [plant] : [])].map ((b) => ({ id: b.id, name: b.name, short: short[b.name] || b.name.slice (0, 5) }));
 }
 let COLUMNS = BASE_COLUMNS;
 function rebuildColumns () {
-  const extra = [];
+  const extra = [...CHPS_TICKS], fx = [...CHPS_EFFECTS];
   if (state.result && state.result.econ) {
     const bb = bonusBuildings ();
     for (const b of bb) extra.push ({ key: 'bt:' + b.name, sec: 'bonus', label: b.short, chk: 'b' + b.id, econ: true, title: `${b.name} (tick to try it)` });
-    for (const b of bb) extra.push (effectColumn ('b' + b.id, { key: 'be:' + b.name, sec: 'bonusfx', label: b.short + ' Effect', econ: true,
-      title: `What a ${b.name} would gain this city per turn, and the turns until it pays back its cost. Uses your slider, or the one in Try slider. Sorts fastest payback first` }));
+    for (const b of bb) fx.push (effectColumn ('b' + b.id, { key: 'be:' + b.name, sec: 'bonusfx', label: b.short + ' Effect', econ: true,
+      title: `What a ${b.name} would gain this city per turn (${state.result.rules.buildings[b.id].production ? 'shields' : 'science, gold, luxury'}), and the turns until it pays back its cost. Uses your slider, or the one in Try slider. Sorts fastest payback first` }));
   }
   const at = BASE_COLUMNS.findIndex ((c) => c.key === 'upkeep');
-  COLUMNS = [...BASE_COLUMNS.slice (0, at), ...extra, ...BASE_COLUMNS.slice (at)];
+  COLUMNS = [...BASE_COLUMNS.slice (0, at), ...extra, ...fx, ...BASE_COLUMNS.slice (at)];
   // Tick columns sort by whether the city has the building (real, like every sort)
   for (const col of COLUMNS) if (col.chk && ! col.val) col.val = (c) => (state.realValues ? hasNow (c, col.chk) : ticked (c, col.chk)) ? 1 : 0;
 }
@@ -1729,18 +1747,18 @@ function renderGovernments (res) {
   for (const [t, cl, tip] of cols) head.appendChild (Object.assign (document.createElement ('th'), { textContent: t, className: cl || '', title: tip || '' }));
   const body = $('govrows'); body.textContent = '';
   res.rules.governments.forEach ((g, k) => {
-    const t = { commerce: 0, corruption: 0, shields: 0, waste: 0, food: 0, gold: 0, science: 0, luxury: 0, upkeep: 0 };
+    const t = { commerce: 0, corruption: 0, shields: 0, waste: 0, food: 0, gold: 0, science: 0, luxury: 0, upkeep: 0, production: 0 };
     for (const c of res.cities) {
       const real = {}; for (const key of tickKeysFor (c)) real[key] = hasNow (c, key);
       const e = evaluate (c, real, rates, k === res.government ? null : k);
-      t.commerce += e.commerce; t.corruption += e.corruption; t.shields += e.shields; t.waste += e.waste; t.food += e.foodNet;
+      t.commerce += e.commerce; t.corruption += e.corruption; t.shields += e.shields; t.waste += e.waste; t.food += e.foodNet; t.production += e.production;
       t.gold += e.gold + c.specialistOutput.gold; t.science += e.science + c.specialistOutput.science; t.luxury += e.luxury + c.specialistOutput.luxury; t.upkeep += e.upkeep;
     }
     const pc = (a, b) => b ? Math.round (100 * a / b) + '%' : '–', sg = (v) => (v > 0 ? '+' : '') + v;
     const deals = res.goldDeals ? res.goldDeals.incoming - res.goldDeals.outgoing : 0;
     const units = res.unitSupport ? res.unitSupport (k) : 0, net = t.gold + deals - t.upkeep - units;
     const cells = [g.name + (k === res.government ? ' (yours)' : ''), t.commerce, pc (t.corruption, t.commerce), t.commerce - t.corruption, t.shields, pc (t.waste, t.shields),
-                   t.shields - t.waste, sg (t.food), t.science, t.luxury, t.gold, t.upkeep, res.unitSupport ? units : '?', sg (net)];
+                   t.production, sg (t.food), t.science, t.luxury, t.gold, t.upkeep, res.unitSupport ? units : '?', sg (net)];
     const tr = document.createElement ('tr');
     cells.forEach ((v, i) => tr.appendChild (Object.assign (document.createElement ('td'), { textContent: v, className: (cols[i][1] || '') + (i === cells.length - 1 ? (net < 0 ? ' red' : ' green') : '') })));
     if (k === res.government) tr.classList.add ('yours');
@@ -1773,10 +1791,10 @@ function renderSummary (res) {
       blocked: cs.filter (blockedC).map ((c) => c.name), deficit: sum ((c) => Math.min (0, v.get (c).foodNet)),
       filling: cs.filter ((c) => c.atSizeLimit && ! c.growthBlocked && v.get (c).foodNet > 0).map ((c) => c.name),
       food: sum ((c) => c.foodTiles + v.get (c).foodNet - c.foodNet) };
-    st.netCommerce = st.commerce - st.corruption; st.netShields = st.shields - st.waste; st.foodUsable = st.food - st.wasted;
+    st.netCommerce = st.commerce - st.corruption; st.netShields = sum ((c) => v.get (c).production); st.foodUsable = st.food - st.wasted;
     return st;
   };
-  const N = stats ((c) => ({ commerce: c.commerce, corruption: c.corruption, shields: c.shields, waste: c.waste, foodNet: c.foodNet,
+  const N = stats ((c) => ({ commerce: c.commerce, corruption: c.corruption, shields: c.shields, waste: c.waste, foodNet: c.foodNet, production: c.production,
                              gold: c.gold, science: c.science, luxury: c.luxury, upkeep: c.upkeep }));
   const whatIf = tickCount () > 0 || !! triedRates () || triedGov () !== null;
   const T = whatIf ? stats ((c) => wi (c)) : N;
@@ -1821,7 +1839,7 @@ function renderSummary (res) {
     card ('Production', `All cities. ${note}`,
       row ('Shields', both ('shields'), 'Raw shields from tiles, before waste') +
       row ('Waste', both ('waste') + pctBoth ('waste', 'shields'), 'Shields lost to waste') +
-      row ('Net shields', both ('netShields'), 'Shields after waste')) +
+      row ('Net shields', both ('netShields'), 'Shields after waste, with Factory and power plant bonuses')) +
     card ('Food', `Net food per turn, all cities. ${note}`,
       row ('Surplus', both ('surplus', sg), 'Net food of all cities with a surplus') +
       row ('Surplus that grows cities', both ('usableSurplus', sg), 'Surplus in cities that can grow') +
@@ -2053,7 +2071,7 @@ function renderViewPicker () {
 }
 $('viewsel').addEventListener ('change', () => { state.views.current = +$('viewsel').value; saveViews (); renderViewEditor (); render (); });
 const SECTION_NAMES = { city: 'City', attn: 'Attention', mood: 'Citizens', food: 'Food & growth', shields: 'Shields', corr: 'Courthouse & Police',
-  commerce: 'Commerce & corruption', output: 'Gold, luxury, science', bonus: 'Commerce buildings', bonusfx: 'Commerce building effects',
+  commerce: 'Commerce & corruption', output: 'Gold, luxury, science', bonus: 'Building what-ifs (tick)', bonusfx: 'Building effects',
   other: 'Other', build: 'Production' };
 function columnAvailable (col) { return (! col.model || modelOn ()) && (! col.econ || econOn ()); }
 function setViewColumns (keys) {
@@ -2096,7 +2114,7 @@ function renderViewEditor () {
     box.appendChild (g);
   }
   const note = econOn () ? 'The City column is always shown; columns keep a fixed order. Views are saved in this browser.'
-    : '* needs the rules file (conquests.biq). The Commerce buildings columns (Library, Bank, …) appear once it is loaded. Views are saved in this browser.';
+    : '* needs the rules file (conquests.biq). The building columns (Library, Bank, Factory, …) appear once it is loaded. Views are saved in this browser.';
   box.appendChild (Object.assign (document.createElement ('div'), { className: 'note', textContent: note }));
 }
 $('editview').addEventListener ('click', () => openPanel ('columns'));

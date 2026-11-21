@@ -31,7 +31,7 @@ Sections: name(4) + count + entries each starting with their length. Offsets fro
   Wealth 29, Forbidden Palace 56, Stock Exchange 76, Secret Police HQ 82. 83 buildings.
 - **TERR** (after a bitmap of possible resources, one bit each rounded up to bytes): +0 name, +64 irrigation, +68 mining,
   +72 road bonus, +84 food, +88 shields, +92 commerce. **GOOD**: +4 name, +76 prerequisite tech, +80 food, +84 shields,
-  +88 commerce. BLDG flag bits: +250 bit1 tourist attraction, +238 bit7 shields on water, +239 bit0 food on water (Harbor), bit1 commerce on water.
+  +88 commerce. BLDG: +208 production (quarters), +224 obsolete by tech; flag bits: +237 bit5 power plant, +250 bit1 tourist attraction, +238 bit7 shields on water, +239 bit0 food on water (Harbor), bit1 commerce on water.
 - **PRTO**: +8 name[32], +84 cost (plain shields), +208 needs support (C3X `UnitType.requires_support`). **GOVT**: +28 name, +380 corruption level (0 minimal, 1 nuisance,
   2 problematic, 3 rampant, 4 catastrophic, 5 communal), +396 number of governments, +516 required advance, +520 slider rate limit
   (tenths; 10 in every default government, matching the game). **DIFF**: +4 name, +108 optimal cities %. **WSIZ**: +4 optimal city number.
@@ -58,6 +58,9 @@ support) × GOVT +556; free = GOVT +540 + Σ cities (+544 town, +548 city, +552 
 **Tourist attractions** (exe 0x4B0710): + commerce before corruption per flagged building by age (current year − BINF year):
 over 1000 → 2, 1500 → 4, 1750 → 6, 1875 → 8, 2000 → 10, 2250 → 12, 2500 → 14. **GAME** (BIQ, after one int per playable
 civ from +16): +40 time unit (0 years), +52 start year, +64 turns per period[7], +92 years per turn[7].
+
+**Production** (exe 0x4B05D0): (raw − waste) × (4 + Σ production of the city's buildings + the best power plant that has
+its required building) / 4, rounded down.
 
 **Commerce replay** (`City_recompute_commerce` 0x4B07C0): net = raw + tourist − corruption (+ per-city calibration); lux = round(net·L/10), sci = round(net·S/10) (halves up), lux = net − sci if lux + sci > net, gold = net − lux − sci;
 each × (1 + Σ bonuses) floored; +50% per Library/University/Research Lab (sci) or Marketplace/Bank/Stock Exchange (gold), +100% research-doubling wonders.
