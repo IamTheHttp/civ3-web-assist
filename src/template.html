@@ -293,7 +293,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Milestones</dt><dd>Targets to reach by a turn, per game: ✓ met, in progress, or ✗ missed. Edit, add or delete them; the defaults are only starting points. In History, ⚑ marks a deadline and ◆ a target.</dd>
         <dt>History</dt><dd>Each save you open stores its turn. Pick a chart and a city; the dashed line is the turn you have loaded. <b>Add saves…</b> adds older saves at once.</dd>
         <dt>Governments</dt><dd>Your empire's totals under each government, with your slider (or the tried one). Click a row to try it in the table.</dd>
-        <dt>Diplomacy</dt><dd>Civilizations you've met: government, cities, culture against yours, war, embassy, alliances against you.</dd>
+        <dt>Diplomacy</dt><dd>Civilizations you've met: government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you.</dd>
         <dt>Diagnostics</dt><dd>What the page read from your files. <b>Download debug report</b> if something looks wrong.</dd>
       </dl>
 
@@ -402,6 +402,8 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <th title="Their total culture">Culture</th>
       <th title="Their total culture ÷ yours. 0.5× = half of yours; above 1×, they have more culture than you, which raises the culture-flip risk in your cities near them">Culture ratio</th>
       <th class="l">Status</th><th title="Times they declared war on you">War declarations</th><th class="l" title="You have an embassy with them">Embassy</th>
+      <th class="l" title="Your units may move through their territory">Right of passage</th>
+      <th class="l" title="Civilizations allied with you against them">Your allies against them</th>
       <th class="l">Allied against you with</th>
     </tr></thead><tbody id="diplorows"></tbody></table></div>
     <p class="histnote">Attitude toward you isn't stored in the save: the game works it out when you open diplomacy. Only civilizations you have met are listed.</p>
@@ -1487,6 +1489,8 @@ function renderDiplomacy (res) {
       [! p.alive ? 'Destroyed' : (p.atWar ? 'At war' : 'Peace'), 'l ' + (! p.alive ? 'dim' : (p.atWar ? 'red' : ''))],
       [p.warDeclarations || '', p.warDeclarations ? 'amber' : ''],
       [p.embassy ? 'Yes' : '', 'l'],
+      [p.rightOfPassage ? 'Yes' : '', 'l'],
+      [p.yourAllies.filter ((k) => byId[k]).map ((k) => byId[k]).join (', '), 'l ' + (p.yourAllies.some ((k) => byId[k]) ? 'green' : '')],
       // Only civilizations you have met are named; others aren't shown at all
       [p.alliedAgainstYou.filter ((k) => byId[k]).map ((k) => byId[k]).join (', '), 'l ' + (p.alliedAgainstYou.some ((k) => byId[k]) ? 'red' : '')]
     ];

@@ -594,6 +594,11 @@ const Civ3Parse = (() => {
 				const alliedAgainstYou = [];
 				const bits = i32 (o + 3996 + 4 * player) >>> 0;
 				for (let j = 0; j < 32; j++) if ((bits >>> j) & 1) alliedAgainstYou.push (j);
+				// Your allies against them: your LEAD +3996 + 4 x their id (checked in-game: Japan and France against the Ottomans
+				// and the Celts)
+				const yourAllies = [];
+				const mineBits = i32 (mine + 3996 + 4 * id) >>> 0;
+				for (let j = 0; j < 32; j++) if ((mineBits >>> j) & 1) yourAllies.push (j);
 				const cities = i32 (o + 384);
 				if (cities === (owners[id] || 0)) cityOk++;
 				result.players.push ({
@@ -602,7 +607,9 @@ const Civ3Parse = (() => {
 					culture: cult ? i32 (cult + 12) : null,
 					atWar: b[mine + 3356 + id] !== 0, embassy: b[mine + 3388 + id] !== 0,
 					warDeclarations: i32 (mine + 412 + 76 * id), // times this player declared war on you
-					alliedAgainstYou
+					alliedAgainstYou, yourAllies,
+					// Treaty bits (LEAD +3868): bit1 right of passage (checked in-game: Japan and France, both ways); other bits unknown
+					rightOfPassage: ((i32 (mine + 3868 + 4 * id) >>> 1) & 1) === 1
 				});
 			});
 			const myCult = culs.find ((c) => c > mine && (leads.indexOf (mine) + 1 >= leads.length || c < leads[leads.indexOf (mine) + 1]));

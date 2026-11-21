@@ -10,4 +10,6 @@
   Military Advisor shows 92 units (141 − 49 of another nationality) and 84 allowed, as the viewer computes.
 - Net gold also adds gold per turn from deals: Maya +33 (146 + 6 from the French − 103 − 16), the Domestic Advisor's figure. Maya: Republic +27
   (16 gold for units), Democracy −40 (no free units: 92 gold), Communism +10 (0 for units).
+- The capital's +10 commerce not in its record is from tourist attractions (old wonders give commerce; the player's
+  explanation); the exe adds buildings' commerce before corruption (0x4B0710), not transcribed: the viewer calibrates it.
 - Not modelled: war weariness, happiness and martial law, hurrying.

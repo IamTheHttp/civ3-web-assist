@@ -67,8 +67,9 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   water: 8 a river on the city tile, 1 a one-tile lake (lake = water body of ≤ 20 tiles: the limit is assumed).
 - Players (LEAD, save offset = C3X `Leader` memory offset − 20): +140 government, +384 city count (matches CITY records
   7/7), +412 reputation[32] × 76 bytes (first int: war declarations on this player), +3356 at war[32] (bytes),
-  +3388 embassy[32] (bytes), +3740 contact[32], +3868 treaties[32] (meaning of bits unknown), +3996 allies against
-  player k[32] (bitmask of players). Each LEAD is followed by its CULT record: +12 total culture, +16 culture last turn
+  +3388 embassy[32] (bytes), +3740 contact[32], +3868 treaties[32] (bit1 right of passage; other bits unknown),
+  +3996 allies against player k[32] (bitmask of players; in your own record: your allies against k). Both confirmed
+  in-game (Japan and France: right of passage, allied with you against the Ottomans and the Celts). Each LEAD is followed by its CULT record: +12 total culture, +16 culture last turn
   (yours equals the sum of your cities' culture). GAME +84: remaining players bitmap. AI governments all read Republic
   (confirmed in-game). Attitude isn't stored: the game computes it (`Leader.get_attitude_toward`).
 - BLDG +216 spaceship part (−1 if not one), +220 required advance; flag byte +237 bit6 near water, bit7 near river;
