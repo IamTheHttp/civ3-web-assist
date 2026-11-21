@@ -5,7 +5,7 @@ Everything here was verified against the player's files unless marked *(inferred
 ## Save file (SAV, after decompression; starts "CIV3")
 - Embedded scenario (BIQ) at byte 562, length at byte 38. With default rules it holds only VER# + GAME (8 KB) → names/rules come from `conquests.biq`.
 - **GAME** = first "GAME" after the embedded BIQ: +24 difficulty id, +36 number of cities, +64 turn, +80 human-players bitmap (player = lowest set bit ≥1), +17 flags byte (bit1 accelerated production, bit7 cultural conversions).
-- **LEAD** (per player; find the one with +8 == player): +12 civilization (RACE index), +24 capital city id, +40 Golden Age end turn (C3X), +140 government, +376 unit count, +380 military units, +400/+404/+408 luxury/science/tax rate (tenths).
+- **LEAD** (per player; find the one with +8 == player): +12 civilization (RACE index), +24 capital city id, +40 Golden Age end turn (C3X), +140 government, +16 power level, +376 unit count, +380 military units, +412 + 76k memory of player k (19 ints; see `docs/learnings/diplomacy.md`), +400/+404/+408 luxury/science/tax rate (tenths).
 - **WRLD** (first block, length field 2): +22 height, +42 width, +174 world seed, +178 flags (bit0 wrap X, bit1 wrap Y), +238 world size id.
 - **CITY** record = "CITY" header with length **136** (other CITY headers aren't cities). Offsets from the header:
   +8 id, +12/+14 x/y (int16), +16 owner (byte), +20 building upkeep, +24 flags byte (bit0 disorder, bit1 celebrating),
@@ -37,7 +37,7 @@ Sections: name(4) + count + entries each starting with their length. Offsets fro
   (tenths; 10 in every default government, matching the game). **DIFF**: +4 name, +108 optimal cities %. **WSIZ**: +4 optimal city number.
 - **RULE**: +288 max town size, +292 max city size (OpenCiv3's 248/252 are 40 bytes off).
 - **RACE**: city-name list (24 bytes each) and great-leader list (32 each) come first, plus 4 eras × 520 bytes of art paths:
-  noun at +180+shift, traits byte at +272+2080+shift (bit0 militaristic, 1 commercial, 2 expansionist, 3 scientific,
+  noun at +180+shift, culture group +2300+shift, aggression +2312+shift, shunned / favorite government +2320/+2324+shift, traits byte at +272+2080+shift (bit0 militaristic, 1 commercial, 2 expansionist, 3 scientific,
   4 religious, 5 industrious, 6 agricultural, 7 seafaring), shift = 24·cities + 32·leaders. Maya = #31 (Industrious, Agricultural).
 - **CTZN**: specialist outputs (entertainer 1 lux, tax collector 2 gold, scientist 3 research in default rules).
 

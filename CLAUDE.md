@@ -79,7 +79,9 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   +3996 allies against player k[32] (bitmask of players; in your own record: your allies against k). Both confirmed
   in-game (Japan and France: right of passage, allied with you against the Ottomans and the Celts). Each LEAD is followed by its CULT record: +12 total culture, +16 culture last turn
   (yours equals the sum of your cities' culture). GAME +84: remaining players bitmap. AI governments all read Republic
-  (confirmed in-game). Attitude isn't stored: the game computes it (`Leader.get_attitude_toward`).
+  (confirmed in-game). Attitude isn't stored: the viewer computes it with the game's rule (`Leader_get_attitude_toward` 0x440100;
+  details in `docs/learnings/diplomacy.md`); matches the diplomacy screen for 4/4 civs (Japan, France Gracious; America,
+  Ottomans Furious).
 - BLDG +216 spaceship part (−1 if not one), +220 required advance; flag byte +237 bit6 near water, bit7 near river;
   +240 bit0 coastal (OpenCiv3 `Bldg.cs`; spaceship flag matches the 10 SS parts in the default rules).
 - Current buildings = BITM bitmap, not BINF history (captured cities keep the history of destroyed Palaces etc.).

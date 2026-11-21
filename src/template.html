@@ -293,7 +293,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Milestones</dt><dd>Targets to reach by a turn, per game: ✓ met, in progress, or ✗ missed. Edit, add or delete them; the defaults are only starting points. In History, ⚑ marks a deadline and ◆ a target.</dd>
         <dt>History</dt><dd>Each save you open stores its turn. Pick a chart and a city; the dashed line is the turn you have loaded. <b>Add saves…</b> adds older saves at once.</dd>
         <dt>Governments</dt><dd>Your empire's totals under each government, with your slider (or the tried one). Click a row to try it in the table.</dd>
-        <dt>Diplomacy</dt><dd>Civilizations you've met: government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you.</dd>
+        <dt>Diplomacy</dt><dd>Civilizations you've met: their attitude toward you (point at it for the reasons), government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you.</dd>
         <dt>Diagnostics</dt><dd>What the page read from your files. <b>Download debug report</b> if something looks wrong.</dd>
       </dl>
 
@@ -398,7 +398,9 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <p class="panelnote" hidden>Open a save to see this.</p>
   <section id="diplomacy" hidden>
     <div class="diplowrap"><table class="diplo"><thead><tr>
-      <th class="l">Civilization</th><th class="l">Government</th><th>Cities</th>
+      <th class="l">Civilization</th>
+      <th class="l" title="How they feel about you, by the game's own rule (lower score is better). Point at a value for the reasons">Attitude</th>
+      <th class="l">Government</th><th>Cities</th>
       <th title="Their total culture">Culture</th>
       <th title="Their total culture ÷ yours. 0.5× = half of yours; above 1×, they have more culture than you, which raises the culture-flip risk in your cities near them">Culture ratio</th>
       <th class="l">Status</th><th title="Times they declared war on you">War declarations</th><th class="l" title="You have an embassy with them">Embassy</th>
@@ -406,7 +408,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <th class="l" title="Civilizations allied with you against them">Your allies against them</th>
       <th class="l">Allied against you with</th>
     </tr></thead><tbody id="diplorows"></tbody></table></div>
-    <p class="histnote">Attitude toward you isn't stored in the save: the game works it out when you open diplomacy. Only civilizations you have met are listed.</p>
+    <p class="histnote">Attitude: worked out with the game's own rule (the save doesn't store it); point at it for the reasons. Treaties count every turn; gifts fade within a few turns; war declarations, broken deals and razed cities stay for most of the game. Only civilizations you have met are listed.</p>
   </section>
     </div>
     <div class="panel" data-panel="columns" hidden>
@@ -1502,7 +1504,12 @@ function renderDiplomacy (res) {
     const tr = document.createElement ('tr');
     const ratio = mine && p.culture !== null ? p.culture / mine : null;
     const cells = [
-      [p.name, 'l'], [p.alive ? p.government : '–', 'l'], [p.cities],
+      [p.name, 'l'],
+      [p.attitude ? `${p.attitude.word} (${p.attitude.score > 0 ? '+' : ''}${p.attitude.score})` : '?',
+       'l ' + (! p.attitude ? '' : { Gracious: 'green', Polite: 'green', Cautious: 'dim', Annoyed: 'amber', Furious: 'red' }[p.attitude.word]),
+       p.attitude ? p.attitude.reasons.map (([w, v]) => `${v > 0 ? '+' : ''}${v}  ${w}`).join ('\n') +
+         `\n= ${p.attitude.score}. Gracious below −${p.attitude.band}, Furious above +${p.attitude.band}. Lower is better. Resource deals (−5 each) aren't counted.` : ''],
+      [p.alive ? p.government : '–', 'l'], [p.cities],
       [p.culture ?? '?'],
       [ratio === null ? '?' : ratio.toFixed (2) + '×', ratio > 1 ? 'amber' : ''],
       [! p.alive ? 'Destroyed' : (p.atWar ? 'At war' : 'Peace'), 'l ' + (! p.alive ? 'dim' : (p.atWar ? 'red' : ''))],
@@ -1513,7 +1520,7 @@ function renderDiplomacy (res) {
       // Only civilizations you have met are named; others aren't shown at all
       [p.alliedAgainstYou.filter ((k) => byId[k]).map ((k) => byId[k]).join (', '), 'l ' + (p.alliedAgainstYou.some ((k) => byId[k]) ? 'red' : '')]
     ];
-    for (const [text, cls] of cells) tr.appendChild (Object.assign (document.createElement ('td'), { textContent: text, className: cls || '' }));
+    for (const [text, cls, tip] of cells) tr.appendChild (Object.assign (document.createElement ('td'), { textContent: text, className: cls || '', title: tip || '' }));
     if (! p.alive) tr.classList.add ('dim');
     body.appendChild (tr);
   }

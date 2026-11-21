@@ -101,8 +101,11 @@ const Civ3Parse = (() => {
 			// City and great-leader name lists, and 4 eras x 520 bytes of artwork paths, come before the fixed fields
 			const n = i32 (e + 4), m = i32 (e + 8 + 24 * n), shift = 24 * n + 32 * m;
 			const traits = b[e + 272 + 2080 + shift];
+			// OpenCiv3 Race.cs, after the 4 eras of art: culture group, aggression (-2..2), shunned and favorite government
 			r.civs.push ({ noun: readAscii (b, e + 180 + shift, 40), commercial: (traits & 2) !== 0, industrious: (traits & 32) !== 0,
-			               agricultural: (traits & 64) !== 0, seafaring: (traits & 128) !== 0 });
+			               agricultural: (traits & 64) !== 0, seafaring: (traits & 128) !== 0,
+			               cultureGroup: i32 (e + 2300 + shift), aggression: i32 (e + 2312 + shift),
+			               shunnedGov: i32 (e + 2320 + shift), favoriteGov: i32 (e + 2324 + shift) });
 		}
 		return r;
 	}
@@ -641,6 +644,74 @@ const Civ3Parse = (() => {
 			let cityOk = 0;
 			const owners = {};
 			for (const off of findAll (b, 'CITY', gameOff)) if (i32 (off + 4) === 136) owners[u8 (off + 16)] = (owners[u8 (off + 16)] || 0) + 1;
+			// AI attitude toward you, transcribed from the game (GOG Leader_get_attitude_toward 0x440100; checked in-game: 4 of 4
+			// civilizations). Lower is better. The AI's memory of each player is 19 ints at LEAD +412 + 76 x player (field
+			// meanings inferred from the code that writes them). Not decoded: resource deals (-5 each) and the game's AI
+			// aggression setting (assumed normal).
+			const leadOf = {};
+			for (const o of leads) { const id = i32 (o + 8); if (! (id in leadOf)) leadOf[id] = o; }
+			const cultureOf = (o) => { const k = leads.indexOf (o), c = culs.find ((x) => x > o && (k + 1 >= leads.length || x < leads[k + 1])); return c ? i32 (c + 12) : 0; };
+			const yourNationals = {};
+			for (const u of findAll (b, 'UNIT', gameOff)) if (i32 (u + 4) === 472 && i32 (u + 32) === playerRace) yourNationals[i32 (u + 28)] = (yourNationals[i32 (u + 28)] || 0) + 1;
+			const M = world ? tdiv (world.width + world.height, 2) : 100, band = tdiv (M, 10);
+			const atWarL = (a, k) => b[a + 3356 + k] !== 0;
+			const attitudeOf = (A) => {
+				const a = leadOf[A], t = mine, T = player, reasons = [];
+				const add = (v, why) => { if (v) reasons.push ([why, v]); return v; };
+				const civA = rules.civs[i32 (a + 12)] || {}, civT = rules.civs[i32 (t + 12)] || {};
+				const rp = (lo, k, i) => i32 (lo + 412 + 76 * k + 4 * i), m = (i) => rp (a, T, i);
+				let agg = (civA.aggression || 0) + tdiv (result.difficultyId, 2) - tdiv (rules.difficulties.length, 6);
+				agg = Math.max (-2, Math.min (2, agg));
+				let s = add (agg, 'aggression');
+				s += add (4 * m (0), 'war declarations');
+				s += add (Math.min (4 * m (1), 8), 'deals broken');
+				s += add (Math.min (8 * m (2), 16), 'alliances broken');
+				s += add (Math.min (2 * m (3), 4), 'treaties broken by war');
+				s += add (Math.min (m (5), 10), 'units killed');
+				s += add (-Math.min (tdiv (m (9), 10), 10), 'gifts');
+				s += add (16 * (2 * m (11) + m (12)), 'pillage');
+				s += add (Math.min (m (13), 10) + Math.min (m (14), 10), 'war damage');
+				s += add (16 * m (16), 'cities razed');
+				s += add (4 * m (4) + 2 * m (6) - m (7) + m (8) - Math.min (m (10), 1) - Math.min (m (15), 10) + m (17) + m (18), 'other memories');
+				s += add (yourNationals[A] || 0, 'their units of your nationality');
+				if (i32 (t + 3996 + 4 * A)) s += add (10, 'you have allies against them');
+				if (i32 (t + 4124 + 4 * A)) s += add (atWarL (a, T) ? 2 : 10, 'your embargo against them');
+				if (atWarL (a, T)) s += add (5, 'at war');
+				else { const f = i32 (a + 3740 + 4 * T); if (f & 16) s += add (5, 'told to leave'); else if (f & 8) s += add (1, 'asked to leave'); }
+				const gT = i32 (t + 140), gA = i32 (a + 140);
+				if (gT !== gA) s += add (gT === civA.shunnedGov ? 5 : 1, gT === civA.shunnedGov ? 'you have the government they hate' : 'different government');
+				else if (gT === civA.favoriteGov) s += add (-5, 'same government, their favorite');
+				const ca = cultureOf (a), ct = cultureOf (t);
+				if (ct < tdiv (ca, 2)) s += add (1, 'they have much more culture'); else if (ct > 2 * ca) s += add (-1, 'you have much more culture');
+				if (b[a + 3388 + T]) s += add (atWarL (a, T) ? 1 : -2, 'embassy');
+				if (civT.cultureGroup === civA.cultureGroup) s += add (-1, 'same culture group');
+				const tb = i32 (a + 3868 + 4 * T);
+				if ((tb & 4) || (tb & 1)) s += add (-10, 'mutual protection pact');
+				if (tb & 2) s += add (-5, 'right of passage');
+				let shared = 0;
+				for (let j = 1; j < 32; j++) if (leadOf[j] && ((remaining >>> j) & 1) && ((i32 (a + 3996 + 4 * j) >>> T) & 1)) shared++;
+				s += add (-2 * shared, 'allied together');
+				let common = 0;
+				for (let j = 1; j < 32; j++) {
+					const lj = leadOf[j];
+					if (! lj || ! ((remaining >>> j) & 1) || ! atWarL (a, j)) continue;
+					if (atWarL (t, j)) common += -Math.min (rp (lj, T, 14), 1) - 3 - Math.min (rp (lj, T, 4), 2) - Math.min (rp (lj, T, 5), 4) - Math.min (rp (lj, T, 13), 5);
+					else if (i32 (t + 4124 + 4 * j)) common -= 2;
+				}
+				s += add (common, 'common enemies');
+				let spread = 0;
+				for (let j = 1; j < 32; j++) {
+					const lj = leadOf[j];
+					if (! lj || j === A || j === T || (atWarL (a, j) && ((remaining >>> j) & 1)) || ! (i32 (a + 3740 + 4 * j) & 1)) continue;
+					spread += Math.min (rp (lj, T, 0), 2) + Math.min (rp (lj, T, 1), 2) + Math.min (rp (lj, T, 2), 3) + Math.min (rp (lj, T, 3), 1) + Math.min (rp (lj, T, 16), 8) + Math.min (rp (lj, T, 17), 1);
+				}
+				s += add (spread, 'your reputation with others');
+				if (s < 0 && atWarL (a, T)) { reasons.push (['at war: good feeling ignored', -s]); s = 0; }
+				if (s < 0 && i32 (t + 16) > i32 (a + 16)) { reasons.push (['you are stronger: good feeling halved', tdiv (s, 2) - s]); s = tdiv (s, 2); }
+				s = Math.max (-M, Math.min (M, s));
+				const word = s < -band ? 'Gracious' : s > band ? 'Furious' : s < 0 ? 'Polite' : s === 0 ? 'Cautious' : 'Annoyed';
+				return { score: s, word, reasons, band };
+			};
 			leads.forEach ((o, k) => {
 				const id = i32 (o + 8), race = i32 (o + 12);
 				if (id <= 0 || id === player || id >= 32 || race < 0 || ! rules.civs[race]) return;
@@ -665,7 +736,8 @@ const Civ3Parse = (() => {
 					warDeclarations: i32 (mine + 412 + 76 * id), // times this player declared war on you
 					alliedAgainstYou, yourAllies,
 					// Treaty bits (LEAD +3868): bit1 right of passage (checked in-game: Japan and France, both ways); other bits unknown
-					rightOfPassage: ((i32 (mine + 3868 + 4 * id) >>> 1) & 1) === 1
+					rightOfPassage: ((i32 (mine + 3868 + 4 * id) >>> 1) & 1) === 1,
+					attitude: attitudeOf (id)
 				});
 			});
 			const myCult = culs.find ((c) => c > mine && (leads.indexOf (mine) + 1 >= leads.length || c < leads[leads.indexOf (mine) + 1]));
