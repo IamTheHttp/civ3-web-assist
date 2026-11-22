@@ -305,7 +305,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Milestones</dt><dd>Targets to reach by a turn, per game: ✓ met, in progress, or ✗ missed. Edit, add or delete them; the defaults are only starting points. In History, ⚑ marks a deadline and ◆ a target.</dd>
         <dt>History</dt><dd>Each save you open stores its turn. Pick a chart and a city; the dashed line is the turn you have loaded. <b>Add saves…</b> adds older saves at once.</dd>
         <dt>Governments</dt><dd>Your empire's totals under each government, with your slider (or the tried one). Click a row to try it in the table.</dd>
-        <dt>Diplomacy</dt><dd>Civilizations you've met: their attitude toward you (point at it for the reasons, such as your war declarations on them), government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you, the techs and luxuries each side can trade, and their gold. Below: your war weariness points with each enemy and what they do to a city of size 12.</dd>
+        <dt>Diplomacy</dt><dd>Civilizations you've met: their attitude toward you (point at it for the reasons, such as your war declarations on them), government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you, the techs and luxuries each side can trade, and their treasury. Below: your war weariness points with each enemy and what they do to a city of size 12.</dd>
         <dt>Diagnostics</dt><dd>What the page read from your files. <b>Download debug report</b> if something looks wrong.</dd>
       </dl>
 
@@ -424,7 +424,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <th class="l" title="Techs you know that they can receive: they know the prerequisites and the tech's era isn't later than theirs">Techs you can trade</th>
       <th class="l" title="Luxuries from their own sources that you don't have">Their luxuries</th>
       <th class="l" title="Luxuries from your own sources that they don't have. Luxuries you already give them still show: current deals aren't read">Your luxuries they lack</th>
-      <th title="Gold in their treasury, and the most gold per turn they can offer (estimate). Point at a value for the parts">Gold</th>
+      <th title="Gold in their treasury: the most they can pay at once">Treasury</th>
     </tr></thead><tbody id="diplorows"></tbody></table></div>
     <p class="histnote">Attitude: worked out with the game's own rule (the save doesn't store it); point at it for the reasons. Treaties count every turn; gifts fade within a few turns; war declarations, broken deals and razed cities stay for most of the game. Only civilizations you have met are listed.</p>
     <div id="wwbox" hidden>
@@ -1563,10 +1563,7 @@ function tradeCells (p) {
   return [
     list (p.techsTheyGive, 'green'), list (p.techsYouGive, ''),
     list (p.luxTheyHave, 'green'), list (p.luxYouHave, ''),
-    [`${p.treasury} · ≤${p.maxGpt}/turn`, noTrade ? 'dim' : '',
-     `Treasury: ${p.treasury} gold.\nMost per turn: ${p.maxGpt} = their cities' gold with tax collectors + gold per turn they get from other civs ` +
-     '(game rule 0x55DA60; a small per-city term and interest are left out). What they agree to pay depends on what they get.' +
-     (noTrade ? '\n' + noTrade : '')]
+    [p.treasury, noTrade ? 'dim' : '', 'Gold in their treasury: the most they can pay at once' + (noTrade ? '\n' + noTrade : '')]
   ];
 }
 

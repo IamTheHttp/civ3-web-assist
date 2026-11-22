@@ -673,13 +673,12 @@ const Civ3Parse = (() => {
 			let cityOk = 0;
 			const owners = {};
 			// Per owner: the resources its cities reach (CITY +132, one bit per GOOD; the civ's own sources, imports not
-			// included: checked, France lacks the Gems and Silks it gets from you) and its cities' gold with tax collectors
-			const resMask = {}, cityGold = {};
+			// included: checked, France lacks the Gems and Silks it gets from you)
+			const resMask = {};
 			for (const off of findAll (b, 'CITY', gameOff)) if (i32 (off + 4) === 136) {
 				const o = u8 (off + 16);
 				owners[o] = (owners[o] || 0) + 1;
 				resMask[o] = (resMask[o] || 0) | i32 (off + 132);
-				cityGold[o] = (cityGold[o] || 0) + i32 (off + 524) + i32 (off + 536);
 			}
 			// AI attitude toward you, transcribed from the game (GOG Leader_get_attitude_toward 0x440100; checked in-game: 4 of 4
 			// civilizations). Lower is better. The AI's memory of each player is 19 ints at LEAD +412 + 76 x player (field
@@ -759,9 +758,6 @@ const Civ3Parse = (() => {
 			const tradeTechs = (from, to, toLead) => techsOk ? rules.techs.map ((t, k) => knows (from, k) && canReceive (toLead, to, k) ? t.name : null).filter (Boolean) : null;
 			const luxuries = (p) => rules.goods.map ((g, k) => g.type === 1 && ((resMask[p] >>> k) & 1) ? g.name : null).filter (Boolean);
 			const myLux = luxuries (player);
-			// Most gold per turn a civ can offer (GOG 0x55DA60): its cities' gold with tax collectors + gold per turn it gets
-			// from other civs + a per-city term and interest (not transcribed: building upkeep and unit costs aren't subtracted)
-			const gptIn = (id) => { let n = 0; for (const lo of Object.values (leadOf)) n += Math.max (0, i32 (lo + 3612 + 4 * id)); return n; };
 			leads.forEach ((o, k) => {
 				const id = i32 (o + 8), race = i32 (o + 12);
 				if (id <= 0 || id === player || id >= 32 || race < 0 || ! rules.civs[race]) return;
@@ -792,7 +788,7 @@ const Civ3Parse = (() => {
 					techsTheyGive: tradeTechs (id, player, mine), techsYouGive: tradeTechs (player, id, o),
 					luxTheyHave: luxuries (id).filter ((x) => ! myLux.includes (x)), luxYouHave: myLux.filter ((x) => ! luxuries (id).includes (x)),
 					// Treasury: LEAD +48 + +52 (GOG Leader_set_treasury 0x4C2350 splits it in two)
-					treasury: i32 (o + 48) + i32 (o + 52), maxGpt: (cityGold[id] || 0) + gptIn (id)
+					treasury: i32 (o + 48) + i32 (o + 52)
 				});
 			});
 			// War weariness in your cities (GOG 0x4BD780 and 0x4BD6D0), checked against the cause shares the game stores

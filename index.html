@@ -305,7 +305,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Milestones</dt><dd>Targets to reach by a turn, per game: ✓ met, in progress, or ✗ missed. Edit, add or delete them; the defaults are only starting points. In History, ⚑ marks a deadline and ◆ a target.</dd>
         <dt>History</dt><dd>Each save you open stores its turn. Pick a chart and a city; the dashed line is the turn you have loaded. <b>Add saves…</b> adds older saves at once.</dd>
         <dt>Governments</dt><dd>Your empire's totals under each government, with your slider (or the tried one). Click a row to try it in the table.</dd>
-        <dt>Diplomacy</dt><dd>Civilizations you've met: their attitude toward you (point at it for the reasons, such as your war declarations on them), government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you, the techs and luxuries each side can trade, and their gold. Below: your war weariness points with each enemy and what they do to a city of size 12.</dd>
+        <dt>Diplomacy</dt><dd>Civilizations you've met: their attitude toward you (point at it for the reasons, such as your war declarations on them), government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you, the techs and luxuries each side can trade, and their treasury. Below: your war weariness points with each enemy and what they do to a city of size 12.</dd>
         <dt>Diagnostics</dt><dd>What the page read from your files. <b>Download debug report</b> if something looks wrong.</dd>
       </dl>
 
@@ -424,7 +424,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <th class="l" title="Techs you know that they can receive: they know the prerequisites and the tech's era isn't later than theirs">Techs you can trade</th>
       <th class="l" title="Luxuries from their own sources that you don't have">Their luxuries</th>
       <th class="l" title="Luxuries from your own sources that they don't have. Luxuries you already give them still show: current deals aren't read">Your luxuries they lack</th>
-      <th title="Gold in their treasury, and the most gold per turn they can offer (estimate). Point at a value for the parts">Gold</th>
+      <th title="Gold in their treasury: the most they can pay at once">Treasury</th>
     </tr></thead><tbody id="diplorows"></tbody></table></div>
     <p class="histnote">Attitude: worked out with the game's own rule (the save doesn't store it); point at it for the reasons. Treaties count every turn; gifts fade within a few turns; war declarations, broken deals and razed cities stay for most of the game. Only civilizations you have met are listed.</p>
     <div id="wwbox" hidden>
@@ -1283,13 +1283,12 @@ const Civ3Parse = (() => {
 			let cityOk = 0;
 			const owners = {};
 			// Per owner: the resources its cities reach (CITY +132, one bit per GOOD; the civ's own sources, imports not
-			// included: checked, France lacks the Gems and Silks it gets from you) and its cities' gold with tax collectors
-			const resMask = {}, cityGold = {};
+			// included: checked, France lacks the Gems and Silks it gets from you)
+			const resMask = {};
 			for (const off of findAll (b, 'CITY', gameOff)) if (i32 (off + 4) === 136) {
 				const o = u8 (off + 16);
 				owners[o] = (owners[o] || 0) + 1;
 				resMask[o] = (resMask[o] || 0) | i32 (off + 132);
-				cityGold[o] = (cityGold[o] || 0) + i32 (off + 524) + i32 (off + 536);
 			}
 			// AI attitude toward you, transcribed from the game (GOG Leader_get_attitude_toward 0x440100; checked in-game: 4 of 4
 			// civilizations). Lower is better. The AI's memory of each player is 19 ints at LEAD +412 + 76 x player (field
@@ -1369,9 +1368,6 @@ const Civ3Parse = (() => {
 			const tradeTechs = (from, to, toLead) => techsOk ? rules.techs.map ((t, k) => knows (from, k) && canReceive (toLead, to, k) ? t.name : null).filter (Boolean) : null;
 			const luxuries = (p) => rules.goods.map ((g, k) => g.type === 1 && ((resMask[p] >>> k) & 1) ? g.name : null).filter (Boolean);
 			const myLux = luxuries (player);
-			// Most gold per turn a civ can offer (GOG 0x55DA60): its cities' gold with tax collectors + gold per turn it gets
-			// from other civs + a per-city term and interest (not transcribed: building upkeep and unit costs aren't subtracted)
-			const gptIn = (id) => { let n = 0; for (const lo of Object.values (leadOf)) n += Math.max (0, i32 (lo + 3612 + 4 * id)); return n; };
 			leads.forEach ((o, k) => {
 				const id = i32 (o + 8), race = i32 (o + 12);
 				if (id <= 0 || id === player || id >= 32 || race < 0 || ! rules.civs[race]) return;
@@ -1402,7 +1398,7 @@ const Civ3Parse = (() => {
 					techsTheyGive: tradeTechs (id, player, mine), techsYouGive: tradeTechs (player, id, o),
 					luxTheyHave: luxuries (id).filter ((x) => ! myLux.includes (x)), luxYouHave: myLux.filter ((x) => ! luxuries (id).includes (x)),
 					// Treasury: LEAD +48 + +52 (GOG Leader_set_treasury 0x4C2350 splits it in two)
-					treasury: i32 (o + 48) + i32 (o + 52), maxGpt: (cityGold[id] || 0) + gptIn (id)
+					treasury: i32 (o + 48) + i32 (o + 52)
 				});
 			});
 			// War weariness in your cities (GOG 0x4BD780 and 0x4BD6D0), checked against the cause shares the game stores
@@ -2608,10 +2604,7 @@ function tradeCells (p) {
   return [
     list (p.techsTheyGive, 'green'), list (p.techsYouGive, ''),
     list (p.luxTheyHave, 'green'), list (p.luxYouHave, ''),
-    [`${p.treasury} · ≤${p.maxGpt}/turn`, noTrade ? 'dim' : '',
-     `Treasury: ${p.treasury} gold.\nMost per turn: ${p.maxGpt} = their cities' gold with tax collectors + gold per turn they get from other civs ` +
-     '(game rule 0x55DA60; a small per-city term and interest are left out). What they agree to pay depends on what they get.' +
-     (noTrade ? '\n' + noTrade : '')]
+    [p.treasury, noTrade ? 'dim' : '', 'Gold in their treasury: the most they can pay at once' + (noTrade ? '\n' + noTrade : '')]
   ];
 }
 
