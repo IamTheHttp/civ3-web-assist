@@ -92,7 +92,7 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   (0x561580: prerequisites TECH +88..+100 known, TECH +72 era ≤ the receiver's era LEAD +224) and TECH +104 lacks 0x80000
   (0x437F80; none in the default rules). No embassy needed (confirmed in-game). Luxuries: CITY +132 = bitmask of GOOD
   (+60 class: 1 luxury) a city reaches from its civ's own sources, imports not included; France shows only Dyes
-  (confirmed in-game). Treasury = LEAD +48 + +52 (`Leader_set_treasury` 0x4C2350). 0x55DA60 caps only the gold per turn
+  (confirmed in-game). Treasury = LEAD +48 + +52 (`Leader_set_treasury` 0x4C2350; France 100, confirmed in-game). 0x55DA60 caps only the gold per turn
   that you offer (cities' gold + tax collectors + gold per turn received + a per-city term + interest). What an AI offers
   comes from `Leader_consider_trade` 0x440EE0 (not decoded): France offered at most 67/turn for Banking, Physics and
   Metallurgy, above its net income (48 by the viewer's rules).
