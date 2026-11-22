@@ -197,6 +197,8 @@ dialog#help::backdrop { background: rgba(0, 0, 0, .45); }
 #histchartbox { position: relative; width: 100%; overflow: hidden; }
 #histchartbox svg { display: block; max-width: 100%; height: auto; }
 .histnote { color: var(--muted); margin: 4px 0 8px; }
+.wwhead { font-size: 12px; font-weight: 600; color: var(--gold); margin: 18px 0 0; text-transform: uppercase; letter-spacing: .4px; }
+table.diplo tr.wwtotal td { font-weight: 600; border-top: 2px solid var(--line); }
 .histlegend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--ink); font-size: 12.5px; }
 .histkey { display: inline-flex; align-items: center; gap: 6px; }
 .histkey i, .htip i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; }
@@ -293,7 +295,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Milestones</dt><dd>Targets to reach by a turn, per game: ✓ met, in progress, or ✗ missed. Edit, add or delete them; the defaults are only starting points. In History, ⚑ marks a deadline and ◆ a target.</dd>
         <dt>History</dt><dd>Each save you open stores its turn. Pick a chart and a city; the dashed line is the turn you have loaded. <b>Add saves…</b> adds older saves at once.</dd>
         <dt>Governments</dt><dd>Your empire's totals under each government, with your slider (or the tried one). Click a row to try it in the table.</dd>
-        <dt>Diplomacy</dt><dd>Civilizations you've met: their attitude toward you (point at it for the reasons, such as your war declarations on them), government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you.</dd>
+        <dt>Diplomacy</dt><dd>Civilizations you've met: their attitude toward you (point at it for the reasons, such as your war declarations on them), government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you. Below: your war weariness points with each enemy and what they do to a city of size 12.</dd>
         <dt>Diagnostics</dt><dd>What the page read from your files. <b>Download debug report</b> if something looks wrong.</dd>
       </dl>
 
@@ -409,6 +411,16 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <th class="l">Allied against you with</th>
     </tr></thead><tbody id="diplorows"></tbody></table></div>
     <p class="histnote">Attitude: worked out with the game's own rule (the save doesn't store it); point at it for the reasons. Treaties count every turn; gifts fade within a few turns; war declarations, broken deals and razed cities stay for most of the game. Only civilizations you have met are listed.</p>
+    <div id="wwbox" hidden>
+      <h3 class="wwhead" id="wwtitle"></h3>
+      <div class="diplowrap"><table class="diplo"><thead><tr>
+        <th class="l">Enemy</th>
+        <th title="Your war weariness points toward them. Each enemy counts alone">Points</th>
+        <th class="l">Effect</th>
+        <th title="Faces this war adds in a city of size 12">City of size 12</th>
+      </tr></thead><tbody id="wwrows"></tbody></table></div>
+      <p class="histnote" id="wwnote"></p>
+    </div>
   </section>
     </div>
     <div class="panel" data-panel="columns" hidden>
@@ -1525,6 +1537,45 @@ function renderDiplomacy (res) {
   }
 }
 
+// War weariness: your points with each enemy (your own record only) and their effect on a city of size 12
+function renderWarWeariness (res) {
+  const ww = res.warWeariness, ps = (res.players || []).filter ((p) => p.alive && (p.atWar || p.warWeariness > 0));
+  $('wwbox').hidden = ! ww || ! ps.length;
+  if ($('wwbox').hidden) return;
+  const level = ww.level, size = 12;
+  $('wwtitle').textContent = `War weariness — ${ww.government} (${['none', 'low', 'high'][level] || level})`;
+  const pct = (v) => v > 120 ? 100 : v > 60 ? 50 : v > 30 ? 25 : 0;
+  const faces = (r) => r.bonus - r.unhappy > 0 ? `+${r.bonus - r.unhappy} content` : r.unhappy - r.bonus > 0 ? `${r.unhappy - r.bonus} unhappy` : '0';
+  const tone = (r) => r.bonus - r.unhappy > 0 ? 'green' : r.unhappy - r.bonus > 0 ? 'red' : 'dim';
+  const order = [...ps].sort ((a, b) => (b.atWar - a.atWar) || (b.warWeariness - a.warWeariness));
+  const body = $('wwrows'); body.textContent = '';
+  const row = (cells, cls) => {
+    const tr = document.createElement ('tr'); if (cls) tr.className = cls;
+    for (const [text, c, tip] of cells) tr.appendChild (Object.assign (document.createElement ('td'), { textContent: text, className: c || '', title: tip || '' }));
+    body.appendChild (tr);
+  };
+  for (const p of order) {
+    const v = p.warWeariness;
+    let effect, city = '—', cityCls = 'dim';
+    if (! p.atWar) effect = 'peace, −5% per turn';
+    else {
+      const r = Civ3Parse.warWearinessCity (level, [v], size);
+      city = faces (r); cityCls = tone (r);
+      effect = v < 0 ? '25% content (bonus)' : ! level ? 'none (government)' : `${pct (v) * level}% unhappy`;
+    }
+    row ([[p.name, 'l'], [v, ! p.atWar ? 'dim' : v < 0 ? 'green' : v > 60 ? 'red' : v > 30 ? 'amber' : ''],
+          [effect, 'l' + (p.atWar ? '' : ' dim'), v < 0 && p.atWar ? 'They declared war on you: each of your cities gets a quarter of its size content' : ''],
+          [city, cityCls]]);
+  }
+  const total = Civ3Parse.warWearinessCity (level, ps.filter ((p) => p.atWar).map ((p) => p.warWeariness), size);
+  row ([['Total', 'l'], [''], [''], [faces (total), tone (total)]], 'wwtotal');
+  const bands = level ? `Unhappy by points: ≤30 0% · 31–60 ${25 * level}% · 61–120 ${50 * level}% · >120 ${100 * level}%` +
+    (level === 1 ? ' (Democracy ×2)' : '') + '. ' : `${ww.government}: no war weariness, only the bonus. `;
+  $('wwnote').textContent = bands + 'Rounded down per city; each side at most 100%. Police Station −25% in its city; ' +
+    'Universal Suffrage −1 per city. At peace: points −5% per turn.' +
+    (ww.checked ? ` Matches the game in ${ww.match}/${ww.checked} cities.` : '');
+}
+
 // ---------- milestones: targets to reach by a turn, kept per game in this browser ----------
 // A metric reads a snapshot (the loaded save or a stored history turn); null: that turn didn't store it.
 const MS_METRICS = [
@@ -1872,6 +1923,7 @@ function render () {
 
   renderSummary (res);
   renderDiplomacy (res);
+  renderWarWeariness (res);
   renderMilestones ();
   syncPanelNote ();
   const COLS = visibleColumns ();

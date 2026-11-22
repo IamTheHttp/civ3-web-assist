@@ -84,6 +84,10 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   Ottomans Furious).
 - BLDG +216 spaceship part (−1 if not one), +220 required advance; flag byte +237 bit6 near water, bit7 near river;
   +240 bit0 coastal (OpenCiv3 `Bldg.cs`; spaceship flag matches the 10 SS parts in the default rules).
+- War weariness (`docs/learnings/war-weariness.md`): points per enemy at LEAD +3228 + 4k. Faces per city (exe 0x4BD780):
+  base size (high) or size/2 (low; GOVT +560), per enemy at war ≤30 → 0, 31–60 → ½, 61–120 → 1, >120 → 2 × base, summed,
+  at most the size. CITY +152..+160 store unhappiness causes in % (+153 base, +154 war weariness): the formula matches
+  **49/49** cities that have unhappy citizens (all civs, all Republic).
 - Current buildings = BITM bitmap, not BINF history (captured cities keep the history of destroyed Palaces etc.).
 
 ## How to work here
@@ -105,6 +109,9 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   tile that has some. Verify each on a save that has it.
 - The model assumes every city is connected to the capital by trade (not read from the save; otherwise distance × 5/4;
   mismatches show "~").
+
+- War weariness: high (Democracy), Police Station (−size/4), Universal Suffrage (−1 per city) and the +size/4 content
+  for an enemy that declared war on you are read from the exe, not seen on a save.
 
 - Attitude doesn't count resource deals (−5, helper 0x55E8E0: a table behind leader +5652, 96 bytes per entry, 3 per
   player). Its save layout is unknown: it isn't in the data after each LEAD in the memory layout. To locate it: two saves of

@@ -14,4 +14,5 @@ and `docs/REVERSE_ENGINEERING.md`; the corruption rule is in `docs/CORRUPTION.md
 | [diplomacy.md](diplomacy.md) | Other players in the save; the AI attitude rule, memory fields, decay, trust, razing |
 | [governments.md](governments.md) | The government what-if: what it changes and what it leaves out |
 | [rally-points.md](rally-points.md) | Why "continental" rally points disappear |
+| [war-weariness.md](war-weariness.md) | War weariness points, faces per city, what is checked |
 | [not-built-yet.md](not-built-yet.md) | Ideas checked for feasibility but not built |

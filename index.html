@@ -197,6 +197,8 @@ dialog#help::backdrop { background: rgba(0, 0, 0, .45); }
 #histchartbox { position: relative; width: 100%; overflow: hidden; }
 #histchartbox svg { display: block; max-width: 100%; height: auto; }
 .histnote { color: var(--muted); margin: 4px 0 8px; }
+.wwhead { font-size: 12px; font-weight: 600; color: var(--gold); margin: 18px 0 0; text-transform: uppercase; letter-spacing: .4px; }
+table.diplo tr.wwtotal td { font-weight: 600; border-top: 2px solid var(--line); }
 .histlegend { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--ink); font-size: 12.5px; }
 .histkey { display: inline-flex; align-items: center; gap: 6px; }
 .histkey i, .htip i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; }
@@ -293,7 +295,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Milestones</dt><dd>Targets to reach by a turn, per game: ✓ met, in progress, or ✗ missed. Edit, add or delete them; the defaults are only starting points. In History, ⚑ marks a deadline and ◆ a target.</dd>
         <dt>History</dt><dd>Each save you open stores its turn. Pick a chart and a city; the dashed line is the turn you have loaded. <b>Add saves…</b> adds older saves at once.</dd>
         <dt>Governments</dt><dd>Your empire's totals under each government, with your slider (or the tried one). Click a row to try it in the table.</dd>
-        <dt>Diplomacy</dt><dd>Civilizations you've met: their attitude toward you (point at it for the reasons, such as your war declarations on them), government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you.</dd>
+        <dt>Diplomacy</dt><dd>Civilizations you've met: their attitude toward you (point at it for the reasons, such as your war declarations on them), government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you. Below: your war weariness points with each enemy and what they do to a city of size 12.</dd>
         <dt>Diagnostics</dt><dd>What the page read from your files. <b>Download debug report</b> if something looks wrong.</dd>
       </dl>
 
@@ -409,6 +411,16 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <th class="l">Allied against you with</th>
     </tr></thead><tbody id="diplorows"></tbody></table></div>
     <p class="histnote">Attitude: worked out with the game's own rule (the save doesn't store it); point at it for the reasons. Treaties count every turn; gifts fade within a few turns; war declarations, broken deals and razed cities stay for most of the game. Only civilizations you have met are listed.</p>
+    <div id="wwbox" hidden>
+      <h3 class="wwhead" id="wwtitle"></h3>
+      <div class="diplowrap"><table class="diplo"><thead><tr>
+        <th class="l">Enemy</th>
+        <th title="Your war weariness points toward them. Each enemy counts alone">Points</th>
+        <th class="l">Effect</th>
+        <th title="Faces this war adds in a city of size 12">City of size 12</th>
+      </tr></thead><tbody id="wwrows"></tbody></table></div>
+      <p class="histnote" id="wwnote"></p>
+    </div>
   </section>
     </div>
     <div class="panel" data-panel="columns" hidden>
@@ -650,6 +662,9 @@ const Civ3Parse = (() => {
 				// +1 food / shield / commerce on water tiles of a large water body (Harbor, Offshore Platform, Commercial Dock)
 				// Tourist attraction (+248 bit 17): commerce once the building is over 1000 years old
 				touristAttraction: ((b[e + 250] >> 1) & 1) !== 0,
+				// War weariness (GOG 0x4BD780): +236 bit 22 removes size/4 faces in its city (Police Station); wonder flag
+				// +248 bit 11 removes 1 face in every city of its owner (Universal Suffrage)
+				reducesWarWeariness: ((b[e + 238] >> 6) & 1) !== 0, warWearinessWonder: ((b[e + 249] >> 3) & 1) !== 0,
 				// Production (+208, quarters: Factory 2 = +50%), power plant (+237 bit 5: counts only with its required
 				// building, and only the best one), made obsolete by (+224, a tech)
 				production: i32 (e + 208), powerPlant: ((b[e + 237] >> 5) & 1) !== 0, obsoleteBy: i32 (e + 224),
@@ -669,8 +684,10 @@ const Civ3Parse = (() => {
 			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380), maintenance: i32 (e + 12) !== 0,
 				tilePenalty: i32 (e + 20) !== 0, tradeBonus: i32 (e + 24) !== 0,
 				// Unit support: free units (-1: no unit costs), free units per town / city / metropolis, gold per further unit
-				freeUnits: i32 (e + 540), freePerSize: [i32 (e + 544), i32 (e + 548), i32 (e + 552)], unitCost: i32 (e + 556) })),
-			difficulties: diff.map ((e) => ({ name: readAscii (b, e + 4, 64), costFactor: i32 (e + 104), optimalPercent: i32 (e + 108), corruptionPercent: i32 (e + 116) })),
+				freeUnits: i32 (e + 540), freePerSize: [i32 (e + 544), i32 (e + 548), i32 (e + 552)], unitCost: i32 (e + 556),
+				// War weariness level (+560): 0 none, 1 low, 2 high
+				warWeariness: i32 (e + 560) })),
+			difficulties: diff.map ((e) => ({ name: readAscii (b, e + 4, 64), contentCitizens: i32 (e + 68), costFactor: i32 (e + 104), optimalPercent: i32 (e + 108), corruptionPercent: i32 (e + 116) })),
 			worldSizes: wsiz.map ((e) => ({ optimalCities: i32 (e + 4) })),
 			civs: [], maxTown: 6, maxCity: 12,
 			calendar: game ? calendarOf (b, game[0]) : null
@@ -727,6 +744,23 @@ const Civ3Parse = (() => {
 	// Not in the save, so assumed: the city is connected to the capital by trade (otherwise distance x 5/4), and no
 	// police-type specialists (they subtract their corruption value).
 	const tdiv = (a, b) => Math.trunc (a / b);
+
+	// War weariness in one city (GOG 0x4BD780, 0x4BD6D0). level: the government's (0 none, 1 low, 2 high); points: yours
+	// toward each enemy you are at war with. Each enemy counts alone: above 30 / 60 / 120 points it adds a quarter / half /
+	// all of the base (size, or size / 2 rounded down for low). Police Station-type buildings remove size / 4 each, a
+	// Universal Suffrage-type wonder 1, and the total stops at the size. An enemy with negative points (it declared war on
+	// you) gives size / 4 content instead, again at most the size.
+	function warWearinessCity (level, points, size, police = 0, suffrage = 0) {
+		let unhappy = 0, bonus = 0;
+		for (const v of points) {
+			if (v < 0) bonus += tdiv (size, 4);
+			if (! level) continue;
+			const base = level === 2 ? size : tdiv (size, 2);
+			unhappy += v > 120 ? 2 * base : v > 60 ? base : v > 30 ? tdiv (base, 2) : 0;
+		}
+		unhappy = Math.min (size, Math.max (0, unhappy - police * tdiv (size, 4) - suffrage));
+		return { unhappy, bonus: Math.min (size, bonus) };
+	}
 	function corruptedYield (m, city, ni, Y, isWaste) {
 		const none = { lost: 0, D: 0, rankNum: 0, nopt: 1, NiTotal: ni, capLost: 0 };
 		if (Y <= 0) return none;
@@ -938,6 +972,10 @@ const Civ3Parse = (() => {
 				upkeep: i32 (off + 20), culture: i32 (off + 220), pollution: i32 (off + 48),
 				buildType: i32 (off + 56), buildId: i32 (off + 52),
 				buildings,
+				// Share of each unhappiness cause in %, rounded down (memory City +0xCC..+0xD4, written by GOG
+				// City_recompute_happiness 0x4BCFF0); all 0 when the city has no unhappy citizen. +1 base (working citizens
+				// past the difficulty's content number), +2 war weariness, +3..+8 other causes
+				unhappyCauses: Array.from (b.subarray (off + 152, off + 161)),
 				raw: { offset: off, specialistsPopd, finalTotal: i32 (off + 512), netShields: i32 (off + 508) }
 			};
 
@@ -1318,9 +1356,36 @@ const Civ3Parse = (() => {
 					alliedAgainstYou, yourAllies,
 					// Treaty bits (LEAD +3868): bit1 right of passage (checked in-game: Japan and France, both ways); other bits unknown
 					rightOfPassage: ((i32 (mine + 3868 + 4 * id) >>> 1) & 1) === 1,
-					attitude: attitudeOf (id)
+					attitude: attitudeOf (id),
+					// Your war weariness points toward them (LEAD +3228; Leader +0xCB0 in memory)
+					warWeariness: i32 (mine + 3228 + 4 * id)
 				});
 			});
+			// War weariness in your cities (GOG 0x4BD780 and 0x4BD6D0), checked against the cause shares the game stores
+			{
+				const gov = rules.governments[government];
+				const level = gov ? gov.warWeariness : 0;
+				const enemies = result.players.filter ((p) => p.alive && p.atWar).map ((p) => p.warWeariness);
+				const police = new Set (rules.buildings.map ((x, k) => x.reducesWarWeariness ? k : -1).filter ((k) => k >= 0));
+				const suffrage = new Set (rules.buildings.map ((x, k) => x.warWearinessWonder ? k : -1).filter ((k) => k >= 0));
+				const known = (k) => result.knownTechs ? result.knownTechs.has (k) : false;
+				const suffrageCount = [...suffrage].filter ((k) => result.cities.some ((c) => c.buildings && c.buildings.has (k))).length;
+				const content = (rules.difficulties[result.difficultyId] || {}).contentCitizens;
+				let checked = 0, match = 0;
+				for (const c of result.cities) {
+					const policeHere = c.buildings ? [...police].filter ((k) => c.buildings.has (k) && ! (rules.buildings[k].obsoleteBy >= 0 && known (rules.buildings[k].obsoleteBy))).length : 0;
+					c.warWeariness = warWearinessCity (level, enemies, c.size, policeHere, suffrageCount);
+					const s = c.unhappyCauses;
+					if (content === undefined || ! s.some ((v) => v) || s[0] || s.slice (3).some ((v) => v)) continue;
+					const base = Math.max (0, c.size - c.specialists - content), tot = base + c.warWeariness.unhappy;
+					if (! tot) continue;
+					checked++;
+					if (Math.floor (100 * base / tot) === s[1] && Math.floor (100 * c.warWeariness.unhappy / tot) === s[2]) match++;
+					else c.warWeariness.mismatch = true;
+				}
+				result.warWeariness = { level, government: gov ? gov.name : '?', checked, match, suffrage: suffrageCount };
+				diag.push (`War weariness (${gov ? gov.name : '?'}, level ${level}): the formula matches the game's unhappiness causes in ${match}/${checked} cities (the others have no unhappy citizen or another cause)`);
+			}
 			const myCult = culs.find ((c) => c > mine && (leads.indexOf (mine) + 1 >= leads.length || c < leads[leads.indexOf (mine) + 1]));
 			result.myCulture = myCult ? { total: i32 (myCult + 12), perTurn: i32 (myCult + 16) } : null;
 			const cityCulture = result.cities.reduce ((n, c) => n + c.culture, 0);
@@ -1419,7 +1484,7 @@ const Civ3Parse = (() => {
 		result.ok = result.cities.length > 0;
 		return result;
 	}
-	return { parse, parseRulesFile };
+	return { parse, parseRulesFile, warWearinessCity };
 })();
 if (typeof module !== 'undefined') module.exports = Civ3Parse;
 
@@ -2489,6 +2554,45 @@ function renderDiplomacy (res) {
   }
 }
 
+// War weariness: your points with each enemy (your own record only) and their effect on a city of size 12
+function renderWarWeariness (res) {
+  const ww = res.warWeariness, ps = (res.players || []).filter ((p) => p.alive && (p.atWar || p.warWeariness > 0));
+  $('wwbox').hidden = ! ww || ! ps.length;
+  if ($('wwbox').hidden) return;
+  const level = ww.level, size = 12;
+  $('wwtitle').textContent = `War weariness — ${ww.government} (${['none', 'low', 'high'][level] || level})`;
+  const pct = (v) => v > 120 ? 100 : v > 60 ? 50 : v > 30 ? 25 : 0;
+  const faces = (r) => r.bonus - r.unhappy > 0 ? `+${r.bonus - r.unhappy} content` : r.unhappy - r.bonus > 0 ? `${r.unhappy - r.bonus} unhappy` : '0';
+  const tone = (r) => r.bonus - r.unhappy > 0 ? 'green' : r.unhappy - r.bonus > 0 ? 'red' : 'dim';
+  const order = [...ps].sort ((a, b) => (b.atWar - a.atWar) || (b.warWeariness - a.warWeariness));
+  const body = $('wwrows'); body.textContent = '';
+  const row = (cells, cls) => {
+    const tr = document.createElement ('tr'); if (cls) tr.className = cls;
+    for (const [text, c, tip] of cells) tr.appendChild (Object.assign (document.createElement ('td'), { textContent: text, className: c || '', title: tip || '' }));
+    body.appendChild (tr);
+  };
+  for (const p of order) {
+    const v = p.warWeariness;
+    let effect, city = '—', cityCls = 'dim';
+    if (! p.atWar) effect = 'peace, −5% per turn';
+    else {
+      const r = Civ3Parse.warWearinessCity (level, [v], size);
+      city = faces (r); cityCls = tone (r);
+      effect = v < 0 ? '25% content (bonus)' : ! level ? 'none (government)' : `${pct (v) * level}% unhappy`;
+    }
+    row ([[p.name, 'l'], [v, ! p.atWar ? 'dim' : v < 0 ? 'green' : v > 60 ? 'red' : v > 30 ? 'amber' : ''],
+          [effect, 'l' + (p.atWar ? '' : ' dim'), v < 0 && p.atWar ? 'They declared war on you: each of your cities gets a quarter of its size content' : ''],
+          [city, cityCls]]);
+  }
+  const total = Civ3Parse.warWearinessCity (level, ps.filter ((p) => p.atWar).map ((p) => p.warWeariness), size);
+  row ([['Total', 'l'], [''], [''], [faces (total), tone (total)]], 'wwtotal');
+  const bands = level ? `Unhappy by points: ≤30 0% · 31–60 ${25 * level}% · 61–120 ${50 * level}% · >120 ${100 * level}%` +
+    (level === 1 ? ' (Democracy ×2)' : '') + '. ' : `${ww.government}: no war weariness, only the bonus. `;
+  $('wwnote').textContent = bands + 'Rounded down per city; each side at most 100%. Police Station −25% in its city; ' +
+    'Universal Suffrage −1 per city. At peace: points −5% per turn.' +
+    (ww.checked ? ` Matches the game in ${ww.match}/${ww.checked} cities.` : '');
+}
+
 // ---------- milestones: targets to reach by a turn, kept per game in this browser ----------
 // A metric reads a snapshot (the loaded save or a stored history turn); null: that turn didn't store it.
 const MS_METRICS = [
@@ -2836,6 +2940,7 @@ function render () {
 
   renderSummary (res);
   renderDiplomacy (res);
+  renderWarWeariness (res);
   renderMilestones ();
   syncPanelNote ();
   const COLS = visibleColumns ();

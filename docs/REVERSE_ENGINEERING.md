@@ -5,7 +5,7 @@ Everything here was verified against the player's files unless marked *(inferred
 ## Save file (SAV, after decompression; starts "CIV3")
 - Embedded scenario (BIQ) at byte 562, length at byte 38. With default rules it holds only VER# + GAME (8 KB) → names/rules come from `conquests.biq`.
 - **GAME** = first "GAME" after the embedded BIQ: +24 difficulty id, +36 number of cities, +64 turn, +80 human-players bitmap (player = lowest set bit ≥1), +17 flags byte (bit1 accelerated production, bit7 cultural conversions).
-- **LEAD** (per player; find the one with +8 == player): +12 civilization (RACE index), +24 capital city id, +40 Golden Age end turn (C3X), +140 government, +16 power level, +376 unit count, +380 military units, +412 + 76k memory of player k (19 ints; see `docs/learnings/diplomacy.md`), +400/+404/+408 luxury/science/tax rate (tenths).
+- **LEAD** (per player; find the one with +8 == player): +12 civilization (RACE index), +24 capital city id, +40 Golden Age end turn (C3X), +140 government, +16 power level, +376 unit count, +380 military units, +412 + 76k memory of player k (19 ints; see `docs/learnings/diplomacy.md`), +400/+404/+408 luxury/science/tax rate (tenths), +3228 + 4k war weariness points toward player k, +3356 + k at war with k (byte).
 - **WRLD** (first block, length field 2): +22 height, +42 width, +174 world seed, +178 flags (bit0 wrap X, bit1 wrap Y), +238 world size id.
 - **CITY** record = "CITY" header with length **136** (other CITY headers aren't cities). Offsets from the header:
   +8 id, +12/+14 x/y (int16), +16 owner (byte), +20 building upkeep, +24 flags byte (bit0 disorder, bit1 celebrating),
@@ -13,6 +13,8 @@ Everything here was verified against the player's files unless marked *(inferred
   +360 food (tiles), +364 **raw shields**, +368 **raw commerce**, +392 name[24],
   +492 food eaten, +496 waste, +500 corruption, +504 net food, +508 net shields, +512 final gold+sci+lux,
   +516 luxury, +520 science, +524 gold, +528/+532/+536 specialist output (lux/sci/gold, separate from the city's figures),
+  +152..+160 unhappiness causes in % (+153 base, +154 war weariness; all 0 without unhappy citizens),
+  +132 resources available to the city, one bit per GOOD index *(inferred)*,
   +552 citizen count. Fixed part 556 bytes.
 - **CTZN** × count, 308 bytes each: +272 type (0 happy, 1 content, 2 unhappy, 3 resister, 4 specialist), +292 specialist type (CTZN index in rules: 1 entertainer, 2 tax collector, 3 scientist…), +296 nationality = **civilization (RACE) index**, not player number.
 - **TILE** (212 bytes, first header length 36, row by row, W/2 per row): +8 river edges, +12 resource (GOOD index), +30 city id,
@@ -34,7 +36,8 @@ Sections: name(4) + count + entries each starting with their length. Offsets fro
   +88 commerce. BLDG: +208 production (quarters), +224 obsolete by tech; flag bits: +237 bit5 power plant, +250 bit1 tourist attraction, +238 bit7 shields on water, +239 bit0 food on water (Harbor), bit1 commerce on water.
 - **PRTO**: +8 name[32], +84 cost (plain shields), +208 needs support (C3X `UnitType.requires_support`). **GOVT**: +28 name, +380 corruption level (0 minimal, 1 nuisance,
   2 problematic, 3 rampant, 4 catastrophic, 5 communal), +396 number of governments, +516 required advance, +520 slider rate limit
-  (tenths; 10 in every default government, matching the game). **DIFF**: +4 name, +108 optimal cities %. **WSIZ**: +4 optimal city number.
+  (tenths; 10 in every default government, matching the game). **DIFF**: +4 name, +68 content citizens, +108 optimal cities %. GOVT +560 war weariness (0 none, 1 low, 2 high).
+  BLDG +236 bit 22 reduces war weariness (Police Station), +248 bit 11 wonder: reduces war weariness (Universal Suffrage). **WSIZ**: +4 optimal city number.
 - **RULE**: +288 max town size, +292 max city size (OpenCiv3's 248/252 are 40 bytes off).
 - **RACE**: city-name list (24 bytes each) and great-leader list (32 each) come first, plus 4 eras × 520 bytes of art paths:
   noun at +180+shift, culture group +2300+shift, aggression +2312+shift, shunned / favorite government +2320/+2324+shift, traits byte at +272+2080+shift (bit0 militaristic, 1 commercial, 2 expansionist, 3 scientific,
