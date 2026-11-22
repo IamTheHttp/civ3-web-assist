@@ -11,7 +11,7 @@ and `docs/REVERSE_ENGINEERING.md`; the corruption rule is in `docs/CORRUPTION.md
 | [corruption.md](corruption.md) | Why the viewer uses the game's own corruption rule |
 | [ai-cost-factor.md](ai-cost-factor.md) | How difficulty changes AI food and build costs |
 | [ai-comparison.md](ai-comparison.md) | AI city data and the History comparison |
-| [diplomacy.md](diplomacy.md) | What the save holds about other players; what it doesn't |
+| [diplomacy.md](diplomacy.md) | Other players in the save; the AI attitude rule, memory fields, decay, trust, razing |
 | [governments.md](governments.md) | The government what-if: what it changes and what it leaves out |
 | [rally-points.md](rally-points.md) | Why "continental" rally points disappear |
 | [not-built-yet.md](not-built-yet.md) | Ideas checked for feasibility but not built |

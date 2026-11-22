@@ -13,5 +13,8 @@
   columns can use a tried slider ("Try slider", default 50% science / 50% gold) instead of the save's. It is a what-if.
 - **What-ifs reach the Summary:** ticks, Try slider and Try government show now → then in the Summary cards too.
 - **All what-if tick columns side by side**, then all Effect columns.
+- **Score parts go in the tooltip,** not in their own column (the war-declarations column was removed; it showed the
+  wrong direction anyway). No extra views unless asked (an "after peace" attitude view was declined).
+- **Checks in-game readily** when given exact predictions and the screen to read; reports back line by line.
 - **Signals over raw numbers:** payback turns for buildings; green / amber / grey.
 - Likes sane defaults that are editable (tiers, milestones, payback limits).
