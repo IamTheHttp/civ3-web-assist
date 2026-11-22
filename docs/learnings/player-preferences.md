@@ -5,7 +5,8 @@
   (exe addresses, OpenCiv3 / C3X files). Correct earlier wrong claims openly (e.g. Courthouse cost is 80, not 60).
 - **No cheating information** in normal views: Diplomacy lists only civilizations met, and other civs' culture per turn
   was removed. City counts are fine (the trade screen shows them). AI comparisons are acceptable only when labelled (History's Compare line, which may show any civilization).
-- **Minimal UI.** Panels live in the side menu and open in a drawer; the table stays at the top. Prefer one column
+- **Minimal UI.** Panels live in the side menu and open in a drawer; the table stays at the top. The drawer is resizable
+  (drag its left edge) and has ⤢ Expand to fill the window; width and expanded state are kept per panel. Prefer one column
   over a big panel (the tier warnings are one Attention column, not a to-do list).
 - **Spreadsheet habits:** ▾ column menus with conditions and value lists; filters and sorting use **real** values, so
   what-if ticks never hide or move rows.

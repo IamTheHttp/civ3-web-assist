@@ -143,7 +143,15 @@ main { margin-left: 132px; }
   main { margin-left: 0; }
   .drawer { width: 100vw; }
 }
-@media (max-width: 1099px) { .drawer { width: min(640px, 100vw); } }
+@media (max-width: 1099px) { .drawer { width: min(var(--drawer-w), 100vw); } }
+/* Drag the left edge to set the panel's width; ⤢ fills the window beside the side menu */
+.drawergrip { position: absolute; top: 0; bottom: 0; left: -4px; width: 8px; cursor: col-resize; z-index: 1; }
+.drawergrip:hover, body.drawer-resizing .drawergrip { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+body.drawer-resizing { user-select: none; cursor: col-resize; }
+body.drawer-full .drawer { left: 132px; width: auto; }
+body.drawer-full .drawergrip { display: none; }
+#drawerfull.active { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 760px) { body.drawer-full .drawer { left: 0; } .drawergrip { display: none; } }
 .searchbar { display: flex; gap: 10px; align-items: center; margin: 0 0 8px; }
 #search { flex: 0 1 460px; font-size: 14px; padding: 6px 10px; }
 td.hit { background: color-mix(in srgb, var(--gold) 26%, transparent) !important; }
@@ -163,6 +171,8 @@ text.msflag { stroke: none; font-size: 11px; }
 .mstarget.s1 path { fill: var(--s1); } .mstarget.s2 path { fill: var(--s2); } .mstarget.s3 path { fill: var(--s3); }
 .diplowrap { overflow-x: auto; margin-top: 8px; }
 table.diplo th { position: static; cursor: default; }
+table.diplo th { white-space: normal; vertical-align: bottom; min-width: 4.5em; }
+table.diplo td.wrap { white-space: normal; min-width: 7em; max-width: 14em; }
 table.diplo th:first-child, table.diplo td:first-child { position: static; }
 .fbtn { margin-left: 4px; padding: 0 4px; font-size: 10px; line-height: 14px; border-radius: 3px; border: 1px solid transparent; background: none; color: var(--muted); cursor: pointer; }
 .fbtn:hover { border-color: var(--line); color: var(--ink); }
@@ -264,7 +274,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Watch autosave folder…</dt><dd>Pick <code>Saves\Auto</code>; the newest save loads by itself.</dd>
         <dt>View</dt><dd>Switch between sets of columns.</dd>
         <dt>Columns…</dt><dd>Choose this view's columns. <b>Clear all columns</b> starts from empty; <b>New view</b> makes your own.</dd>
-        <dt>Side menu</dt><dd>Summary, Milestones, History, Diplomacy, Tiers and Diagnostics open in a panel on the right; the table stays where it is. Esc or Close shuts it.</dd>
+        <dt>Side menu</dt><dd>Summary, Milestones, History, Diplomacy, Tiers and Diagnostics open in a panel on the right; the table stays where it is. Drag its left edge to resize it (double-click: default width), or ⤢ Expand to fill the window; each panel remembers its own. Esc returns an expanded panel to the side, then shuts it.</dd>
         <dt>Tiers</dt><dd>Name corruption tiers and set which buildings each tier should have, from which city size.</dd>
         <dt>Search (above the table)</dt><dd>Matches any text in the table: <code>library</code>, a city name, <code>max</code>, <code>no temple</code>. Several words must all match. Press <b>/</b> to jump there, Esc to clear.</dd>
         <dt>Problems only</dt><dd>Cities in disorder or close to it, starving, or with resisters.</dd>
@@ -295,7 +305,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Milestones</dt><dd>Targets to reach by a turn, per game: ✓ met, in progress, or ✗ missed. Edit, add or delete them; the defaults are only starting points. In History, ⚑ marks a deadline and ◆ a target.</dd>
         <dt>History</dt><dd>Each save you open stores its turn. Pick a chart and a city; the dashed line is the turn you have loaded. <b>Add saves…</b> adds older saves at once.</dd>
         <dt>Governments</dt><dd>Your empire's totals under each government, with your slider (or the tried one). Click a row to try it in the table.</dd>
-        <dt>Diplomacy</dt><dd>Civilizations you've met: their attitude toward you (point at it for the reasons, such as your war declarations on them), government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you. Below: your war weariness points with each enemy and what they do to a city of size 12.</dd>
+        <dt>Diplomacy</dt><dd>Civilizations you've met: their attitude toward you (point at it for the reasons, such as your war declarations on them), government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you, the techs and luxuries each side can trade, and their gold. Below: your war weariness points with each enemy and what they do to a city of size 12.</dd>
         <dt>Diagnostics</dt><dd>What the page read from your files. <b>Download debug report</b> if something looks wrong.</dd>
       </dl>
 
@@ -364,7 +374,8 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
 
 
   <aside id="drawer" class="drawer" aria-labelledby="drawertitle" hidden>
-    <div class="drawerhead"><h2 id="drawertitle"></h2><button id="drawerclose" type="button" title="Close (Esc)">Close</button></div>
+    <div class="drawergrip" id="drawergrip" title="Drag to resize"></div>
+    <div class="drawerhead"><h2 id="drawertitle"></h2><button id="drawerfull" type="button" title="Fill the window (Esc returns)">⤢ Expand</button><button id="drawerclose" type="button" title="Close (Esc)">Close</button></div>
     <div class="drawerbody">
     <div class="panel" data-panel="summary" hidden>
       <p class="panelnote" hidden>Open a save to see this.</p>
@@ -409,6 +420,11 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <th class="l" title="Your units may move through their territory">Right of passage</th>
       <th class="l" title="Civilizations allied with you against them">Your allies against them</th>
       <th class="l">Allied against you with</th>
+      <th class="l" title="Techs they know that you can receive in the trade screen: you know the prerequisites and the tech's era isn't later than yours">Techs they can trade</th>
+      <th class="l" title="Techs you know that they can receive: they know the prerequisites and the tech's era isn't later than theirs">Techs you can trade</th>
+      <th class="l" title="Luxuries from their own sources that you don't have">Their luxuries</th>
+      <th class="l" title="Luxuries from your own sources that they don't have. Luxuries you already give them still show: current deals aren't read">Your luxuries they lack</th>
+      <th title="Gold in their treasury, and the most gold per turn they can offer (estimate). Point at a value for the parts">Gold</th>
     </tr></thead><tbody id="diplorows"></tbody></table></div>
     <p class="histnote">Attitude: worked out with the game's own rule (the save doesn't store it); point at it for the reasons. Treaties count every turn; gifts fade within a few turns; war declarations, broken deals and razed cities stay for most of the game. Only civilizations you have met are listed.</p>
     <div id="wwbox" hidden>
@@ -1527,14 +1543,31 @@ function renderDiplomacy (res) {
       [! p.alive ? 'Destroyed' : (p.atWar ? 'At war' : 'Peace'), 'l ' + (! p.alive ? 'dim' : (p.atWar ? 'red' : ''))],
       [p.embassy ? 'Yes' : '', 'l'],
       [p.rightOfPassage ? 'Yes' : '', 'l'],
-      [p.yourAllies.filter ((k) => byId[k]).map ((k) => byId[k]).join (', '), 'l ' + (p.yourAllies.some ((k) => byId[k]) ? 'green' : '')],
+      [p.yourAllies.filter ((k) => byId[k]).map ((k) => byId[k]).join (', '), 'l wrap ' + (p.yourAllies.some ((k) => byId[k]) ? 'green' : '')],
       // Only civilizations you have met are named; others aren't shown at all
-      [p.alliedAgainstYou.filter ((k) => byId[k]).map ((k) => byId[k]).join (', '), 'l ' + (p.alliedAgainstYou.some ((k) => byId[k]) ? 'red' : '')]
+      [p.alliedAgainstYou.filter ((k) => byId[k]).map ((k) => byId[k]).join (', '), 'l wrap ' + (p.alliedAgainstYou.some ((k) => byId[k]) ? 'red' : '')],
+      ...tradeCells (p)
     ];
     for (const [text, cls, tip] of cells) tr.appendChild (Object.assign (document.createElement ('td'), { textContent: text, className: cls || '', title: tip || '' }));
     if (! p.alive) tr.classList.add ('dim');
     body.appendChild (tr);
   }
+}
+
+// Trade columns: techs and luxuries each side can give, the gold they hold and can pay per turn. At war or destroyed: dimmed
+function tradeCells (p) {
+  if (! p.alive) return [[''], [''], [''], [''], ['']];
+  const noTrade = p.atWar ? 'At war: no trade until peace' : '';
+  const list = (xs, tone) => xs === null ? ['?', 'l dim', 'Known techs not read from this save']
+    : [xs.join (', '), 'l wrap ' + (noTrade ? 'dim' : xs.length ? tone : ''), noTrade];
+  return [
+    list (p.techsTheyGive, 'green'), list (p.techsYouGive, ''),
+    list (p.luxTheyHave, 'green'), list (p.luxYouHave, ''),
+    [`${p.treasury} · ≤${p.maxGpt}/turn`, noTrade ? 'dim' : '',
+     `Treasury: ${p.treasury} gold.\nMost per turn: ${p.maxGpt} = their cities' gold with tax collectors + gold per turn they get from other civs ` +
+     '(game rule 0x55DA60; a small per-city term and interest are left out). What they agree to pay depends on what they get.' +
+     (noTrade ? '\n' + noTrade : '')]
+  ];
 }
 
 // War weariness: your points with each enemy (your own record only) and their effect on a city of size 12
@@ -1765,6 +1798,7 @@ function openPanel (key) {
   state.panel = key;
   $('drawer').hidden = false; document.body.classList.add ('drawer-open');
   $('drawertitle').textContent = PANEL_TITLES[key];
+  applyDrawerLayout ();
   for (const p of document.querySelectorAll ('.panel')) p.hidden = p.dataset.panel !== key;
   for (const b of document.querySelectorAll ('#sidenav button, #editview')) b.classList.toggle ('active', (b.dataset.open || (b.id === 'editview' ? 'columns' : '')) === key);
   // Editors draw only while open
@@ -1777,7 +1811,7 @@ function openPanel (key) {
   fitTable ();
 }
 function closePanel () {
-  $('drawer').hidden = true; state.panel = null; document.body.classList.remove ('drawer-open');
+  $('drawer').hidden = true; state.panel = null; document.body.classList.remove ('drawer-open', 'drawer-full');
   $('viewedit').hidden = true; $('attnedit').hidden = true;
   for (const b of document.querySelectorAll ('#sidenav button, #editview')) b.classList.remove ('active');
   fitTable ();
@@ -1790,7 +1824,44 @@ function syncPanelNote () {
 }
 for (const b of document.querySelectorAll ('#sidenav button')) b.addEventListener ('click', () => openPanel (b.dataset.open));
 $('drawerclose').addEventListener ('click', closePanel);
-document.addEventListener ('keydown', (e) => { if (e.key === 'Escape' && ! $('drawer').hidden && $('fmenu').hidden && ! $('help').open) closePanel (); });
+document.addEventListener ('keydown', (e) => {
+  if (e.key !== 'Escape' || $('drawer').hidden || ! $('fmenu').hidden || $('help').open) return;
+  if (document.body.classList.contains ('drawer-full')) setDrawerLayout ({ full: false }); else closePanel ();
+});
+
+// Each panel keeps its own width and expanded state in this browser
+const DRAWER_DEFAULT_W = { diplomacy: 1000, history: 820, governments: 820 };
+function loadDrawerLayouts () { try { return JSON.parse (localStorage.getItem ('civ3viewer.drawer') || '{}') || {}; } catch (e) { return {}; } }
+function drawerLayout (key) { return { w: DRAWER_DEFAULT_W[key] || 640, full: false, ...(loadDrawerLayouts ()[key] || {}) }; }
+function setDrawerLayout (change) {
+  const key = state.panel; if (! key) return;
+  const all = loadDrawerLayouts (); all[key] = { ...drawerLayout (key), ...change };
+  try { localStorage.setItem ('civ3viewer.drawer', JSON.stringify (all)); } catch (e) { /* ignore */ }
+  applyDrawerLayout ();
+}
+const maxDrawerW = () => Math.max (320, window.innerWidth - 132 - 280);
+function applyDrawerLayout () {
+  const l = drawerLayout (state.panel);
+  document.documentElement.style.setProperty ('--drawer-w', Math.min (l.w, maxDrawerW ()) + 'px');
+  document.body.classList.toggle ('drawer-full', l.full);
+  $('drawerfull').classList.toggle ('active', l.full);
+  $('drawerfull').textContent = l.full ? '⤡ Side' : '⤢ Expand';
+  $('drawerfull').title = l.full ? 'Back to the side (Esc)' : 'Fill the window (Esc returns)';
+  fitTable ();
+}
+$('drawerfull').addEventListener ('click', () => setDrawerLayout ({ full: ! drawerLayout (state.panel).full }));
+$('drawergrip').addEventListener ('pointerdown', (e) => {
+  e.preventDefault (); $('drawergrip').setPointerCapture (e.pointerId); document.body.classList.add ('drawer-resizing');
+  const move = (ev) => document.documentElement.style.setProperty ('--drawer-w', Math.round (Math.max (320, Math.min (maxDrawerW (), window.innerWidth - ev.clientX))) + 'px');
+  const up = () => {
+    $('drawergrip').removeEventListener ('pointermove', move); $('drawergrip').removeEventListener ('pointerup', up);
+    document.body.classList.remove ('drawer-resizing');
+    setDrawerLayout ({ w: parseInt (getComputedStyle (document.documentElement).getPropertyValue ('--drawer-w'), 10) });
+  };
+  $('drawergrip').addEventListener ('pointermove', move); $('drawergrip').addEventListener ('pointerup', up);
+});
+$('drawergrip').addEventListener ('dblclick', () => setDrawerLayout ({ w: DRAWER_DEFAULT_W[state.panel] || 640 }));
+window.addEventListener ('resize', () => { if (state.panel) applyDrawerLayout (); });
 
 // Governments: the empire's totals under each one, with the slider in use; your own buildings (ticks not included)
 function renderGovernments (res) {

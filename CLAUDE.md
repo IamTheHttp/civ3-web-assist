@@ -88,6 +88,14 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   base size (high) or size/2 (low; GOVT +560), per enemy at war ≤30 → 0, 31–60 → ½, 61–120 → 1, >120 → 2 × base, summed,
   at most the size. CITY +152..+160 store unhappiness causes in % (+153 base, +154 war weariness): the formula matches
   **49/49** cities that have unhappy citizens (all civs, all Republic).
+- Trade (Diplomacy columns): the trade screen (exe 0x50FA60) lists a tech when one side knows it and the other can research it
+  (0x561580: prerequisites TECH +88..+100 known, TECH +72 era ≤ the receiver's era LEAD +224) and TECH +104 lacks 0x80000
+  (0x437F80; none in the default rules). No embassy needed (confirmed in-game). Luxuries: CITY +132 = bitmask of GOOD
+  (+60 class: 1 luxury) a city reaches from its civ's own sources, imports not included; France shows only Dyes
+  (confirmed in-game). Treasury = LEAD +48 + +52 (`Leader_set_treasury` 0x4C2350). Most gold per turn a civ can offer
+  (0x55DA60) = cities' gold + tax collectors + gold per turn received + a per-city term (city +624 in memory, unknown) +
+  interest; the viewer leaves out the last two (not checked: France offered 67/turn for 3 techs, limit shown 154).
+  What the AI accepts (`Leader_consider_trade` 0x440EE0) isn't decoded.
 - Current buildings = BITM bitmap, not BINF history (captured cities keep the history of destroyed Palaces etc.).
 
 ## How to work here

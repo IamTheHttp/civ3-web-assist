@@ -81,8 +81,11 @@ const Civ3Parse = (() => {
 			terrainYields: terr ? terr.map ((e) => { const t = e + 8 + Math.ceil (i32 (e + 4) / 8);
 				return { irrigation: i32 (t + 64), mining: i32 (t + 68), road: i32 (t + 72), food: i32 (t + 84), shields: i32 (t + 88), commerce: i32 (t + 92) }; }) : [],
 			// Resources (OpenCiv3 Good.cs): prerequisite tech and the yield they add
-			goods: good ? good.map ((e) => ({ name: readAscii (b, e + 4, 24), prereq: i32 (e + 76), food: i32 (e + 80), shields: i32 (e + 84), commerce: i32 (e + 88) })) : [],
-			techs: tech ? tech.map ((e) => ({ name: readAscii (b, e + 4, 32) })) : [],
+			// +60 class: 0 bonus, 1 luxury, 2 strategic
+			goods: good ? good.map ((e) => ({ name: readAscii (b, e + 4, 24), type: i32 (e + 60), prereq: i32 (e + 76), food: i32 (e + 80), shields: i32 (e + 84), commerce: i32 (e + 88) })) : [],
+			// TECH +72 era, +88..+100 prerequisites (-1: none), +104 flags (0x80000: cannot be traded)
+			techs: tech ? tech.map ((e) => ({ name: readAscii (b, e + 4, 32), era: i32 (e + 72),
+				prereqs: [0, 1, 2, 3].map ((j) => i32 (e + 88 + 4 * j)).filter ((x) => x >= 0), noTrade: (i32 (e + 104) & 0x80000) !== 0 })) : [],
 			// +208: the unit needs support (C3X UnitType.requires_support)
 			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84), requiresSupport: i32 (e + 208) !== 0 })) : [],
 			// OpenCiv3 Govt.cs: +12 buildings need maintenance, +20 tile penalty (-1 on a yield above 2), +24 trade bonus
@@ -669,7 +672,15 @@ const Civ3Parse = (() => {
 			const remaining = i32 (gameOff + 84) >>> 0;
 			let cityOk = 0;
 			const owners = {};
-			for (const off of findAll (b, 'CITY', gameOff)) if (i32 (off + 4) === 136) owners[u8 (off + 16)] = (owners[u8 (off + 16)] || 0) + 1;
+			// Per owner: the resources its cities reach (CITY +132, one bit per GOOD; the civ's own sources, imports not
+			// included: checked, France lacks the Gems and Silks it gets from you) and its cities' gold with tax collectors
+			const resMask = {}, cityGold = {};
+			for (const off of findAll (b, 'CITY', gameOff)) if (i32 (off + 4) === 136) {
+				const o = u8 (off + 16);
+				owners[o] = (owners[o] || 0) + 1;
+				resMask[o] = (resMask[o] || 0) | i32 (off + 132);
+				cityGold[o] = (cityGold[o] || 0) + i32 (off + 524) + i32 (off + 536);
+			}
 			// AI attitude toward you, transcribed from the game (GOG Leader_get_attitude_toward 0x440100; checked in-game: 4 of 4
 			// civilizations). Lower is better. The AI's memory of each player is 19 ints at LEAD +412 + 76 x player (field
 			// meanings inferred from the code that writes them). Not decoded: resource deals (-5 each) and the game's AI
@@ -738,6 +749,19 @@ const Civ3Parse = (() => {
 				const word = s < -band ? 'Gracious' : s > band ? 'Furious' : s < 0 ? 'Polite' : s === 0 ? 'Cautious' : 'Annoyed';
 				return { score: s, word, reasons, band };
 			};
+			// Trade screen (GOG 0x50FA60): a tech is listed when one side knows it and the other can research it
+			// (0x561580: all prerequisites known, its era not later than the receiver's era, LEAD +224) and it may be traded
+			// (0x437F80: TECH +104 bit 0x80000 clear). No embassy needed (checked in-game).
+			const techsOk = result.knownTechs !== null;
+			const knows = (p, t) => ((i32 (techStart + 4 * t) >>> p) & 1) === 1;
+			const canReceive = (lo, p, t) => ! knows (p, t) && ! rules.techs[t].noTrade && rules.techs[t].era <= i32 (lo + 224) &&
+				rules.techs[t].prereqs.every ((x) => knows (p, x));
+			const tradeTechs = (from, to, toLead) => techsOk ? rules.techs.map ((t, k) => knows (from, k) && canReceive (toLead, to, k) ? t.name : null).filter (Boolean) : null;
+			const luxuries = (p) => rules.goods.map ((g, k) => g.type === 1 && ((resMask[p] >>> k) & 1) ? g.name : null).filter (Boolean);
+			const myLux = luxuries (player);
+			// Most gold per turn a civ can offer (GOG 0x55DA60): its cities' gold with tax collectors + gold per turn it gets
+			// from other civs + a per-city term and interest (not transcribed: building upkeep and unit costs aren't subtracted)
+			const gptIn = (id) => { let n = 0; for (const lo of Object.values (leadOf)) n += Math.max (0, i32 (lo + 3612 + 4 * id)); return n; };
 			leads.forEach ((o, k) => {
 				const id = i32 (o + 8), race = i32 (o + 12);
 				if (id <= 0 || id === player || id >= 32 || race < 0 || ! rules.civs[race]) return;
@@ -764,7 +788,11 @@ const Civ3Parse = (() => {
 					rightOfPassage: ((i32 (mine + 3868 + 4 * id) >>> 1) & 1) === 1,
 					attitude: attitudeOf (id),
 					// Your war weariness points toward them (LEAD +3228; Leader +0xCB0 in memory)
-					warWeariness: i32 (mine + 3228 + 4 * id)
+					warWeariness: i32 (mine + 3228 + 4 * id),
+					techsTheyGive: tradeTechs (id, player, mine), techsYouGive: tradeTechs (player, id, o),
+					luxTheyHave: luxuries (id).filter ((x) => ! myLux.includes (x)), luxYouHave: myLux.filter ((x) => ! luxuries (id).includes (x)),
+					// Treasury: LEAD +48 + +52 (GOG Leader_set_treasury 0x4C2350 splits it in two)
+					treasury: i32 (o + 48) + i32 (o + 52), maxGpt: (cityGold[id] || 0) + gptIn (id)
 				});
 			});
 			// War weariness in your cities (GOG 0x4BD780 and 0x4BD6D0), checked against the cause shares the game stores
