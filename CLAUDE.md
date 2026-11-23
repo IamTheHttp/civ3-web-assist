@@ -93,9 +93,12 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   (0x437F80; none in the default rules). No embassy needed (confirmed in-game). Luxuries: CITY +132 = bitmask of GOOD
   (+60 class: 1 luxury) a city reaches from its civ's own sources, imports not included; France shows only Dyes
   (confirmed in-game). Treasury = LEAD +48 + +52 (`Leader_set_treasury` 0x4C2350; France 100, confirmed in-game). 0x55DA60 caps only the gold per turn
-  that you offer (cities' gold + tax collectors + gold per turn received + a per-city term + interest). What an AI offers
-  comes from `Leader_consider_trade` 0x440EE0 (not decoded): France offered at most 67/turn for Banking, Physics and
-  Metallurgy, above its net income (48 by the viewer's rules).
+  that you offer. An AI refuses to pay more gold per turn than its net gold per turn − its cities − 1
+  (`Leader_consider_trade` 0x440EE0; each gold per turn counts 18 in its deal value): France 80 − 12 − 1 = 67, confirmed
+  in-game. Net gold per turn (`Leader_compute_income` 0x55DD50) = cities' gold + tax collectors + gold per turn received −
+  paid (living players) − building upkeep (CITY +20) − unit support; an AI gets DIFF +92 more free units and DIFF +96 per
+  city (Monarch 4 and 1; exe 0x55D310). Not transcribed: a per-city term (City +624 in memory) and interest. The same rule
+  gives your +33.
 - Current buildings = BITM bitmap, not BINF history (captured cities keep the history of destroyed Palaces etc.).
 
 ## How to work here

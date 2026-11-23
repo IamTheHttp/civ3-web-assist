@@ -1,7 +1,9 @@
 # Diplomacy data
 
 - Trade columns: techs each side can trade, luxuries each side has that the other lacks (own sources only, so a luxury you
-  already give still shows), treasury. No gold-per-turn column: the AI's offer isn't decoded. Rules and offsets in `CLAUDE.md`. In the Maya save the
+  already give still shows), treasury, and the most gold per turn the AI pays (net gold per turn − cities − 1;
+  rule in `CLAUDE.md`). Below that cap, whether it agrees depends on its deal value (`Leader_consider_trade`: each gold
+  per turn counts 18 on either side; tech values from 0x448BF0, luxuries 0x43B730) — not transcribed. Rules and offsets in `CLAUDE.md`. In the Maya save the
   player leads in tech: no AI has a tech to give, and the AIs (era 1) can't receive era-2 techs.
 - Read and shown: attitude (with its reasons, such as your war declarations on them), government, cities, total culture and
   ratio to yours, at war, embassy,

@@ -96,7 +96,9 @@ const Civ3Parse = (() => {
 				freeUnits: i32 (e + 540), freePerSize: [i32 (e + 544), i32 (e + 548), i32 (e + 552)], unitCost: i32 (e + 556),
 				// War weariness level (+560): 0 none, 1 low, 2 high
 				warWeariness: i32 (e + 560) })),
-			difficulties: diff.map ((e) => ({ name: readAscii (b, e + 4, 64), contentCitizens: i32 (e + 68), costFactor: i32 (e + 104), optimalPercent: i32 (e + 108), corruptionPercent: i32 (e + 116) })),
+			// +92 / +96: free units for an AI player, and more per city (GOG 0x55D310)
+			difficulties: diff.map ((e) => ({ name: readAscii (b, e + 4, 64), contentCitizens: i32 (e + 68), costFactor: i32 (e + 104),
+				aiFreeUnits: i32 (e + 92), aiFreeUnitsPerCity: i32 (e + 96), optimalPercent: i32 (e + 108), corruptionPercent: i32 (e + 116) })),
 			worldSizes: wsiz.map ((e) => ({ optimalCities: i32 (e + 4) })),
 			civs: [], maxTown: 6, maxCity: 12,
 			calendar: game ? calendarOf (b, game[0]) : null
@@ -674,11 +676,23 @@ const Civ3Parse = (() => {
 			const owners = {};
 			// Per owner: the resources its cities reach (CITY +132, one bit per GOOD; the civ's own sources, imports not
 			// included: checked, France lacks the Gems and Silks it gets from you)
-			const resMask = {};
+			// and the figures of its net gold per turn: gold with tax collectors, building upkeep (+20), cities by size class
+			const resMask = {}, cityGold = {}, upkeep = {}, sizeClasses = {};
 			for (const off of findAll (b, 'CITY', gameOff)) if (i32 (off + 4) === 136) {
-				const o = u8 (off + 16);
+				const o = u8 (off + 16), size = i32 (off + 552);
 				owners[o] = (owners[o] || 0) + 1;
 				resMask[o] = (resMask[o] || 0) | i32 (off + 132);
+				cityGold[o] = (cityGold[o] || 0) + i32 (off + 524) + i32 (off + 536);
+				upkeep[o] = (upkeep[o] || 0) + i32 (off + 20);
+				(sizeClasses[o] = sizeClasses[o] || [0, 0, 0])[size > rules.maxCity ? 2 : size > rules.maxTown ? 1 : 0]++;
+			}
+			// Units per owner, and those that cost support (own nationality, a type that needs support)
+			const unitsOf = {}, supportedOf = {};
+			for (const u of findAll (b, 'UNIT', gameOff)) if (i32 (u + 4) === 472) {
+				const ow = i32 (u + 28), t = rules.units[i32 (u + 40)];
+				unitsOf[ow] = (unitsOf[ow] || 0) + 1;
+				const lo = leads.find ((o) => i32 (o + 8) === ow);
+				if (lo && i32 (u + 32) === i32 (lo + 12) && t && t.requiresSupport) supportedOf[ow] = (supportedOf[ow] || 0) + 1;
 			}
 			// AI attitude toward you, transcribed from the game (GOG Leader_get_attitude_toward 0x440100; checked in-game: 4 of 4
 			// civilizations). Lower is better. The AI's memory of each player is 19 ints at LEAD +412 + 76 x player (field
@@ -758,6 +772,28 @@ const Civ3Parse = (() => {
 			const tradeTechs = (from, to, toLead) => techsOk ? rules.techs.map ((t, k) => knows (from, k) && canReceive (toLead, to, k) ? t.name : null).filter (Boolean) : null;
 			const luxuries = (p) => rules.goods.map ((g, k) => g.type === 1 && ((resMask[p] >>> k) & 1) ? g.name : null).filter (Boolean);
 			const myLux = luxuries (player);
+			// Net gold per turn of a player (GOG Leader_compute_income 0x55DD50): cities' gold with tax collectors + gold per
+			// turn received - paid (living players only) - building upkeep - unit support. Unit support (0x55D310): an AI
+			// player gets DIFF +92 more free units, and DIFF +96 per city. Left out: a per-city term (City +624 in memory) and
+			// interest (Wall Street-type wonders). Checked: France 136 + 18 - 6 - 26 - 42 = 80.
+			const alive = (k) => ((remaining >>> k) & 1) === 1;
+			const netGold = (lo) => {
+				const id = i32 (lo + 8), gv = rules.governments[i32 (lo + 140)], dv = rules.difficulties[result.difficultyId];
+				let gIn = 0, gOut = 0;
+				for (const [kk, other] of Object.entries (leadOf)) {
+					const kn = +kk; if (kn === id || ! alive (kn)) continue;
+					gIn += Math.max (0, i32 (other + 3612 + 4 * id)); gOut += Math.max (0, i32 (lo + 3612 + 4 * kn));
+				}
+				let support = 0;
+				if (gv && gv.freeUnits >= 0) {
+					const cl = sizeClasses[id] || [0, 0, 0], cities = cl[0] + cl[1] + cl[2];
+					let allowed = gv.freeUnits + cl[0] * gv.freePerSize[0] + cl[1] * gv.freePerSize[1] + cl[2] * gv.freePerSize[2];
+					if (! ((humanBits >>> id) & 1) && dv) allowed += dv.aiFreeUnits + dv.aiFreeUnitsPerCity * cities;
+					if (cities) support = Math.max (0, (supportedOf[id] || 0) - allowed) * gv.unitCost;
+				}
+				const parts = { cities: cityGold[id] || 0, received: gIn, paid: gOut, upkeep: upkeep[id] || 0, units: support };
+				return { ...parts, net: parts.cities + gIn - gOut - parts.upkeep - support };
+			};
 			leads.forEach ((o, k) => {
 				const id = i32 (o + 8), race = i32 (o + 12);
 				if (id <= 0 || id === player || id >= 32 || race < 0 || ! rules.civs[race]) return;
@@ -788,7 +824,10 @@ const Civ3Parse = (() => {
 					techsTheyGive: tradeTechs (id, player, mine), techsYouGive: tradeTechs (player, id, o),
 					luxTheyHave: luxuries (id).filter ((x) => ! myLux.includes (x)), luxYouHave: myLux.filter ((x) => ! luxuries (id).includes (x)),
 					// Treasury: LEAD +48 + +52 (GOG Leader_set_treasury 0x4C2350 splits it in two)
-					treasury: i32 (o + 48) + i32 (o + 52)
+					treasury: i32 (o + 48) + i32 (o + 52),
+					// Most gold per turn an AI agrees to pay (GOG Leader_consider_trade 0x440EE0): more than its net gold per
+					// turn - its cities - 1 and it refuses the deal. Checked in-game: France 80 - 12 - 1 = 67
+					income: netGold (o), maxGpt: Math.max (0, netGold (o).net - cities - 1)
 				});
 			});
 			// War weariness in your cities (GOG 0x4BD780 and 0x4BD6D0), checked against the cause shares the game stores
@@ -819,6 +858,7 @@ const Civ3Parse = (() => {
 			const myCult = culs.find ((c) => c > mine && (leads.indexOf (mine) + 1 >= leads.length || c < leads[leads.indexOf (mine) + 1]));
 			result.myCulture = myCult ? { total: i32 (myCult + 12), perTurn: i32 (myCult + 16) } : null;
 			const cityCulture = result.cities.reduce ((n, c) => n + c.culture, 0);
+			{ const g = netGold (mine); diag.push (`Net gold per turn by the game's income rule: yours ${g.net} (cities ${g.cities} + ${g.received} received - ${g.paid} paid - ${g.upkeep} upkeep - ${g.units} units)`); }
 			diag.push (`Players met: ${result.players.length}; city counts match ${cityOk}/${result.players.length}; ` +
 			           `your culture last turn ${result.myCulture ? result.myCulture.perTurn : '?'} (sum of your cities: ${cityCulture})`);
 		}
