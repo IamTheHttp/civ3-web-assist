@@ -20,4 +20,6 @@
 - **Signals over raw numbers:** payback turns for buildings; green / amber / grey.
 - **Yields have a worth in gold** (Tiers → Building payback): shield and food 4, gold, science and luxury 1 by default.
   Payback = cost in shields × shield worth ÷ the gain's worth per turn (10 shields for +1 gold a turn = 40 turns).
+  4 gold a shield is the game's buy price for a building not started: a Marketplace (100 shields) costs 400 gold
+  (seen in-game; the price for a partly built one isn't checked).
 - Likes sane defaults that are editable (tiers, milestones, payback limits).
