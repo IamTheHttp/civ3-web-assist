@@ -154,6 +154,13 @@ body.drawer-full .drawergrip { display: none; }
 @media (max-width: 760px) { body.drawer-full .drawer { left: 0; } .drawergrip { display: none; } }
 .searchbar { display: flex; gap: 10px; align-items: center; margin: 0 0 8px; }
 #search { flex: 0 1 460px; font-size: 14px; padding: 6px 10px; }
+.fxtip { position: fixed; z-index: 40; pointer-events: none; background: var(--panel); border: 1px solid var(--line);
+         border-radius: 6px; padding: 6px 10px; box-shadow: 0 6px 18px rgba(0,0,0,.3); font-size: 13px; }
+.fxtip table { border-collapse: collapse; }
+.fxtip td { border: 0; padding: 1px 6px 1px 0; white-space: nowrap; text-align: left; background: none; }
+.fxtip td.n { text-align: right; font-variant-numeric: tabular-nums; }
+.fxtip img { height: 15px; vertical-align: -3px; }
+.fxtip .foot { color: var(--muted); margin-top: 4px; font-size: 12px; }
 span.yield { white-space: nowrap; display: inline-block; margin-left: 8px; }
 span.yield img { height: 15px; vertical-align: -3px; position: relative; }
 span.yield.neg img { filter: drop-shadow(0 0 1px #ff3b30) drop-shadow(0 0 1px #ff3b30); }
@@ -362,6 +369,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
 
 
   <div id="fmenu" class="fmenu" role="dialog" aria-label="Filter" hidden></div>
+  <div id="fxtip" class="fxtip" role="tooltip" hidden></div>
 
   <div class="searchbar" id="searchbar" hidden>
     <input id="search" type="search" placeholder="Search the table: a city, library, max, at war…   ( / )" aria-label="Search the table">
@@ -1854,11 +1862,17 @@ function effectOf (c, key) {
   item (dl, 'lux', 'luxury');
   item (dsh, 'shd', 'shield');
   item (df, 'food', 'food');
+  // One line per resource for the hover box: [icon, name, change], gold and upkeep apart
+  const lines = [['science', 'Science', ds], ['gold', 'Gold', dg], ['upkeep', 'Upkeep', -du], ['luxury', 'Luxury', dl],
+                 ['shield', 'Shields', dsh], ['food', 'Food', df]].filter ((x) => x[2]);
   const detail = [ds && `${sign (ds)} science`, dg && `${sign (dg)} gold`, du && `−${du} upkeep`, dl && `${sign (dl)} luxury`, dsh && `${sign (dsh)} shields`, df && `${sign (df)} food`].filter (Boolean).join (', ') || 'no change';
   // Payback: build cost ÷ net gain per turn, both in gold
   const cost = buildCost (id), costG = cost ? cost * V.shield : null, payback = gain > 0 && costG ? Math.ceil (costG / gain) : null;
   const g = (v) => +v.toFixed (2), worth = `Worth in gold: shield ${g (V.shield)}, food ${g (V.food)}, gold ${g (V.gold)}, science ${g (V.science)}, luxury ${g (V.luxury)} (set in Tiers).`;
-  return { value: gain, payback, sort: gain, text: parts.map ((x) => x.text).join (', ') || '0', parts,
+  const foot = [`Total ${sign (g (gain))} gold a turn (worth: shield ${g (V.shield)}, food ${g (V.food)}, gold ${g (V.gold)}, science ${g (V.science)}, luxury ${g (V.luxury)})`,
+                payback ? `Costs ${cost} shields = ${g (costG)} gold · pays back in ${payback} turns` : `Costs ${cost} shields · never pays back`];
+  if (at.trim ()) foot.push (at.trim ());
+  return { value: gain, payback, sort: gain, text: parts.map ((x) => x.text).join (', ') || '0', parts, lines, foot,
            tip: detail + '.\n' + (payback ? `Costs ${cost} shields = ${g (costG)} gold; gains ${g (gain)} gold a turn; pays back in ${payback} turns.`
                          : `Costs ${cost} shields; the gain doesn't cover its upkeep, so it never pays back.`) + at + '\n' + worth };
 }
@@ -1876,12 +1890,12 @@ const ICON_W = { shield: 13, gold: 16, upkeep: 16, science: 9, luxury: 10, food:
 // px); a gold loss is red coins, another loss has a red edge. The text stays for search, CSV, the tooltip and as the
 // fallback.
 function renderEffect (td, e) {
+  if (e.lines) td.fx = e;
   if (! e.parts || ! e.parts.length || ! Object.keys (ICONS).length) return;
   td.textContent = '';
   for (const x of e.parts) {
     const n = Math.abs (parseInt (x.v.replace ('−', '-'), 10)) || 0, w = ICON_W[x.icon] || 14, span = document.createElement ('span');
     span.className = 'yield' + (! x.loss && /^[−-]/.test (x.v) ? ' neg' : '');
-    span.title = x.text;
     const step = Math.min (w + 1, Math.max (3, 64 / Math.max (1, n)));
     for (let k = 0; k < Math.max (1, n); k++)
       span.appendChild (Object.assign (document.createElement ('img'), { src: ICONS[x.icon], alt: k ? '' : x.text, style: `margin-right:${Math.round (step - w)}px` }));
@@ -1898,8 +1912,37 @@ function gainClass (e) {
 // An Effect column: sorts by the gain (largest first), coloured by it
 function effectColumn (key, extra) {
   return { ...extra, val: (c) => effectOf (c, key).sort ?? effectOf (c, key).value, show: (c) => effectOf (c, key).text, csv: (c) => effectOf (c, key).text,
-           cls: (c) => gainClass (effectOf (c, key)), render: (c, td) => renderEffect (td, effectOf (c, key)), tip: (c) => effectOf (c, key).tip || '', firstDir: -1 };
+           cls: (c) => gainClass (effectOf (c, key)), render: (c, td) => renderEffect (td, effectOf (c, key)), tip: (c) => effectOf (c, key).lines ? '' : effectOf (c, key).tip || '', firstDir: -1 };
 }
+
+// The Effect hover box: shows at once, one line per resource change, then the total and the payback
+function showFxTip (td, ev) {
+  const e = td.fx, box = $('fxtip'); box.textContent = '';
+  const t = document.createElement ('table');
+  for (const [icon, name, v] of e.lines) {
+    const tr = t.insertRow ();
+    const a = tr.insertCell (); if (ICONS[icon]) a.appendChild (Object.assign (document.createElement ('img'), { src: ICONS[icon], alt: '' }));
+    tr.insertCell ().textContent = name;
+    Object.assign (tr.insertCell (), { className: 'n ' + (v < 0 ? 'red' : 'green'), textContent: (v > 0 ? '+' : '−') + Math.abs (v) });
+  }
+  if (! e.lines.length) t.insertRow ().insertCell ().textContent = 'No change';
+  box.appendChild (t);
+  for (const f of e.foot) box.appendChild (Object.assign (document.createElement ('div'), { className: 'foot', textContent: f }));
+  box.hidden = false; moveFxTip (ev);
+}
+function moveFxTip (ev) {
+  const box = $('fxtip'), r = box.getBoundingClientRect ();
+  let x = ev.clientX + 14, y = ev.clientY + 16;
+  if (x + r.width > window.innerWidth - 8) x = ev.clientX - r.width - 14;
+  if (y + r.height > window.innerHeight - 8) y = ev.clientY - r.height - 12;
+  box.style.left = Math.max (8, x) + 'px'; box.style.top = Math.max (8, y) + 'px';
+}
+document.addEventListener ('mouseover', (ev) => {
+  const td = ev.target.closest && ev.target.closest ('td');
+  if (td && td.fx) showFxTip (td, ev); else $('fxtip').hidden = true;
+});
+document.addEventListener ('mousemove', (ev) => { if (! $('fxtip').hidden) moveFxTip (ev); });
+window.addEventListener ('scroll', () => { $('fxtip').hidden = true; }, true);
 
 // Commerce buildings from the rules that can be ticked: non-wonders that boost science, gold or luxury
 // Buildings that can be ticked: non-wonders that boost science, gold or luxury, then the production buildings (Factory,
