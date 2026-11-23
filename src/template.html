@@ -550,6 +550,11 @@ const BASE_COLUMNS = [
   { key: 'science', sec: 'output', label: 'Sci', title: 'Science after Library etc.', val: (c) => wi (c).science, show: (c) => arrow (c.science, wi (c).science), cls: (c) => wiCls (c, 'science', true), total: true },
   { key: 'upkeep', sec: 'other', label: 'Upkeep', val: (c) => wi (c).upkeep, show: (c) => arrow (c.upkeep, wi (c).upkeep), cls: (c) => wiCls (c, 'upkeep'), total: true, title: 'Building maintenance per turn' },
   { key: 'culture', sec: 'other', label: 'Culture', val: (c) => c.culture, total: true, title: 'Culture per turn' },
+  { key: 'flip', sec: 'other', label: 'Flip %', title: 'Chance per turn that the city flips to another civilization by culture (the game\'s rule). Point at a value for the reasons',
+    val: (c) => c.flip ? (c.flip.immune || c.flip.capital ? -1 : c.flip.chance * 100) : -2,
+    show: (c) => ! c.flip ? '' : c.flip.capital ? 'capital' : c.flip.immune ? `immune ${c.flipImmunity}` : c.flip.chance ? (c.flip.chance * 100).toFixed (2) + '%' : '0',
+    cls: (c) => ! c.flip || ! c.flip.chance ? 'dim' : c.flip.chance >= 0.01 ? 'red' : c.flip.chance >= 0.002 ? 'amber' : '',
+    tip: (c) => flipTip (c) },
   { key: 'status', sec: 'other', label: 'Status', title: 'In disorder, or celebrating (We Love the King Day)', l: true, val: (c) => c.disorder ? 2 : (c.celebrating ? 1 : 0),
     show: (c) => c.disorder ? 'Disorder' : (c.celebrating ? 'Celebrating' : ''), cls: (c) => c.disorder ? 'red' : 'green' },
   { key: 'build', sec: 'build', label: 'Production', title: 'What the city builds, and turns to finish', l: true, val: (c) => c.buildName, show: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : ''),
@@ -570,7 +575,7 @@ let state = { result: null, sortKey: 'size', sortDir: -1, fileName: '', loadedAt
 
 // ---------- views: named sets of columns, saved in this browser ----------
 const DEFAULT_VIEWS = [
-  { name: 'Overview', columns: ['name', 'size', 'happy', 'content', 'unhappy', 'grow', 'foodNet', 'shields', 'commerce', 'corruptionPct', 'gold', 'luxury', 'science', 'status', 'build'] },
+  { name: 'Overview', columns: ['name', 'size', 'happy', 'content', 'unhappy', 'grow', 'foodNet', 'shields', 'commerce', 'corruptionPct', 'gold', 'luxury', 'science', 'flip', 'status', 'build'] },
   { name: 'Growth & happiness', columns: ['name', 'size', 'happy', 'content', 'unhappy', 'resisters', 'spec', 'foreign', 'grow', 'foodNet', 'box', 'luxury', 'status', 'build'] },
   { name: 'Corruption management', columns: ['name', 'size', 'shields', 'waste', 'wastePct', 'netShields', 'commerce', 'corruption', 'corruptionPct', 'netCommerce', 'ch', 'ps', 'chEffect', 'psEffect', 'upkeep', 'build'] },
   { name: 'Science & gold buildings', columns: ['name', 'size', 'commerce', 'corruptionPct', 'gold', 'science', 'bt:Library', 'bt:University', 'bt:Research Lab', 'bt:Marketplace', 'bt:Bank', 'bt:Stock Exchange',
@@ -826,6 +831,20 @@ function buildCost (id) {
   const cost = b.cost * 10;
   return state.result.accelerated ? Math.ceil (cost / 2) : cost;
 }
+// Culture flip: one line per civilization the city could flip to, with the parts of the game's rule
+function flipTip (c) {
+  if (! c.flip) return '';
+  if (c.flip.capital) return 'A capital never flips';
+  if (c.flip.immune) return `Can't flip for ${c.flipImmunity} more ${c.flipImmunity === 1 ? 'turn' : 'turns'}`;
+  if (! c.flip.by.length) return 'No civilization has citizens here or more than 2 tiles in its area, or its score is cancelled by units and culture';
+  const names = Object.fromEntries ((state.result.players || []).map ((p) => [p.id, p.name]));
+  const lines = c.flip.by.map ((x) => `${names[x.id] || 'A civilization you haven\'t met'}: ${(x.chance * 100).toFixed (2)}% a turn` +
+    ` (score ${x.P} / ${x.D}: ${x.citizens} of their citizens, ${x.tiles} of their tiles near` + (x.moreCulture ? ', more culture here than you' : '') +
+    `, −${x.units} for your military units)`);
+  return lines.join ('\n') + '\nScore: citizens + tiles − 2 (at most 10), ×2 in disorder, ×2 if they have more culture here, × their culture ÷ yours (at most ×4), ÷2 celebrating, − military units. ' +
+    'Chance = score ÷ (2000 × distance to their capital ÷ distance to yours, 500–8000). Not counted: ×1.4 the turn after you lose a city.';
+}
+
 // Game icons (shield, gold, upkeep, science, luxury, food), inlined by build.py from src/icons
 const ICONS = /*ICONS*/{};
 // Icon widths at the cell's 15 px height (from the PNG sizes)

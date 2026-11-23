@@ -105,6 +105,15 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   paid (living players) − building upkeep (CITY +20) − unit support; an AI gets DIFF +92 more free units and DIFF +96 per
   city (Monarch 4 and 1; exe 0x55D310). Not transcribed: a per-city term (City +624 in memory) and interest. The same rule
   gives your +33.
+- Culture flip (exe 0x4B28D0, each city every turn; transcribed, **not checked against a flip**): needs GAME +17 bit 7
+  (culture flipping on); a capital or a city with flip immunity (CITY +64 turns) never flips. Per other living civ k:
+  P = k's citizens in the city (CTZN +296 = k's race; twice if CTZN +8 is set, always 0 on the saves) + k's tiles among
+  the 20 around it (TILE +9 owner) − 2, at most 10; ×2 in disorder (CITY +24 bit0); ×2 if k's culture in the city
+  (CITY +224 + 4k, the culture each owner accumulated) is above the owner's; × (k's CULT +12 + 1) / (owner's + 1),
+  at most ×4; ÷2 celebrating (bit1); − military units on the tile (PRTO +96 attack or +88 defence > 0; UNIT +12/+16
+  position) × DIFF +120 (1). Flips if random(D) < P, D = 2000 × dist(k's capital) / dist(owner's capital), 500..8000;
+  dist = max − ((dx+dy)/2 − min + 1)/2 on wrapped |dx|, |dy|. Not counted: ×1.4 the turn after the owner lost a city by
+  capture (Leader +5576, not in the LEAD record).
 - Current buildings = BITM bitmap, not BINF history (captured cities keep the history of destroyed Palaces etc.).
 
 ## How to work here

@@ -87,7 +87,8 @@ const Civ3Parse = (() => {
 			techs: tech ? tech.map ((e) => ({ name: readAscii (b, e + 4, 32), era: i32 (e + 72),
 				prereqs: [0, 1, 2, 3].map ((j) => i32 (e + 88 + 4 * j)).filter ((x) => x >= 0), noTrade: (i32 (e + 104) & 0x80000) !== 0 })) : [],
 			// +208: the unit needs support (C3X UnitType.requires_support)
-			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84), requiresSupport: i32 (e + 208) !== 0 })) : [],
+			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84), requiresSupport: i32 (e + 208) !== 0,
+				defence: i32 (e + 88), attack: i32 (e + 96) })) : [],
 			// OpenCiv3 Govt.cs: +12 buildings need maintenance, +20 tile penalty (-1 on a yield above 2), +24 trade bonus
 			// (+1 commerce on a tile with commerce)
 			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380), maintenance: i32 (e + 12) !== 0,
@@ -98,7 +99,7 @@ const Civ3Parse = (() => {
 				warWeariness: i32 (e + 560) })),
 			// +92 / +96: free units for an AI player, and more per city (GOG 0x55D310)
 			difficulties: diff.map ((e) => ({ name: readAscii (b, e + 4, 64), contentCitizens: i32 (e + 68), costFactor: i32 (e + 104),
-				aiFreeUnits: i32 (e + 92), aiFreeUnitsPerCity: i32 (e + 96), optimalPercent: i32 (e + 108), corruptionPercent: i32 (e + 116) })),
+				aiFreeUnits: i32 (e + 92), aiFreeUnitsPerCity: i32 (e + 96), flipUnitWeight: i32 (e + 120), optimalPercent: i32 (e + 108), corruptionPercent: i32 (e + 116) })),
 			worldSizes: wsiz.map ((e) => ({ optimalCities: i32 (e + 4) })),
 			civs: [], maxTown: 6, maxCity: 12,
 			calendar: game ? calendarOf (b, game[0]) : null
@@ -334,7 +335,7 @@ const Civ3Parse = (() => {
 			const count = i32 (off + 552), specialistsPopd = i32 (off + 548);
 			if (count < 0 || count > 255 || off + CITY_FIXED + count * CTZN_SIZE > b.length) { rejected++; continue; }
 			let citizensOk = true;
-			const moods = [0, 0, 0, 0, 0], nationalities = {}, specialistTypes = {};
+			const moods = [0, 0, 0, 0, 0], nationalities = {}, specialistTypes = {}, flaggedNat = {};
 			for (let k = 0; k < count; k++) {
 				const c = off + CITY_FIXED + k * CTZN_SIZE;
 				if (readAscii (b, c, 4) !== 'CTZN') { citizensOk = false; break; }
@@ -343,6 +344,7 @@ const Civ3Parse = (() => {
 				if (type === 4) { const st = i32 (c + 292); specialistTypes[st] = (specialistTypes[st] || 0) + 1; }
 				const nat = i32 (c + 296);
 				nationalities[nat] = (nationalities[nat] || 0) + 1;
+				if (b[c + 8]) flaggedNat[nat] = (flaggedNat[nat] || 0) + 1; // memory Citizen +32: counts twice for a culture flip
 			}
 			if (! citizensOk) { rejected++; continue; }
 			// Current buildings: the BITM bitmap after the building history (BINF), one bit per building type
@@ -387,7 +389,11 @@ const Civ3Parse = (() => {
 				specialistTypes, // citizen type id -> count (1 entertainer, 2 tax collector, 3 scientist, ... in the default rules)
 				entertainers: specialistTypes[1] || 0, taxmen: specialistTypes[2] || 0, scientists: specialistTypes[3] || 0,
 				specialistOutput: { luxury: i32 (off + 528), science: i32 (off + 532), gold: i32 (off + 536) }, // kept apart from the city's figures
-				nationalities,
+				nationalities, flaggedNat,
+				// Culture each civilization accumulated in the city while it owned it (CITY +224 + 4k; memory City +320):
+				// the owner's grows by the culture per turn (+220) each turn (GOG City_update_culture 0x4B2680)
+				cultureBy: Array.from ({ length: 32 }, (_, k) => i32 (off + 224 + 4 * k)),
+				flipImmunity: i32 (off + 64), // turns without culture flips (memory City +88)
 				disorder: (flags0 & 1) !== 0, celebrating: (flags0 & 2) !== 0,
 				storedFood: i32 (off + 40),
 				foodTiles: i32 (off + 360), foodEaten: i32 (off + 492), foodNet: i32 (off + 504),
@@ -592,6 +598,7 @@ const Civ3Parse = (() => {
 						c.freshWater = c.river || c.lake;
 					}
 					result.tiles = true;
+					result.tileOwnerAt = (x, y) => { const o = tile (x, y); return o < 0 ? -1 : b[o + 9]; }; // TILE +9: territory owner
 
 					// Worked tiles and their yields under every government, transcribed from the game (GOG
 					// Map_calc_food_yield_at 0x5D7180, Map_calc_shield_yield_at 0x5D75F0, Map_calc_commerce_yield_at 0x5D7AD0).
@@ -873,6 +880,63 @@ const Civ3Parse = (() => {
 				}
 				result.warWeariness = { level, government: gov ? gov.name : '?', checked, match, suffrage: suffrageCount };
 				diag.push (`War weariness (${gov ? gov.name : '?'}, level ${level}): the formula matches the game's unhappiness causes in ${match}/${checked} cities (the others have no unhappy citizen or another cause)`);
+			}
+			// Culture flip chance per turn, transcribed from the game (GOG 0x4B28D0, run for each city every turn). For each
+			// other living civ k: P = its citizens in the city (twice for a citizen flagged at CTZN +8) + its tiles among the
+			// 20 around the city minus 2, at most 10; x2 in disorder; x2 if k has more culture in the city than the owner;
+			// x (k's culture + 1) / (owner's culture + 1), at most x4; /2 while celebrating; minus the military units in the
+			// city (x DIFF +120). The city flips to k if random(D) < P, D = 2000 x distance to k's capital / distance to the
+			// owner's capital, 500..8000 (2000 without capitals). Not counted: x1.4 the turn after the owner lost a city by
+			// capture (Leader +5576, not in the LEAD record). A capital, or a city with flip immunity, never flips.
+			result.flipsOn = cultureFlips;
+			if (cultureFlips && result.tileOwnerAt && world) {
+				const cityAt = {}; for (const off of findAll (b, 'CITY', gameOff)) if (i32 (off + 4) === 136) cityAt[i32 (off + 8)] = { x: i16 (off + 12), y: i16 (off + 14) };
+				const dist = (a, c) => {
+					let dx = Math.abs (a.x - c.x), dy = Math.abs (a.y - c.y);
+					if (world.wrapX && dx > tdiv (world.width, 2)) dx = world.width - dx;
+					if (world.wrapY && dy > tdiv (world.height, 2)) dy = world.height - dy;
+					const mx = Math.max (dx, dy), mn = Math.min (dx, dy);
+					return mx - tdiv (tdiv (dx + dy, 2) - mn + 1, 2);
+				};
+				const ring = []; for (let dx = -4; dx <= 4; dx++) for (let dy = -4; dy <= 4; dy++)
+					if ((dx || dy) && Math.abs (dx) + Math.abs (dy) <= 4 && (dx + dy) % 2 === 0 && ! (Math.abs (dx) === 4 || Math.abs (dy) === 4)) ring.push ([dx, dy]);
+				const military = {}; // units with attack or defence on each tile (GOG count_units_at, filter 4)
+				for (const u of findAll (b, 'UNIT', gameOff)) if (i32 (u + 4) === 472) {
+					const t = rules.units[i32 (u + 40)];
+					if (t && (t.attack > 0 || t.defence > 0)) { const key = i32 (u + 12) + ',' + i32 (u + 16); military[key] = (military[key] || 0) + 1; }
+				}
+				const weight = (rules.difficulties[result.difficultyId] || {}).flipUnitWeight ?? 1;
+				const ownCulture = cultureOf (mine), ownCap = cityAt[capitalId];
+				for (const c of result.cities) {
+					c.flip = { chance: 0, by: [], immune: c.flipImmunity > 0, capital: c.id === capitalId };
+					if (c.flip.immune || c.flip.capital) continue;
+					const units = (military[c.x + ',' + c.y] || 0) * weight;
+					let stay = 1;
+					for (const [kk, lo] of Object.entries (leadOf)) {
+						const k = +kk; if (k <= 0 || k === player || ! ((remaining >>> k) & 1)) continue;
+						const race = i32 (lo + 12), nat = c.nationalities[race] || 0, flagged = (c.flaggedNat || {})[race] || 0;
+						let tiles = 0; for (const [dx, dy] of ring) if (result.tileOwnerAt (c.x + dx, c.y + dy) === k) tiles++;
+						let P = Math.min (10, nat + flagged + Math.max (0, tiles - 2));
+						if (P <= 0) continue;
+						const parts = { citizens: nat + flagged, tiles };
+						if (c.disorder) P *= 2;
+						const moreCulture = c.cultureBy[k] > c.cultureBy[player]; if (moreCulture) P *= 2;
+						const ck = cultureOf (lo);
+						P = ck + 1 > 4 * (ownCulture + 1) ? 4 * P : tdiv (P * (ck + 1), ownCulture + 1);
+						if (c.celebrating) P = tdiv (P, 2);
+						P -= units;
+						if (P <= 0) continue;
+						let D = 2000; const kCap = cityAt[i32 (lo + 24)];
+						if (ownCap && kCap) { const d1 = dist (c, ownCap); D = Math.max (500, Math.min (8000, d1 ? tdiv (2000 * dist (c, kCap), d1) : 8000)); }
+						const chance = Math.min (1, P / D);
+						stay *= 1 - chance;
+						c.flip.by.push ({ id: k, P, D, chance, ...parts, moreCulture, culture: ck, units });
+					}
+					c.flip.chance = 1 - stay;
+				}
+				const atRisk = result.cities.filter ((c) => c.flip && c.flip.chance > 0);
+				diag.push (`Culture flips (the game's rule, GOG 0x4B28D0; not checked against a flip): ${atRisk.length} of your cities can flip` +
+					(atRisk.length ? `; highest ${Math.max (...atRisk.map ((c) => c.flip.chance * 100)).toFixed (2)}% a turn` : ''));
 			}
 			const myCult = culs.find ((c) => c > mine && (leads.indexOf (mine) + 1 >= leads.length || c < leads[leads.indexOf (mine) + 1]));
 			result.myCulture = myCult ? { total: i32 (myCult + 12), perTurn: i32 (myCult + 16) } : null;

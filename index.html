@@ -717,7 +717,8 @@ const Civ3Parse = (() => {
 			techs: tech ? tech.map ((e) => ({ name: readAscii (b, e + 4, 32), era: i32 (e + 72),
 				prereqs: [0, 1, 2, 3].map ((j) => i32 (e + 88 + 4 * j)).filter ((x) => x >= 0), noTrade: (i32 (e + 104) & 0x80000) !== 0 })) : [],
 			// +208: the unit needs support (C3X UnitType.requires_support)
-			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84), requiresSupport: i32 (e + 208) !== 0 })) : [],
+			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84), requiresSupport: i32 (e + 208) !== 0,
+				defence: i32 (e + 88), attack: i32 (e + 96) })) : [],
 			// OpenCiv3 Govt.cs: +12 buildings need maintenance, +20 tile penalty (-1 on a yield above 2), +24 trade bonus
 			// (+1 commerce on a tile with commerce)
 			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380), maintenance: i32 (e + 12) !== 0,
@@ -728,7 +729,7 @@ const Civ3Parse = (() => {
 				warWeariness: i32 (e + 560) })),
 			// +92 / +96: free units for an AI player, and more per city (GOG 0x55D310)
 			difficulties: diff.map ((e) => ({ name: readAscii (b, e + 4, 64), contentCitizens: i32 (e + 68), costFactor: i32 (e + 104),
-				aiFreeUnits: i32 (e + 92), aiFreeUnitsPerCity: i32 (e + 96), optimalPercent: i32 (e + 108), corruptionPercent: i32 (e + 116) })),
+				aiFreeUnits: i32 (e + 92), aiFreeUnitsPerCity: i32 (e + 96), flipUnitWeight: i32 (e + 120), optimalPercent: i32 (e + 108), corruptionPercent: i32 (e + 116) })),
 			worldSizes: wsiz.map ((e) => ({ optimalCities: i32 (e + 4) })),
 			civs: [], maxTown: 6, maxCity: 12,
 			calendar: game ? calendarOf (b, game[0]) : null
@@ -964,7 +965,7 @@ const Civ3Parse = (() => {
 			const count = i32 (off + 552), specialistsPopd = i32 (off + 548);
 			if (count < 0 || count > 255 || off + CITY_FIXED + count * CTZN_SIZE > b.length) { rejected++; continue; }
 			let citizensOk = true;
-			const moods = [0, 0, 0, 0, 0], nationalities = {}, specialistTypes = {};
+			const moods = [0, 0, 0, 0, 0], nationalities = {}, specialistTypes = {}, flaggedNat = {};
 			for (let k = 0; k < count; k++) {
 				const c = off + CITY_FIXED + k * CTZN_SIZE;
 				if (readAscii (b, c, 4) !== 'CTZN') { citizensOk = false; break; }
@@ -973,6 +974,7 @@ const Civ3Parse = (() => {
 				if (type === 4) { const st = i32 (c + 292); specialistTypes[st] = (specialistTypes[st] || 0) + 1; }
 				const nat = i32 (c + 296);
 				nationalities[nat] = (nationalities[nat] || 0) + 1;
+				if (b[c + 8]) flaggedNat[nat] = (flaggedNat[nat] || 0) + 1; // memory Citizen +32: counts twice for a culture flip
 			}
 			if (! citizensOk) { rejected++; continue; }
 			// Current buildings: the BITM bitmap after the building history (BINF), one bit per building type
@@ -1017,7 +1019,11 @@ const Civ3Parse = (() => {
 				specialistTypes, // citizen type id -> count (1 entertainer, 2 tax collector, 3 scientist, ... in the default rules)
 				entertainers: specialistTypes[1] || 0, taxmen: specialistTypes[2] || 0, scientists: specialistTypes[3] || 0,
 				specialistOutput: { luxury: i32 (off + 528), science: i32 (off + 532), gold: i32 (off + 536) }, // kept apart from the city's figures
-				nationalities,
+				nationalities, flaggedNat,
+				// Culture each civilization accumulated in the city while it owned it (CITY +224 + 4k; memory City +320):
+				// the owner's grows by the culture per turn (+220) each turn (GOG City_update_culture 0x4B2680)
+				cultureBy: Array.from ({ length: 32 }, (_, k) => i32 (off + 224 + 4 * k)),
+				flipImmunity: i32 (off + 64), // turns without culture flips (memory City +88)
 				disorder: (flags0 & 1) !== 0, celebrating: (flags0 & 2) !== 0,
 				storedFood: i32 (off + 40),
 				foodTiles: i32 (off + 360), foodEaten: i32 (off + 492), foodNet: i32 (off + 504),
@@ -1222,6 +1228,7 @@ const Civ3Parse = (() => {
 						c.freshWater = c.river || c.lake;
 					}
 					result.tiles = true;
+					result.tileOwnerAt = (x, y) => { const o = tile (x, y); return o < 0 ? -1 : b[o + 9]; }; // TILE +9: territory owner
 
 					// Worked tiles and their yields under every government, transcribed from the game (GOG
 					// Map_calc_food_yield_at 0x5D7180, Map_calc_shield_yield_at 0x5D75F0, Map_calc_commerce_yield_at 0x5D7AD0).
@@ -1504,6 +1511,63 @@ const Civ3Parse = (() => {
 				result.warWeariness = { level, government: gov ? gov.name : '?', checked, match, suffrage: suffrageCount };
 				diag.push (`War weariness (${gov ? gov.name : '?'}, level ${level}): the formula matches the game's unhappiness causes in ${match}/${checked} cities (the others have no unhappy citizen or another cause)`);
 			}
+			// Culture flip chance per turn, transcribed from the game (GOG 0x4B28D0, run for each city every turn). For each
+			// other living civ k: P = its citizens in the city (twice for a citizen flagged at CTZN +8) + its tiles among the
+			// 20 around the city minus 2, at most 10; x2 in disorder; x2 if k has more culture in the city than the owner;
+			// x (k's culture + 1) / (owner's culture + 1), at most x4; /2 while celebrating; minus the military units in the
+			// city (x DIFF +120). The city flips to k if random(D) < P, D = 2000 x distance to k's capital / distance to the
+			// owner's capital, 500..8000 (2000 without capitals). Not counted: x1.4 the turn after the owner lost a city by
+			// capture (Leader +5576, not in the LEAD record). A capital, or a city with flip immunity, never flips.
+			result.flipsOn = cultureFlips;
+			if (cultureFlips && result.tileOwnerAt && world) {
+				const cityAt = {}; for (const off of findAll (b, 'CITY', gameOff)) if (i32 (off + 4) === 136) cityAt[i32 (off + 8)] = { x: i16 (off + 12), y: i16 (off + 14) };
+				const dist = (a, c) => {
+					let dx = Math.abs (a.x - c.x), dy = Math.abs (a.y - c.y);
+					if (world.wrapX && dx > tdiv (world.width, 2)) dx = world.width - dx;
+					if (world.wrapY && dy > tdiv (world.height, 2)) dy = world.height - dy;
+					const mx = Math.max (dx, dy), mn = Math.min (dx, dy);
+					return mx - tdiv (tdiv (dx + dy, 2) - mn + 1, 2);
+				};
+				const ring = []; for (let dx = -4; dx <= 4; dx++) for (let dy = -4; dy <= 4; dy++)
+					if ((dx || dy) && Math.abs (dx) + Math.abs (dy) <= 4 && (dx + dy) % 2 === 0 && ! (Math.abs (dx) === 4 || Math.abs (dy) === 4)) ring.push ([dx, dy]);
+				const military = {}; // units with attack or defence on each tile (GOG count_units_at, filter 4)
+				for (const u of findAll (b, 'UNIT', gameOff)) if (i32 (u + 4) === 472) {
+					const t = rules.units[i32 (u + 40)];
+					if (t && (t.attack > 0 || t.defence > 0)) { const key = i32 (u + 12) + ',' + i32 (u + 16); military[key] = (military[key] || 0) + 1; }
+				}
+				const weight = (rules.difficulties[result.difficultyId] || {}).flipUnitWeight ?? 1;
+				const ownCulture = cultureOf (mine), ownCap = cityAt[capitalId];
+				for (const c of result.cities) {
+					c.flip = { chance: 0, by: [], immune: c.flipImmunity > 0, capital: c.id === capitalId };
+					if (c.flip.immune || c.flip.capital) continue;
+					const units = (military[c.x + ',' + c.y] || 0) * weight;
+					let stay = 1;
+					for (const [kk, lo] of Object.entries (leadOf)) {
+						const k = +kk; if (k <= 0 || k === player || ! ((remaining >>> k) & 1)) continue;
+						const race = i32 (lo + 12), nat = c.nationalities[race] || 0, flagged = (c.flaggedNat || {})[race] || 0;
+						let tiles = 0; for (const [dx, dy] of ring) if (result.tileOwnerAt (c.x + dx, c.y + dy) === k) tiles++;
+						let P = Math.min (10, nat + flagged + Math.max (0, tiles - 2));
+						if (P <= 0) continue;
+						const parts = { citizens: nat + flagged, tiles };
+						if (c.disorder) P *= 2;
+						const moreCulture = c.cultureBy[k] > c.cultureBy[player]; if (moreCulture) P *= 2;
+						const ck = cultureOf (lo);
+						P = ck + 1 > 4 * (ownCulture + 1) ? 4 * P : tdiv (P * (ck + 1), ownCulture + 1);
+						if (c.celebrating) P = tdiv (P, 2);
+						P -= units;
+						if (P <= 0) continue;
+						let D = 2000; const kCap = cityAt[i32 (lo + 24)];
+						if (ownCap && kCap) { const d1 = dist (c, ownCap); D = Math.max (500, Math.min (8000, d1 ? tdiv (2000 * dist (c, kCap), d1) : 8000)); }
+						const chance = Math.min (1, P / D);
+						stay *= 1 - chance;
+						c.flip.by.push ({ id: k, P, D, chance, ...parts, moreCulture, culture: ck, units });
+					}
+					c.flip.chance = 1 - stay;
+				}
+				const atRisk = result.cities.filter ((c) => c.flip && c.flip.chance > 0);
+				diag.push (`Culture flips (the game's rule, GOG 0x4B28D0; not checked against a flip): ${atRisk.length} of your cities can flip` +
+					(atRisk.length ? `; highest ${Math.max (...atRisk.map ((c) => c.flip.chance * 100)).toFixed (2)}% a turn` : ''));
+			}
 			const myCult = culs.find ((c) => c > mine && (leads.indexOf (mine) + 1 >= leads.length || c < leads[leads.indexOf (mine) + 1]));
 			result.myCulture = myCult ? { total: i32 (myCult + 12), perTurn: i32 (myCult + 16) } : null;
 			const cityCulture = result.cities.reduce ((n, c) => n + c.culture, 0);
@@ -1650,6 +1714,11 @@ const BASE_COLUMNS = [
   { key: 'science', sec: 'output', label: 'Sci', title: 'Science after Library etc.', val: (c) => wi (c).science, show: (c) => arrow (c.science, wi (c).science), cls: (c) => wiCls (c, 'science', true), total: true },
   { key: 'upkeep', sec: 'other', label: 'Upkeep', val: (c) => wi (c).upkeep, show: (c) => arrow (c.upkeep, wi (c).upkeep), cls: (c) => wiCls (c, 'upkeep'), total: true, title: 'Building maintenance per turn' },
   { key: 'culture', sec: 'other', label: 'Culture', val: (c) => c.culture, total: true, title: 'Culture per turn' },
+  { key: 'flip', sec: 'other', label: 'Flip %', title: 'Chance per turn that the city flips to another civilization by culture (the game\'s rule). Point at a value for the reasons',
+    val: (c) => c.flip ? (c.flip.immune || c.flip.capital ? -1 : c.flip.chance * 100) : -2,
+    show: (c) => ! c.flip ? '' : c.flip.capital ? 'capital' : c.flip.immune ? `immune ${c.flipImmunity}` : c.flip.chance ? (c.flip.chance * 100).toFixed (2) + '%' : '0',
+    cls: (c) => ! c.flip || ! c.flip.chance ? 'dim' : c.flip.chance >= 0.01 ? 'red' : c.flip.chance >= 0.002 ? 'amber' : '',
+    tip: (c) => flipTip (c) },
   { key: 'status', sec: 'other', label: 'Status', title: 'In disorder, or celebrating (We Love the King Day)', l: true, val: (c) => c.disorder ? 2 : (c.celebrating ? 1 : 0),
     show: (c) => c.disorder ? 'Disorder' : (c.celebrating ? 'Celebrating' : ''), cls: (c) => c.disorder ? 'red' : 'green' },
   { key: 'build', sec: 'build', label: 'Production', title: 'What the city builds, and turns to finish', l: true, val: (c) => c.buildName, show: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : ''),
@@ -1670,7 +1739,7 @@ let state = { result: null, sortKey: 'size', sortDir: -1, fileName: '', loadedAt
 
 // ---------- views: named sets of columns, saved in this browser ----------
 const DEFAULT_VIEWS = [
-  { name: 'Overview', columns: ['name', 'size', 'happy', 'content', 'unhappy', 'grow', 'foodNet', 'shields', 'commerce', 'corruptionPct', 'gold', 'luxury', 'science', 'status', 'build'] },
+  { name: 'Overview', columns: ['name', 'size', 'happy', 'content', 'unhappy', 'grow', 'foodNet', 'shields', 'commerce', 'corruptionPct', 'gold', 'luxury', 'science', 'flip', 'status', 'build'] },
   { name: 'Growth & happiness', columns: ['name', 'size', 'happy', 'content', 'unhappy', 'resisters', 'spec', 'foreign', 'grow', 'foodNet', 'box', 'luxury', 'status', 'build'] },
   { name: 'Corruption management', columns: ['name', 'size', 'shields', 'waste', 'wastePct', 'netShields', 'commerce', 'corruption', 'corruptionPct', 'netCommerce', 'ch', 'ps', 'chEffect', 'psEffect', 'upkeep', 'build'] },
   { name: 'Science & gold buildings', columns: ['name', 'size', 'commerce', 'corruptionPct', 'gold', 'science', 'bt:Library', 'bt:University', 'bt:Research Lab', 'bt:Marketplace', 'bt:Bank', 'bt:Stock Exchange',
@@ -1926,6 +1995,20 @@ function buildCost (id) {
   const cost = b.cost * 10;
   return state.result.accelerated ? Math.ceil (cost / 2) : cost;
 }
+// Culture flip: one line per civilization the city could flip to, with the parts of the game's rule
+function flipTip (c) {
+  if (! c.flip) return '';
+  if (c.flip.capital) return 'A capital never flips';
+  if (c.flip.immune) return `Can't flip for ${c.flipImmunity} more ${c.flipImmunity === 1 ? 'turn' : 'turns'}`;
+  if (! c.flip.by.length) return 'No civilization has citizens here or more than 2 tiles in its area, or its score is cancelled by units and culture';
+  const names = Object.fromEntries ((state.result.players || []).map ((p) => [p.id, p.name]));
+  const lines = c.flip.by.map ((x) => `${names[x.id] || 'A civilization you haven\'t met'}: ${(x.chance * 100).toFixed (2)}% a turn` +
+    ` (score ${x.P} / ${x.D}: ${x.citizens} of their citizens, ${x.tiles} of their tiles near` + (x.moreCulture ? ', more culture here than you' : '') +
+    `, −${x.units} for your military units)`);
+  return lines.join ('\n') + '\nScore: citizens + tiles − 2 (at most 10), ×2 in disorder, ×2 if they have more culture here, × their culture ÷ yours (at most ×4), ÷2 celebrating, − military units. ' +
+    'Chance = score ÷ (2000 × distance to their capital ÷ distance to yours, 500–8000). Not counted: ×1.4 the turn after you lose a city.';
+}
+
 // Game icons (shield, gold, upkeep, science, luxury, food), inlined by build.py from src/icons
 const ICONS = {"food": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABIAAAARCAYAAADQWvz5AAAByklEQVR42l2TTyiEURTFv2z8KVla20/ZTZGlsrGyo1GokaWykg0rIwtF1rIxmGSNIlnYDGoWmBRpVmMKycYwXf3udF6Pvm7f+3fOPffc9xJLml/9bceI7/clq5cyHo3qqgdrxE95MexbZdzHr/ebBt5JWHg4nrFGpd8PfVzNWfV82oGM4/CEpYzdHQxbbbfbMbXrlaaai7Uee9rr9M2NXK89F/rs9nDCjtZTVsynbX+2yzjzWcz6GZKSiDG4l/Jpk+hyud0INjgACX/K4i8lKBQBCXKjHZ4slMZXyCa+KaAAkDFn76Yw5qqYs4fSqYGWv0RIhJ0D8gYQhLFfUoVqyqUSkgUSfPkPwER1Tmux8SSVJW40ZaEGE1WGgATKRCb/WBfRfLrNkseTIduebLX8QipIRomyMicYQ6a7Jg8hwitXxEC1yxfNRQCIkHeol+FUlOANE4EBSbZAKFKJrKspYL7ORlyVE6FKJAL/H8dGU55U6g56xwgOKrO8iZ+K/vGYfTUrKW4NhtbLwBisuW45CmmG1mlWKI1HGN/o+JlAyBmuhFSIROFEfLyZ+CLKL3kRX0qFzoXS9PFm6B5BVwjuloI5eyTlzxoYvbVfsXV0DBUR5ZUAAAAASUVORK5CYII=", "gold": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABcAAAAWCAYAAAArdgcFAAACoElEQVR42o2Vz0tUURTHpRb9ASHVIsSNsxlrFZHWoNAPHk30CyRqJIcgHdoEExHpxk0FKVERFUxoWIJEBAZCbcJdoCIEI4JLV24qWgRZw4nPee9c75uZ94rH4dz33r3f873fc+65LdKy9dy60SvHcz2i/vqg+gfjN2Vm6ogMlYo6fvhiVL6uPhF/XdLjBjOVQGrVjPz6dE5kvV9EDkhtvcuN8bxjP5bK8vjefnk1PSaz759JKjgMAVYgD8zMgvz+PhoLxDvrCJIIfvdQq1weKMqfz92y9nFIvQPzQBXMQKNdMGbXqbLs68yqxuhbKBTUs3XbESC+GTBBPzzKpoOTSABJGpNtjH/6/ETItJppCEDg8akryeBWIWPX9ipYX99Z9YsTR9UDsvml4PLhy4RBIhE8H+QUHN1h/XO+bWsHlSA0glQzmg+CWV40uUiXBN6+Z3fINgJibPrDnsWzkxf0ne9Ux+a36ZjVNu5Ldem1NNW8tGuHLjRgP5ixxq+8G1Ap6sFNotSEwnTuTkbBCYhkZ/K9GtByUA8c24EnkQMHpNTVEVZIJVBNYcnk5TcXlRXfAPeZ29j/tvB2WBpk8atEKycKQgAru38xx5gTA992emeYxCihhw9m9TBxek1//hcvnW+qdzPtnd5mREUemANGN+QbhnTY/7CncmLJBJCSAxTmsDadaQVIZwcuqWLMU66ur7BdS6KVnB0WPLIAfCqfU5n01KYwV3AW+L0EVma8U5bGnrl2mpuxb2CumY36s4GYAUwA2oH1HEDJycnO7SpVfULNuES0SuhqVmrWp31JrK9bWcK+XC5rIG6letaxUrQaZzKavjzWISPDt11HdL4SaPUATpCN+au6hh0QBPNvJVfngLLIlWV0QQPGgqSrLO35CyooLnOlfApdAAAAAElFTkSuQmCC", "luxury": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABIAAAAbCAYAAABxwd+fAAABnklEQVR42s2VQUsCQRTH/U7dgy6dDIrAoPZSICVCeRK7FAbCBklJh0SIhbC6eUgogxSiQ4fMTkqXPkWXiOLFb9a3kK5rtXuI4TGz+9785j+z897GJBauNc93ZL+YDQd5uHUkk94Q+iF69WxPSsd5s4pt22a8Wzowvb6n19ju46kw11CzuYwslW1xHEeKjbpUmy3X2h3Prl965t1hpSL5bReeLGQN2IDWUsuysJWTzdad9J7vpfv6Lm8f4mv4AWrPAghASAwiD6wGbL1Wc1X1VegE/IWjE2Oe6nbHxHuHzWClcWkcqZsnM8YIAq4TWBAI8KtPMT5va3rQyMNBgJ8BAMaY7QNXyDcQbTE9b5QMQlhA1fA8CBkC0Tj8QWVsV9/5QXxBo2AK4Qj85oy8tcBQ8hNIIEhh+vUsy5Kg2EDQRb1sLitGBvwZRFPQuLixoOnMqkwkC+FBQCJThEUCmo1P/TNFkYBI5EhAfDFKaigQBV4r4q9vNn8IcmwmPumW4H7xZ5xIzBkfMYEgFBBMkvoZCaxA8jBQEUWLMwkyv8L2BafEd+qeRkCuAAAAAElFTkSuQmCC", "science": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAcCAYAAABoMT8aAAAB2UlEQVR42p2UTStEYRTH52OwtMdHmNhYUaRGmGIWiizMahKiWaiZmgkrG5ryMklZeKlhQVlIGHYjJcVmvoCFl3D0O9O53Xm5445up/vynPN7/uflPgEJVF+x6agkV5Ylk8nofWwxJnyr5RvwAoRCfRqMDcxPy1Y25R/A1dMdLAWensnc7Ix4+XkCwuGwpI8PpfD6qSoaBgxN9juAlfV44wBqgPx/KyAFAyyubjQGuDnPiALydwrQVG63/XcBZzcAJcVCzj9gKR3TFp483SuAO0PlGzA+EdHCEfj+JQpJJBL+AXSAwuW+xQFQh4YASCbQANSj1jjXbB/53z9carCZVxpVgK5gh1wtXzi7V0JY8wQgvb2tVduGAoP8PJeCizuPMjIa8Qa0NDcJCramNtWZQNud54/rN4kvxMuGquwM+AuAkYL7cHEASMeik1NylDzwBKCCQlcB2N0vAIVMqwPo7e505ANAZj0A66bCke/O3wA41wKwxkYv+d1y+QawFHA2FW6AOw09ugxAjysVWKA7mDU2wV8nr54Cg9iz1YAUaKf+ugDcEBYNhDPGM99YY2dVm02VahAZ7hebA4NgjDZGxc3sfX9vTapGGSKFQRUWHexSmRjfOSsrf75fkP1n4/gNW58AAAAASUVORK5CYII=", "shield": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAAQCAYAAAAmlE46AAABEUlEQVR42n2SsWoCURBFtw9Z+1Tp0ied2KX3LywCYiNYpsoG7CIEJGAlppFgJTaxsBUk9n5CmpSpwoQz4eo8fIbH1bcz98zMDltY8Xc6s5mdjz6PVJ9/2dlg5/+TzYfJ7z93y62Vi5+sLlbmutqYw3gdbI7evTJJjLXXb1f5ZnsownhhituHiY+CmSD3nFSYO0zR6D5b+bhO3isHagruMN5RoLrmCkTQOwoUdAoGSkbVO5L4D1ZHnh28vp96goBXzRQQiJLlXLZfjsAIK84zXl8OR5uVIcIxhgdvNRwfwJtWdVhCRuTw4N1/coIZIwcT04jJt6pDRcFxGcTIRW8CxrExS7HTSZDTHzw5jFpVz3KeXyLPJrC9YU8uAAAAAElFTkSuQmCC", "upkeep": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABcAAAAWCAYAAAArdgcFAAABxUlEQVR42oWVzU3EMBCFHQFixYkuoIs9cuWIkGgiaSAVoK1he6CA1JESOPMTrcSg5/jzTkxwFI2cOPablzfPk2DhfL1dXVobgmkkphBijE0Tx/fdtZ2OR/P7/rvyjTZ+3N/Z5+Ozfe/31fHr6cWGpsnrq+BiqIXatAbEvfX94r2etU9RBfdMSGRdtwAFTPOZddeZYKqyPNxcRI2lrRLpFQkBzkHSNI5xfQW8TYXzxZsio3nMny+mKQGJpxpzHDIkUL5gcsAL7R1zJaqCv97uMviYpPBfYClgT1DwakHRG6alx+fNcwKcJa/7+DkcUnErBS0PkGetZ0kjoBKcOmwWVKdQUmlOgWwkKoF9eIkyuAAUXgqx9C7RGG3X9wvGflRE65bMvc54HXBtiAdrg/ncd4Ktak5BeVYSP69YK+aa9pk1MSWNAcWezCv0vMm+686SmJMC5hx/3kEgFtdpXOqvL9G+hSS5jyTL+QMzFc7R+y3XRNb+qK/9KGDvwdfYoz3dM8pOf6YJlQ0M5oAqAbKVBSWEGSUhAUm8x2lQJNccRVUi2bPUe2HFtmA1uIaFJIwC1Ro6JY7SfdnE/pxQ7whab+1XVrt+AR8cck2FDl2bAAAAAElFTkSuQmCC"};
 // Icon widths at the cell's 15 px height (from the PNG sizes)
