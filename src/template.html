@@ -255,6 +255,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <button type="button" data-open="diplomacy">Diplomacy <span class="navsub" id="diplocount"></span></button>
     <button type="button" data-open="governments">Governments</button>
     <button type="button" data-open="tiers">Tiers</button>
+    <button type="button" data-open="settings">Settings</button>
     <button type="button" data-open="diagnostics">Diagnostics</button>
   </nav>
 <main>
@@ -284,7 +285,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Watch autosave folder…</dt><dd>Pick <code>Saves\Auto</code>; the newest save loads by itself.</dd>
         <dt>View</dt><dd>Switch between sets of columns.</dd>
         <dt>Columns…</dt><dd>Choose this view's columns. <b>Clear all columns</b> starts from empty; <b>New view</b> makes your own.</dd>
-        <dt>Side menu</dt><dd>Summary, Milestones, History, Diplomacy, Tiers and Diagnostics open in a panel on the right; the table stays where it is. Drag its left edge to resize it (double-click: default width), or ⤢ Expand to fill the window; each panel remembers its own. Esc returns an expanded panel to the side, then shuts it.</dd>
+        <dt>Side menu</dt><dd>Summary, Milestones, History, Diplomacy, Governments, Tiers, Settings and Diagnostics open in a panel on the right; the table stays where it is. Drag its left edge to resize it (double-click: default width), or ⤢ Expand to fill the window; each panel remembers its own. Esc returns an expanded panel to the side, then shuts it.</dd>
         <dt>Tiers</dt><dd>Name corruption tiers and set which buildings each tier should have, from which city size.</dd>
         <dt>Search (above the table)</dt><dd>Matches any text in the table: <code>library</code>, a city name, <code>max</code>, <code>no temple</code>. Several words must all match. Press <b>/</b> to jump there, Esc to clear.</dd>
         <dt>Problems only</dt><dd>Cities in disorder or close to it, starving, or with resisters.</dd>
@@ -302,7 +303,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Sort</dt><dd>Click a column name. Click again to reverse.</dd>
         <dt>▾ Filter</dt><dd>On each column, as in a spreadsheet: sort, a condition (greater than, between, contains…) or tick the values to keep. A blue ▾ marks a filtered column. Filters and sorting use the real numbers, so a what-if tick never hides or moves a city; each view keeps its own filters.</dd>
         <dt>What-if ticks</dt><dd>Tick <b>CH</b>, <b>PS</b>, <b>Lib</b>, <b>Mkt</b>, <b>Fac</b>, <b>Power</b>, <b>Mfg</b>… to try a building (Power: Coal Plant; a city counts only its best power plant). Changed numbers show <i>now → then</i>; an amber outline marks a tick that isn't real.</dd>
-        <dt>Effect columns</dt><dd>What one building would gain the city per turn, after upkeep. The colour is the gain in gold a turn, by the worth of a shield, food, gold, science and luxury set in Tiers (default a shield or food = 4 gold): <span class="green">green</span> above 10, <span class="amber">amber</span> 5–10, grey 0–5, <span class="red">red</span> a loss. Point at a cell for the cost and the turns to pay it back. They sort largest gain first. Set the limits in Tiers.</dd>
+        <dt>Effect columns</dt><dd>What one building would gain the city per turn, after upkeep. The colour is the gain in gold a turn, by the worth of a shield, food, gold, science and luxury set in Settings (default a shield or food = 4 gold): <span class="green">green</span> above 10, <span class="amber">amber</span> 5–10, grey 0–5, <span class="red">red</span> a loss. Point at a cell for the cost and the turns to pay it back. They sort largest gain first. Set the limits, the worths and icons or words in Settings.</dd>
         <dt>Tier</dt><dd>Pick a tier to fix it for that city; <i>(auto)</i> follows corruption.</dd>
         <dt>Attention</dt><dd><span class="amber">Amber</span>: missing. <span class="green">Green</span>: being built now.</dd>
         <dt>Colours</dt><dd><span class="red">Red</span>: serious (half or more lost, disorder). <span class="amber">Amber</span>: watch it. <b>~</b>: the corruption model doesn't match the game in that city.</dd>
@@ -473,6 +474,9 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <p class="histnote" id="govnote"></p>
   </section>
     </div>
+    <div class="panel" data-panel="settings" hidden>
+  <div id="settingsbox"></div>
+    </div>
     <div class="panel" data-panel="tiers" hidden>
       <p class="panelnote" hidden>Open a save to see this.</p>
   <div id="attnedit" hidden>
@@ -555,9 +559,9 @@ const CHPS_TICKS = [
 ];
 const CHPS_EFFECTS = [
   effectColumn ('ch', { key: 'chEffect', sec: 'bonusfx', label: 'CH Effect', model: true,
-    title: 'What a Courthouse would gain this city per turn (science, gold and luxury from the commerce kept, after its Library, Marketplace etc.; shields kept; upkeep). Colour: the gain in gold a turn (limits in Tiers). Uses your slider, or the one in Try slider. Sorts largest gain first' }),
+    title: 'What a Courthouse would gain this city per turn (science, gold and luxury from the commerce kept, after its Library, Marketplace etc.; shields kept; upkeep). Colour: the gain in gold a turn (limits in Settings). Uses your slider, or the one in Try slider. Sorts largest gain first' }),
   effectColumn ('ps', { key: 'psEffect', sec: 'bonusfx', label: 'PS Effect', model: true,
-    title: 'What a Police Station would gain this city per turn. Colour: the gain in gold a turn (limits in Tiers). Sorts largest gain first' }),
+    title: 'What a Police Station would gain this city per turn. Colour: the gain in gold a turn (limits in Settings). Sorts largest gain first' }),
 ];
 let state = { result: null, sortKey: 'size', sortDir: -1, fileName: '', loadedAt: null, rules: null, toggles: {} };
 
@@ -768,7 +772,7 @@ function effectOf (c, key) {
   const base = evaluate (c, real, rates, gov), e = evaluate (c, { ...real, [key]: true }, rates, gov);
   const parts = [], sign = (v) => (v > 0 ? '+' : '') + v;
   const dg = e.gold - base.gold, ds = e.science - base.science, dl = e.luxury - base.luxury, dsh = e.production - base.production, du = e.upkeep - base.upkeep;
-  // Gain per turn and cost in gold, by the values set in Tiers (upkeep is gold)
+  // Gain per turn and cost in gold, by the worths set in Settings (upkeep is gold)
   const V = state.attention.values, df = (e.foodNet ?? 0) - (base.foodNet ?? 0);
   const gain = dg * V.gold + ds * V.science + dl * V.luxury + dsh * V.shield + df * V.food - du * V.gold;
   const at = (res.rates ? ` At ${rates ? 'the tried slider' : 'your slider'}: ${sliderText (rates || res.rates)}.` : '') + (gov !== null ? ` Under ${govName (gov)} (tried).` : '');
@@ -787,7 +791,7 @@ function effectOf (c, key) {
   const detail = [ds && `${sign (ds)} science`, dg && `${sign (dg)} gold`, du && `−${du} upkeep`, dl && `${sign (dl)} luxury`, dsh && `${sign (dsh)} shields`, df && `${sign (df)} food`].filter (Boolean).join (', ') || 'no change';
   // Payback: build cost ÷ net gain per turn, both in gold
   const cost = buildCost (id), costG = cost ? cost * V.shield : null, payback = gain > 0 && costG ? Math.ceil (costG / gain) : null;
-  const g = (v) => +v.toFixed (2), worth = `Worth in gold: shield ${g (V.shield)}, food ${g (V.food)}, gold ${g (V.gold)}, science ${g (V.science)}, luxury ${g (V.luxury)} (set in Tiers).`;
+  const g = (v) => +v.toFixed (2), worth = `Worth in gold: shield ${g (V.shield)}, food ${g (V.food)}, gold ${g (V.gold)}, science ${g (V.science)}, luxury ${g (V.luxury)} (set in Settings).`;
   const foot = [`Total ${sign (g (gain))} gold a turn (worth: shield ${g (V.shield)}, food ${g (V.food)}, gold ${g (V.gold)}, science ${g (V.science)}, luxury ${g (V.luxury)})`,
                 payback ? `Costs ${cost} shields = ${g (costG)} gold · pays back in ${payback} turns` : `Costs ${cost} shields · never pays back`];
   if (at.trim ()) foot.push (at.trim ());
@@ -810,7 +814,7 @@ const ICON_W = { shield: 13, gold: 16, upkeep: 16, science: 9, luxury: 10, food:
 // fallback.
 function renderEffect (td, e) {
   if (e.lines) td.fx = e;
-  if (! e.parts || ! e.parts.length || ! Object.keys (ICONS).length) return;
+  if (state.attention.effectStyle === 'words' || ! e.parts || ! e.parts.length || ! Object.keys (ICONS).length) return;
   td.textContent = '';
   for (const x of e.parts) {
     const n = Math.abs (parseInt (x.v.replace ('−', '-'), 10)) || 0, w = ICON_W[x.icon] || 14, span = document.createElement ('span');
@@ -885,7 +889,7 @@ function rebuildColumns () {
     const bb = bonusBuildings ();
     for (const b of bb) extra.push ({ key: 'bt:' + b.name, sec: 'bonus', label: b.short, chk: 'b' + b.id, econ: true, title: `${b.name} (tick to try it)` });
     for (const b of bb) fx.push (effectColumn ('b' + b.id, { key: 'be:' + b.name, sec: 'bonusfx', label: b.short + ' Effect', econ: true,
-      title: `What a ${b.name} would gain this city per turn (${state.result.rules.buildings[b.id].production ? 'shields' : 'science, gold, luxury'}). Colour: the gain in gold a turn (limits in Tiers). Uses your slider, or the one in Try slider. Sorts largest gain first` }));
+      title: `What a ${b.name} would gain this city per turn (${state.result.rules.buildings[b.id].production ? 'shields' : 'science, gold, luxury'}). Colour: the gain in gold a turn (limits in Settings). Uses your slider, or the one in Try slider. Sorts largest gain first` }));
   }
   const at = BASE_COLUMNS.findIndex ((c) => c.key === 'upkeep');
   COLUMNS = [...BASE_COLUMNS.slice (0, at), ...extra, ...fx, ...BASE_COLUMNS.slice (at)];
@@ -920,6 +924,7 @@ const DEFAULT_ATTENTION = {
   expect: { Temple: [1, 1, 1, null], Library: [6, 1, null, null], Marketplace: [6, 1, null, null], Courthouse: [null, 1, 1, null],
             Aqueduct: [6, 6, 6, null], Hospital: [12, null, null, null], Factory: [12, null, null, null] },
   overrides: {}, // game id -> { city key -> tier index }
+  effectStyle: 'icons',                    // Effect cells: 'icons' (the game's icons) or 'words' (+2 sci, +3 gold)
   gainColors: { good: 10, ok: 5 },         // Effect colours by gain in gold a turn: green above good, amber from ok, red below 0
   values: { shield: 4, food: 4, gold: 1, science: 1, luxury: 1 }, // worth of one of each, in gold, for payback
   reducerPayback: 40                       // expect a Courthouse / Police Station only where it pays back within this (null: always)
@@ -1025,6 +1030,38 @@ function attentionCell (c, td) {
 }
 
 // Settings panel: tiers and expected buildings
+// Settings: how Effect cells look, their colour limits and what each yield is worth in gold
+function renderSettings () {
+  const A = state.attention, box = $('settingsbox'); box.textContent = '';
+  const el = (tag, props = {}, kids = []) => { const e = Object.assign (document.createElement (tag), props); kids.forEach ((k) => e.appendChild (typeof k === 'string' ? document.createTextNode (k) : k)); return e; };
+  const changed = () => { saveAttention (); render (); };
+  const g = el ('div', { className: 'vegroup' }, [el ('h3', { textContent: 'Building effects' })]);
+  // Icons or words
+  const style = el ('div', { className: 'tierrow' }, ['Show effects as ']);
+  for (const [v, label] of [['icons', 'Icons'], ['words', 'Words (+2 sci, +3 gold)']]) {
+    const b = el ('input', { type: 'radio', name: 'fxstyle', value: v, checked: A.effectStyle === v });
+    b.addEventListener ('change', () => { A.effectStyle = v; changed (); });
+    style.appendChild (el ('label', { style: 'margin-right:12px' }, [b, ' ' + label]));
+  }
+  g.appendChild (style);
+  const num = (value, onset) => { const n = el ('input', { type: 'number', min: 1, max: 999, value, className: 'num' }); n.addEventListener ('change', () => { onset (Math.max (1, Math.round (+n.value) || 1)); changed (); }); return n; };
+  g.appendChild (el ('div', { className: 'tierrow', title: 'Gain per turn in gold, after upkeep, by the worths below' },
+    ['Green above ', num (A.gainColors.good, (v) => { A.gainColors.good = v; }), ' gold a turn, amber from ',
+     num (A.gainColors.ok, (v) => { A.gainColors.ok = v; }), ', grey from 0, red below 0']));
+  // What one of each yield is worth, in gold: payback = cost in shields × shield worth ÷ the gain's worth per turn
+  const worth = (key) => { const n = el ('input', { type: 'number', min: 0, max: 99, step: 0.25, value: A.values[key], className: 'num', ariaLabel: `${key} worth in gold` });
+    n.addEventListener ('change', () => { const v = +n.value; A.values[key] = Number.isFinite (v) && v >= 0 ? v : DEFAULT_ATTENTION.values[key]; changed (); }); return n; };
+  g.appendChild (el ('div', { className: 'tierrow', title: 'What one of each is worth, in gold. A building that costs 10 shields and gives +1 gold a turn pays back in 10 × 4 ÷ 1 = 40 turns' },
+    ['Worth in gold: shield ', worth ('shield'), ' food ', worth ('food'), ' gold ', worth ('gold'), ' science ', worth ('science'), ' luxury ', worth ('luxury')]));
+  const reset = el ('button', { type: 'button', textContent: 'Restore defaults' });
+  reset.addEventListener ('click', () => {
+    A.effectStyle = DEFAULT_ATTENTION.effectStyle; A.gainColors = { ...DEFAULT_ATTENTION.gainColors }; A.values = { ...DEFAULT_ATTENTION.values };
+    changed (); renderSettings ();
+  });
+  g.appendChild (reset);
+  box.appendChild (g);
+}
+
 function renderAttentionEditor () {
   if ($('attnedit').hidden) return;
   const A = state.attention, box = $('attnbody'); box.textContent = '';
@@ -1070,17 +1107,8 @@ function renderAttentionEditor () {
     });
     tiers.appendChild (add);
   }
-  // Payback settings
+  // Courthouse / Police Station expectation by payback
   const num = (value, onset) => { const n = el ('input', { type: 'number', min: 1, max: 999, value, className: 'num' }); n.addEventListener ('change', () => { onset (Math.max (1, Math.round (+n.value) || 1)); changed (); }); return n; };
-  tiers.appendChild (el ('h3', { textContent: 'Building effects', style: 'margin-top:12px' }));
-  tiers.appendChild (el ('div', { className: 'tierrow', title: 'Gain per turn in gold, after upkeep, by the worths below' },
-    ['Green above ', num (A.gainColors.good, (v) => { A.gainColors.good = v; }), ' gold a turn, amber from ',
-     num (A.gainColors.ok, (v) => { A.gainColors.ok = v; }), ', grey from 0, red below 0']));
-  // What one of each yield is worth, in gold: payback = cost in shields × shield worth ÷ the gain's worth per turn
-  const worth = (key) => { const n = el ('input', { type: 'number', min: 0, max: 99, step: 0.25, value: A.values[key], className: 'num', ariaLabel: `${key} worth in gold` });
-    n.addEventListener ('change', () => { const v = +n.value; A.values[key] = Number.isFinite (v) && v >= 0 ? v : DEFAULT_ATTENTION.values[key]; changed (); }); return n; };
-  tiers.appendChild (el ('div', { className: 'tierrow', title: 'What one of each is worth, in gold. A building that costs 10 shields and gives +1 gold a turn pays back in 10 × 4 ÷ 1 = 40 turns' },
-    ['Worth in gold: shield ', worth ('shield'), ' food ', worth ('food'), ' gold ', worth ('gold'), ' science ', worth ('science'), ' luxury ', worth ('luxury')]));
   const rp = el ('input', { type: 'checkbox', checked: !! A.reducerPayback });
   rp.addEventListener ('change', () => { A.reducerPayback = rp.checked ? (A.lastReducerPayback || 40) : null; changed (); renderAttentionEditor (); });
   const rpRow = el ('label', { title: 'Without this, a tier that expects a Courthouse warns in every city of that tier' }, [rp, ' Expect a Courthouse / Police Station only where it pays back within ']);
@@ -1866,8 +1894,8 @@ $('msreset').addEventListener ('click', () => {
 });
 
 // ---------- side menu and drawer: one panel at a time, beside the table ----------
-const PANEL_TITLES = { summary: 'Summary', milestones: 'Milestones', history: 'History', diplomacy: 'Diplomacy', governments: 'Governments', columns: 'Columns', tiers: 'Tiers', diagnostics: 'Diagnostics' };
-const PANEL_CONTENT = { summary: 'summary', milestones: 'milestones', history: 'history', diplomacy: 'diplomacy', governments: 'governments', columns: 'viewedit', tiers: 'attnedit', diagnostics: 'diagnostics' };
+const PANEL_TITLES = { summary: 'Summary', milestones: 'Milestones', history: 'History', diplomacy: 'Diplomacy', governments: 'Governments', columns: 'Columns', tiers: 'Tiers', settings: 'Settings', diagnostics: 'Diagnostics' };
+const PANEL_CONTENT = { summary: 'summary', milestones: 'milestones', history: 'history', diplomacy: 'diplomacy', governments: 'governments', columns: 'viewedit', tiers: 'attnedit', settings: 'settingsbox', diagnostics: 'diagnostics' };
 function panelOpen (key) { return ! $('drawer').hidden && state.panel === key; }
 function openPanel (key) {
   if (panelOpen (key)) { closePanel (); return; }
@@ -1881,6 +1909,7 @@ function openPanel (key) {
   $('viewedit').hidden = key !== 'columns'; $('attnedit').hidden = key !== 'tiers';
   if (key === 'columns') renderViewEditor ();
   if (key === 'tiers') renderAttentionEditor ();
+  if (key === 'settings') renderSettings ();
   syncPanelNote ();
   if (key === 'history') drawHistory ();
   if (key === 'governments' && state.result && state.result.ok) renderGovernments (state.result);
