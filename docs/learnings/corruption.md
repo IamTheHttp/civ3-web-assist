@@ -8,4 +8,4 @@
   Palace city is 7 (cap 20%, with a Courthouse 10%).
 - Not in the save, so assumed: trade connection to the capital (else distance × 5/4), no police specialists.
 - A Courthouse saves the most coins in far, high-commerce cities; in the Forbidden Palace city it halves a small loss.
-  The CH/PS Effect columns show the gain and the payback (cost ÷ net gain per turn).
+  The CH/PS Effect columns show the gain and the payback (cost ÷ net gain per turn, both in gold by the worths set in Tiers).

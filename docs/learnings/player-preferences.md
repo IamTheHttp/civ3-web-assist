@@ -18,4 +18,6 @@
   wrong direction anyway). No extra views unless asked (an "after peace" attitude view was declined).
 - **Checks in-game readily** when given exact predictions and the screen to read; reports back line by line.
 - **Signals over raw numbers:** payback turns for buildings; green / amber / grey.
+- **Yields have a worth in gold** (Tiers → Building payback): shield and food 4, gold, science and luxury 1 by default.
+  Payback = cost in shields × shield worth ÷ the gain's worth per turn (10 shields for +1 gold a turn = 40 turns).
 - Likes sane defaults that are editable (tiers, milestones, payback limits).

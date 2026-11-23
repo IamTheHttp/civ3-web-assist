@@ -292,7 +292,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Sort</dt><dd>Click a column name. Click again to reverse.</dd>
         <dt>▾ Filter</dt><dd>On each column, as in a spreadsheet: sort, a condition (greater than, between, contains…) or tick the values to keep. A blue ▾ marks a filtered column. Filters and sorting use the real numbers, so a what-if tick never hides or moves a city; each view keeps its own filters.</dd>
         <dt>What-if ticks</dt><dd>Tick <b>CH</b>, <b>PS</b>, <b>Lib</b>, <b>Mkt</b>, <b>Fac</b>, <b>Power</b>, <b>Mfg</b>… to try a building (Power: Coal Plant; a city counts only its best power plant). Changed numbers show <i>now → then</i>; an amber outline marks a tick that isn't real.</dd>
-        <dt>Effect columns</dt><dd>What one building would gain the city per turn, after upkeep, and how many turns until it pays back its cost: <span class="green">green</span> fast, <span class="amber">amber</span> slow, grey never. They sort fastest payback first. Set the limits in Tiers.</dd>
+        <dt>Effect columns</dt><dd>What one building would gain the city per turn, after upkeep, and how many turns until it pays back its cost (cost and gain in gold, by the worth of a shield, food, gold, science and luxury set in Tiers; default a shield or food = 4 gold): <span class="green">green</span> fast, <span class="amber">amber</span> slow, grey never. They sort fastest payback first. Set the limits in Tiers.</dd>
         <dt>Tier</dt><dd>Pick a tier to fix it for that city; <i>(auto)</i> follows corruption.</dd>
         <dt>Attention</dt><dd><span class="amber">Amber</span>: missing. <span class="green">Green</span>: being built now.</dd>
         <dt>Colours</dt><dd><span class="red">Red</span>: serious (half or more lost, disorder). <span class="amber">Amber</span>: watch it. <b>~</b>: the corruption model doesn't match the game in that city.</dd>
@@ -1837,7 +1837,9 @@ function effectOf (c, key) {
   const base = evaluate (c, real, rates, gov), e = evaluate (c, { ...real, [key]: true }, rates, gov);
   const parts = [], sign = (v) => (v > 0 ? '+' : '') + v;
   const dg = e.gold - base.gold, ds = e.science - base.science, dl = e.luxury - base.luxury, dsh = e.production - base.production, du = e.upkeep - base.upkeep;
-  const gain = e.value - base.value;
+  // Gain per turn and cost in gold, by the values set in Tiers (upkeep is gold)
+  const V = state.attention.values, df = (e.foodNet ?? 0) - (base.foodNet ?? 0);
+  const gain = dg * V.gold + ds * V.science + dl * V.luxury + dsh * V.shield + df * V.food - du * V.gold;
   const at = (res.rates ? ` At ${rates ? 'the tried slider' : 'your slider'}: ${sliderText (rates || res.rates)}.` : '') + (gov !== null ? ` Under ${govName (gov)} (tried).` : '');
   if (key === 'ch' || key === 'ps') {
     // What the commerce kept turns into (after Library, Marketplace etc.), and the shields kept
@@ -1853,12 +1855,15 @@ function effectOf (c, key) {
     if (bd.luxury50 || dl) parts.push (`${sign (dl)} lux`);
     if (bd.production || dsh) parts.push (`${sign (dsh)} shd`);
   }
+  if (df) parts.push (`${sign (df)} food`);
   if (du) parts.push (`−${du} upk`);
-  // Payback: build cost ÷ net gain per turn (gain = science, gold, luxury and shields kept, minus upkeep; counted 1:1)
-  const cost = buildCost (id), payback = gain > 0 && cost ? Math.ceil (cost / gain) : null;
+  // Payback: build cost ÷ net gain per turn, both in gold
+  const cost = buildCost (id), costG = cost ? cost * V.shield : null, payback = gain > 0 && costG ? Math.ceil (costG / gain) : null;
   const tail = payback ? ` · ${payback} ${payback === 1 ? 'turn' : 'turns'}` : ' · never';
+  const g = (v) => +v.toFixed (2), worth = `Worth in gold: shield ${g (V.shield)}, food ${g (V.food)}, gold ${g (V.gold)}, science ${g (V.science)}, luxury ${g (V.luxury)} (set in Tiers).`;
   return { value: gain, payback, sort: payback ? -payback : -1e6 + gain, text: parts.join (', ') + tail,
-           tip: (payback ? `Costs ${cost} shields and pays back in ${payback} turns (net +${gain} per turn).` : `Costs ${cost} shields; the gain doesn't cover its upkeep, so it never pays back.`) + at };
+           tip: (payback ? `Costs ${cost} shields = ${g (costG)} gold; gains ${g (gain)} gold a turn; pays back in ${payback} turns.`
+                         : `Costs ${cost} shields; the gain doesn't cover its upkeep, so it never pays back.`) + at + '\n' + worth };
 }
 // Shields to build it (accelerated production halves costs, as for the city's current build)
 function buildCost (id) {
@@ -1935,13 +1940,14 @@ const DEFAULT_ATTENTION = {
             Aqueduct: [6, 6, 6, null], Hospital: [12, null, null, null], Factory: [12, null, null, null] },
   overrides: {}, // game id -> { city key -> tier index }
   payback: { good: 20, ok: 40 },          // Effect colours: green up to good turns, amber up to ok
+  values: { shield: 4, food: 4, gold: 1, science: 1, luxury: 1 }, // worth of one of each, in gold, for payback
   reducerPayback: 40                       // expect a Courthouse / Police Station only where it pays back within this (null: always)
 };
 function loadAttention () {
   const d = JSON.parse (JSON.stringify (DEFAULT_ATTENTION));
   try {
     const v = JSON.parse (localStorage.getItem ('civ3viewer.attention') || 'null');
-    if (v && Array.isArray (v.tiers) && v.tiers.length >= 2) return { ...d, ...v, payback: { ...d.payback, ...(v.payback || {}) } };
+    if (v && Array.isArray (v.tiers) && v.tiers.length >= 2) return { ...d, ...v, payback: { ...d.payback, ...(v.payback || {}) }, values: { ...d.values, ...(v.values || {}) } };
   } catch (e) { /* ignore */ }
   return d;
 }
@@ -2088,6 +2094,11 @@ function renderAttentionEditor () {
   tiers.appendChild (el ('h3', { textContent: 'Building payback', style: 'margin-top:12px' }));
   tiers.appendChild (el ('div', { className: 'tierrow' }, ['Green up to ', num (A.payback.good, (v) => { A.payback.good = v; }), ' turns, amber up to ',
     num (A.payback.ok, (v) => { A.payback.ok = v; }), ' turns']));
+  // What one of each yield is worth, in gold: payback = cost in shields × shield worth ÷ the gain's worth per turn
+  const worth = (key) => { const n = el ('input', { type: 'number', min: 0, max: 99, step: 0.25, value: A.values[key], className: 'num', ariaLabel: `${key} worth in gold` });
+    n.addEventListener ('change', () => { const v = +n.value; A.values[key] = Number.isFinite (v) && v >= 0 ? v : DEFAULT_ATTENTION.values[key]; changed (); }); return n; };
+  tiers.appendChild (el ('div', { className: 'tierrow', title: 'What one of each is worth, in gold. A building that costs 10 shields and gives +1 gold a turn pays back in 10 × 4 ÷ 1 = 40 turns' },
+    ['Worth in gold: shield ', worth ('shield'), ' food ', worth ('food'), ' gold ', worth ('gold'), ' science ', worth ('science'), ' luxury ', worth ('luxury')]));
   const rp = el ('input', { type: 'checkbox', checked: !! A.reducerPayback });
   rp.addEventListener ('change', () => { A.reducerPayback = rp.checked ? (A.lastReducerPayback || 40) : null; changed (); renderAttentionEditor (); });
   const rpRow = el ('label', { title: 'Without this, a tier that expects a Courthouse warns in every city of that tier' }, [rp, ' Expect a Courthouse / Police Station only where it pays back within ']);
