@@ -154,8 +154,10 @@ body.drawer-full .drawergrip { display: none; }
 @media (max-width: 760px) { body.drawer-full .drawer { left: 0; } .drawergrip { display: none; } }
 .searchbar { display: flex; gap: 10px; align-items: center; margin: 0 0 8px; }
 #search { flex: 0 1 460px; font-size: 14px; padding: 6px 10px; }
-span.yield { white-space: nowrap; }
-span.yield img { height: 15px; vertical-align: -3px; margin-left: 2px; }
+span.yield { white-space: nowrap; display: inline-block; margin-left: 8px; }
+span.yield img { height: 15px; vertical-align: -3px; position: relative; }
+span.yield.neg img { filter: drop-shadow(0 0 1px #ff3b30) drop-shadow(0 0 1px #ff3b30); }
+span.yield.zero img { opacity: .3; }
 td.hit { background: color-mix(in srgb, var(--gold) 26%, transparent) !important; }
 .ms { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; margin: 6px 0; }
 .ms-met { border-left: 4px solid var(--green); } .ms-missed { border-left: 4px solid var(--red); } .ms-progress { border-left: 4px solid var(--accent); }
@@ -796,16 +798,23 @@ function buildCost (id) {
 }
 // Game icons (shield, gold, upkeep, science, luxury, food), inlined by build.py from src/icons
 const ICONS = /*ICONS*/{};
-// An Effect cell: each part as its number and the game's icon; the text stays for search, CSV and as the fallback
+// Icon widths at the cell's 15 px height (from the PNG sizes)
+const ICON_W = { shield: 13, gold: 16, upkeep: 16, science: 9, luxury: 10, food: 16 };
+// An Effect cell: each part as that many game icons, as on the city screen (many icons overlap, to at most 64 px);
+// a loss other than upkeep has a red edge, zero is a faded icon. The text stays for search, CSV, the tooltip and as
+// the fallback.
 function renderEffect (td, e) {
   if (! e.parts || ! e.parts.length || ! Object.keys (ICONS).length) return;
   td.textContent = '';
-  e.parts.forEach ((x, k) => {
-    if (k) td.append (' ');
-    const span = document.createElement ('span'); span.className = 'yield'; span.textContent = x.v;
-    if (ICONS[x.icon]) span.appendChild (Object.assign (document.createElement ('img'), { src: ICONS[x.icon], alt: x.text, title: x.text }));
+  for (const x of e.parts) {
+    const n = Math.abs (parseInt (x.v.replace ('−', '-'), 10)) || 0, w = ICON_W[x.icon] || 14, span = document.createElement ('span');
+    span.className = 'yield' + (x.icon !== 'upkeep' && /^[−-]/.test (x.v) ? ' neg' : '') + (n === 0 ? ' zero' : '');
+    span.title = x.text;
+    const step = Math.min (w + 1, Math.max (3, 64 / Math.max (1, n)));
+    for (let k = 0; k < Math.max (1, n); k++)
+      span.appendChild (Object.assign (document.createElement ('img'), { src: ICONS[x.icon], alt: k ? '' : x.text, style: `margin-right:${Math.round (step - w)}px` }));
     td.appendChild (span);
-  });
+  }
 }
 // Colour by the gain per turn in gold: green above good, amber from ok, grey from 0, red below 0. Cells that can't
 // have the building (has one, needs another, capital) have no gain and stay grey.
