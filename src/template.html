@@ -47,6 +47,8 @@ select, input[type=text] { font: inherit; color: var(--ink); background: var(--b
 .attnbody label { display: flex; gap: 6px; align-items: center; white-space: nowrap; padding: 2px 0; }
 .attnbody .note { color: var(--muted); font-size: 12.5px; margin: 4px 0 0; }
 .tierrow { display: flex; gap: 6px; align-items: center; padding: 2px 0; }
+.setrow { display: grid; grid-template-columns: 9em auto 1fr; gap: 8px; align-items: center; padding: 3px 0; }
+.setrow .note { color: var(--muted); }
 input.num { width: 4.2em; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; }
 button.mini { padding: 0 7px; }
 .gridwrap { max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: 4px; }
@@ -347,9 +349,9 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <span class="sliderbox" id="sliderbox" hidden
       title="Gold, science and luxury, and the Effect columns, use the slider from your save. Tick to try another one; happy and unhappy citizens are not recalculated">
       <label class="chk"><input id="slideron" type="checkbox"> Try slider</label>
-      <select id="slsci" aria-label="Science %"></select> sci
-      <select id="sltax" aria-label="Gold %"></select> gold
-      <select id="sllux" aria-label="Luxury %"></select> lux
+      <label for="slsci">Science:</label> <select id="slsci"></select>
+      <label for="sltax">Gold:</label> <select id="sltax"></select>
+      <label for="sllux">Luxury:</label> <select id="sllux"></select>
     </span>
     <button id="resetwhatif" type="button" hidden>Reset what-ifs</button>
     <span class="status" id="status" aria-live="polite"></span>
@@ -1036,23 +1038,24 @@ function renderSettings () {
   const el = (tag, props = {}, kids = []) => { const e = Object.assign (document.createElement (tag), props); kids.forEach ((k) => e.appendChild (typeof k === 'string' ? document.createTextNode (k) : k)); return e; };
   const changed = () => { saveAttention (); render (); };
   const g = el ('div', { className: 'vegroup' }, [el ('h3', { textContent: 'Building effects' })]);
-  // Icons or words
-  const style = el ('div', { className: 'tierrow' }, ['Show effects as ']);
-  for (const [v, label] of [['icons', 'Icons'], ['words', 'Words (+2 sci, +3 gold)']]) {
-    const b = el ('input', { type: 'radio', name: 'fxstyle', value: v, checked: A.effectStyle === v });
-    b.addEventListener ('change', () => { A.effectStyle = v; changed (); });
-    style.appendChild (el ('label', { style: 'margin-right:12px' }, [b, ' ' + label]));
-  }
-  g.appendChild (style);
+  // One setting per line: "Label: [input]"
+  let uid = 0;
+  const row = (label, input, note) => {
+    input.id = input.id || `set${++uid}`;
+    g.appendChild (el ('div', { className: 'setrow' }, [el ('label', { htmlFor: input.id, textContent: label + ':' }), input, ...(note ? [el ('span', { className: 'note', textContent: note })] : [])]));
+  };
+  const style = el ('select', {});
+  for (const [v, label] of [['icons', 'Icons'], ['words', 'Words (+2 sci, +3 gold)']]) style.appendChild (el ('option', { value: v, textContent: label, selected: A.effectStyle === v }));
+  style.addEventListener ('change', () => { A.effectStyle = style.value; changed (); });
+  row ('Show effects as', style);
   const num = (value, onset) => { const n = el ('input', { type: 'number', min: 1, max: 999, value, className: 'num' }); n.addEventListener ('change', () => { onset (Math.max (1, Math.round (+n.value) || 1)); changed (); }); return n; };
-  g.appendChild (el ('div', { className: 'tierrow', title: 'Gain per turn in gold, after upkeep, by the worths below' },
-    ['Green above ', num (A.gainColors.good, (v) => { A.gainColors.good = v; }), ' gold a turn, amber from ',
-     num (A.gainColors.ok, (v) => { A.gainColors.ok = v; }), ', grey from 0, red below 0']));
+  row ('Green above', num (A.gainColors.good, (v) => { A.gainColors.good = v; }), 'gold a turn');
+  row ('Amber from', num (A.gainColors.ok, (v) => { A.gainColors.ok = v; }), 'gold a turn; grey from 0, red below 0');
   // What one of each yield is worth, in gold: payback = cost in shields × shield worth ÷ the gain's worth per turn
-  const worth = (key) => { const n = el ('input', { type: 'number', min: 0, max: 99, step: 0.25, value: A.values[key], className: 'num', ariaLabel: `${key} worth in gold` });
+  g.appendChild (el ('h3', { textContent: 'Worth in gold', title: 'What one of each is worth, in gold. A building that costs 10 shields and gives +1 gold a turn pays back in 10 × 4 ÷ 1 = 40 turns', style: 'margin-top:12px' }));
+  const worth = (key) => { const n = el ('input', { type: 'number', min: 0, max: 99, step: 0.25, value: A.values[key], className: 'num' });
     n.addEventListener ('change', () => { const v = +n.value; A.values[key] = Number.isFinite (v) && v >= 0 ? v : DEFAULT_ATTENTION.values[key]; changed (); }); return n; };
-  g.appendChild (el ('div', { className: 'tierrow', title: 'What one of each is worth, in gold. A building that costs 10 shields and gives +1 gold a turn pays back in 10 × 4 ÷ 1 = 40 turns' },
-    ['Worth in gold: shield ', worth ('shield'), ' food ', worth ('food'), ' gold ', worth ('gold'), ' science ', worth ('science'), ' luxury ', worth ('luxury')]));
+  for (const [key, label] of [['shield', 'Shield'], ['food', 'Food'], ['gold', 'Gold'], ['science', 'Science'], ['luxury', 'Luxury']]) row (label, worth (key));
   const reset = el ('button', { type: 'button', textContent: 'Restore defaults' });
   reset.addEventListener ('click', () => {
     A.effectStyle = DEFAULT_ATTENTION.effectStyle; A.gainColors = { ...DEFAULT_ATTENTION.gainColors }; A.values = { ...DEFAULT_ATTENTION.values };
