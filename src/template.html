@@ -157,7 +157,6 @@ body.drawer-full .drawergrip { display: none; }
 span.yield { white-space: nowrap; display: inline-block; margin-left: 8px; }
 span.yield img { height: 15px; vertical-align: -3px; position: relative; }
 span.yield.neg img { filter: drop-shadow(0 0 1px #ff3b30) drop-shadow(0 0 1px #ff3b30); }
-span.yield.zero img { opacity: .3; }
 td.hit { background: color-mix(in srgb, var(--gold) 26%, transparent) !important; }
 .ms { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; margin: 6px 0; }
 .ms-met { border-left: 4px solid var(--green); } .ms-missed { border-left: 4px solid var(--red); } .ms-progress { border-left: 4px solid var(--accent); }
@@ -765,29 +764,21 @@ function effectOf (c, key) {
   const V = state.attention.values, df = (e.foodNet ?? 0) - (base.foodNet ?? 0);
   const gain = dg * V.gold + ds * V.science + dl * V.luxury + dsh * V.shield + df * V.food - du * V.gold;
   const at = (res.rates ? ` At ${rates ? 'the tried slider' : 'your slider'}: ${sliderText (rates || res.rates)}.` : '') + (gov !== null ? ` Under ${govName (gov)} (tried).` : '');
-  // Each part: its text (for search and CSV), its icon and its signed value
-  const item = (v, word, icon) => parts.push ({ text: `${sign (v)} ${word}`, icon, v: sign (v) });
-  if (key === 'ch' || key === 'ps') {
-    // What the commerce kept turns into (after Library, Marketplace etc.), and the shields kept
-    if (ds) item (ds, 'sci', 'science');
-    if (dg) item (dg, 'gold', 'gold');
-    if (dl) item (dl, 'lux', 'luxury');
-    if (! ds && ! dg && ! dl) parts.push ({ text: '0 com', icon: 'gold', v: '0' });
-    item (dsh, 'shd', 'shield');
-  } else {
-    // Report what the building boosts, even when the gain rounds to zero
-    if (bd.science50 || bd.doublesScience || ds) item (ds, 'sci', 'science');
-    if (bd.gold50 || dg) item (dg, 'gold', 'gold');
-    if (bd.luxury50 || dl) item (dl, 'lux', 'luxury');
-    if (bd.production || dsh) item (dsh, 'shd', 'shield');
-  }
-  if (df) item (df, 'food', 'food');
-  if (du) parts.push ({ text: `−${du} upk`, icon: 'upkeep', v: `−${du}` });
+  // Net change per yield (upkeep is gold, so it nets against the gold); zero parts are left out. A gold loss shows as
+  // red coins. The tooltip keeps the gold and the upkeep apart.
+  const ng = dg - du;
+  const item = (v, word, icon) => { if (v) parts.push ({ text: `${sign (v)} ${word}`, icon, v: sign (v) }); };
+  item (ds, 'sci', 'science');
+  if (ng) parts.push ({ text: `${sign (ng).replace ('-', '−')} gold`, icon: ng < 0 ? 'upkeep' : 'gold', v: sign (ng).replace ('-', '−'), loss: ng < 0 });
+  item (dl, 'lux', 'luxury');
+  item (dsh, 'shd', 'shield');
+  item (df, 'food', 'food');
+  const detail = [ds && `${sign (ds)} science`, dg && `${sign (dg)} gold`, du && `−${du} upkeep`, dl && `${sign (dl)} luxury`, dsh && `${sign (dsh)} shields`, df && `${sign (df)} food`].filter (Boolean).join (', ') || 'no change';
   // Payback: build cost ÷ net gain per turn, both in gold
   const cost = buildCost (id), costG = cost ? cost * V.shield : null, payback = gain > 0 && costG ? Math.ceil (costG / gain) : null;
   const g = (v) => +v.toFixed (2), worth = `Worth in gold: shield ${g (V.shield)}, food ${g (V.food)}, gold ${g (V.gold)}, science ${g (V.science)}, luxury ${g (V.luxury)} (set in Tiers).`;
-  return { value: gain, payback, sort: gain, text: parts.map ((x) => x.text).join (', '), parts,
-           tip: (payback ? `Costs ${cost} shields = ${g (costG)} gold; gains ${g (gain)} gold a turn; pays back in ${payback} turns.`
+  return { value: gain, payback, sort: gain, text: parts.map ((x) => x.text).join (', ') || '0', parts,
+           tip: detail + '.\n' + (payback ? `Costs ${cost} shields = ${g (costG)} gold; gains ${g (gain)} gold a turn; pays back in ${payback} turns.`
                          : `Costs ${cost} shields; the gain doesn't cover its upkeep, so it never pays back.`) + at + '\n' + worth };
 }
 // Shields to build it (accelerated production halves costs, as for the city's current build)
@@ -800,15 +791,15 @@ function buildCost (id) {
 const ICONS = /*ICONS*/{};
 // Icon widths at the cell's 15 px height (from the PNG sizes)
 const ICON_W = { shield: 13, gold: 16, upkeep: 16, science: 9, luxury: 10, food: 16 };
-// An Effect cell: each part as that many game icons, as on the city screen (many icons overlap, to at most 64 px);
-// a loss other than upkeep has a red edge, zero is a faded icon. The text stays for search, CSV, the tooltip and as
-// the fallback.
+// An Effect cell: each net change as that many game icons, as on the city screen (many icons overlap, to at most 64
+// px); a gold loss is red coins, another loss has a red edge. The text stays for search, CSV, the tooltip and as the
+// fallback.
 function renderEffect (td, e) {
   if (! e.parts || ! e.parts.length || ! Object.keys (ICONS).length) return;
   td.textContent = '';
   for (const x of e.parts) {
     const n = Math.abs (parseInt (x.v.replace ('−', '-'), 10)) || 0, w = ICON_W[x.icon] || 14, span = document.createElement ('span');
-    span.className = 'yield' + (x.icon !== 'upkeep' && /^[−-]/.test (x.v) ? ' neg' : '') + (n === 0 ? ' zero' : '');
+    span.className = 'yield' + (! x.loss && /^[−-]/.test (x.v) ? ' neg' : '');
     span.title = x.text;
     const step = Math.min (w + 1, Math.max (3, 64 / Math.max (1, n)));
     for (let k = 0; k < Math.max (1, n); k++)

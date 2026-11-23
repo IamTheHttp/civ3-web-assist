@@ -157,7 +157,6 @@ body.drawer-full .drawergrip { display: none; }
 span.yield { white-space: nowrap; display: inline-block; margin-left: 8px; }
 span.yield img { height: 15px; vertical-align: -3px; position: relative; }
 span.yield.neg img { filter: drop-shadow(0 0 1px #ff3b30) drop-shadow(0 0 1px #ff3b30); }
-span.yield.zero img { opacity: .3; }
 td.hit { background: color-mix(in srgb, var(--gold) 26%, transparent) !important; }
 .ms { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; margin: 6px 0; }
 .ms-met { border-left: 4px solid var(--green); } .ms-missed { border-left: 4px solid var(--red); } .ms-progress { border-left: 4px solid var(--accent); }
@@ -1846,29 +1845,21 @@ function effectOf (c, key) {
   const V = state.attention.values, df = (e.foodNet ?? 0) - (base.foodNet ?? 0);
   const gain = dg * V.gold + ds * V.science + dl * V.luxury + dsh * V.shield + df * V.food - du * V.gold;
   const at = (res.rates ? ` At ${rates ? 'the tried slider' : 'your slider'}: ${sliderText (rates || res.rates)}.` : '') + (gov !== null ? ` Under ${govName (gov)} (tried).` : '');
-  // Each part: its text (for search and CSV), its icon and its signed value
-  const item = (v, word, icon) => parts.push ({ text: `${sign (v)} ${word}`, icon, v: sign (v) });
-  if (key === 'ch' || key === 'ps') {
-    // What the commerce kept turns into (after Library, Marketplace etc.), and the shields kept
-    if (ds) item (ds, 'sci', 'science');
-    if (dg) item (dg, 'gold', 'gold');
-    if (dl) item (dl, 'lux', 'luxury');
-    if (! ds && ! dg && ! dl) parts.push ({ text: '0 com', icon: 'gold', v: '0' });
-    item (dsh, 'shd', 'shield');
-  } else {
-    // Report what the building boosts, even when the gain rounds to zero
-    if (bd.science50 || bd.doublesScience || ds) item (ds, 'sci', 'science');
-    if (bd.gold50 || dg) item (dg, 'gold', 'gold');
-    if (bd.luxury50 || dl) item (dl, 'lux', 'luxury');
-    if (bd.production || dsh) item (dsh, 'shd', 'shield');
-  }
-  if (df) item (df, 'food', 'food');
-  if (du) parts.push ({ text: `−${du} upk`, icon: 'upkeep', v: `−${du}` });
+  // Net change per yield (upkeep is gold, so it nets against the gold); zero parts are left out. A gold loss shows as
+  // red coins. The tooltip keeps the gold and the upkeep apart.
+  const ng = dg - du;
+  const item = (v, word, icon) => { if (v) parts.push ({ text: `${sign (v)} ${word}`, icon, v: sign (v) }); };
+  item (ds, 'sci', 'science');
+  if (ng) parts.push ({ text: `${sign (ng).replace ('-', '−')} gold`, icon: ng < 0 ? 'upkeep' : 'gold', v: sign (ng).replace ('-', '−'), loss: ng < 0 });
+  item (dl, 'lux', 'luxury');
+  item (dsh, 'shd', 'shield');
+  item (df, 'food', 'food');
+  const detail = [ds && `${sign (ds)} science`, dg && `${sign (dg)} gold`, du && `−${du} upkeep`, dl && `${sign (dl)} luxury`, dsh && `${sign (dsh)} shields`, df && `${sign (df)} food`].filter (Boolean).join (', ') || 'no change';
   // Payback: build cost ÷ net gain per turn, both in gold
   const cost = buildCost (id), costG = cost ? cost * V.shield : null, payback = gain > 0 && costG ? Math.ceil (costG / gain) : null;
   const g = (v) => +v.toFixed (2), worth = `Worth in gold: shield ${g (V.shield)}, food ${g (V.food)}, gold ${g (V.gold)}, science ${g (V.science)}, luxury ${g (V.luxury)} (set in Tiers).`;
-  return { value: gain, payback, sort: gain, text: parts.map ((x) => x.text).join (', '), parts,
-           tip: (payback ? `Costs ${cost} shields = ${g (costG)} gold; gains ${g (gain)} gold a turn; pays back in ${payback} turns.`
+  return { value: gain, payback, sort: gain, text: parts.map ((x) => x.text).join (', ') || '0', parts,
+           tip: detail + '.\n' + (payback ? `Costs ${cost} shields = ${g (costG)} gold; gains ${g (gain)} gold a turn; pays back in ${payback} turns.`
                          : `Costs ${cost} shields; the gain doesn't cover its upkeep, so it never pays back.`) + at + '\n' + worth };
 }
 // Shields to build it (accelerated production halves costs, as for the city's current build)
@@ -1881,15 +1872,15 @@ function buildCost (id) {
 const ICONS = {"food": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABIAAAARCAYAAADQWvz5AAAByklEQVR42l2TTyiEURTFv2z8KVla20/ZTZGlsrGyo1GokaWykg0rIwtF1rIxmGSNIlnYDGoWmBRpVmMKycYwXf3udF6Pvm7f+3fOPffc9xJLml/9bceI7/clq5cyHo3qqgdrxE95MexbZdzHr/ebBt5JWHg4nrFGpd8PfVzNWfV82oGM4/CEpYzdHQxbbbfbMbXrlaaai7Uee9rr9M2NXK89F/rs9nDCjtZTVsynbX+2yzjzWcz6GZKSiDG4l/Jpk+hyud0INjgACX/K4i8lKBQBCXKjHZ4slMZXyCa+KaAAkDFn76Yw5qqYs4fSqYGWv0RIhJ0D8gYQhLFfUoVqyqUSkgUSfPkPwER1Tmux8SSVJW40ZaEGE1WGgATKRCb/WBfRfLrNkseTIduebLX8QipIRomyMicYQ6a7Jg8hwitXxEC1yxfNRQCIkHeol+FUlOANE4EBSbZAKFKJrKspYL7ORlyVE6FKJAL/H8dGU55U6g56xwgOKrO8iZ+K/vGYfTUrKW4NhtbLwBisuW45CmmG1mlWKI1HGN/o+JlAyBmuhFSIROFEfLyZ+CLKL3kRX0qFzoXS9PFm6B5BVwjuloI5eyTlzxoYvbVfsXV0DBUR5ZUAAAAASUVORK5CYII=", "gold": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABcAAAAWCAYAAAArdgcFAAACoElEQVR42o2Vz0tUURTHpRb9ASHVIsSNsxlrFZHWoNAPHk30CyRqJIcgHdoEExHpxk0FKVERFUxoWIJEBAZCbcJdoCIEI4JLV24qWgRZw4nPee9c75uZ94rH4dz33r3f873fc+65LdKy9dy60SvHcz2i/vqg+gfjN2Vm6ogMlYo6fvhiVL6uPhF/XdLjBjOVQGrVjPz6dE5kvV9EDkhtvcuN8bxjP5bK8vjefnk1PSaz759JKjgMAVYgD8zMgvz+PhoLxDvrCJIIfvdQq1weKMqfz92y9nFIvQPzQBXMQKNdMGbXqbLs68yqxuhbKBTUs3XbESC+GTBBPzzKpoOTSABJGpNtjH/6/ETItJppCEDg8akryeBWIWPX9ipYX99Z9YsTR9UDsvml4PLhy4RBIhE8H+QUHN1h/XO+bWsHlSA0glQzmg+CWV40uUiXBN6+Z3fINgJibPrDnsWzkxf0ne9Ux+a36ZjVNu5Ldem1NNW8tGuHLjRgP5ixxq+8G1Ap6sFNotSEwnTuTkbBCYhkZ/K9GtByUA8c24EnkQMHpNTVEVZIJVBNYcnk5TcXlRXfAPeZ29j/tvB2WBpk8atEKycKQgAru38xx5gTA992emeYxCihhw9m9TBxek1//hcvnW+qdzPtnd5mREUemANGN+QbhnTY/7CncmLJBJCSAxTmsDadaQVIZwcuqWLMU66ur7BdS6KVnB0WPLIAfCqfU5n01KYwV3AW+L0EVma8U5bGnrl2mpuxb2CumY36s4GYAUwA2oH1HEDJycnO7SpVfULNuES0SuhqVmrWp31JrK9bWcK+XC5rIG6letaxUrQaZzKavjzWISPDt11HdL4SaPUATpCN+au6hh0QBPNvJVfngLLIlWV0QQPGgqSrLO35CyooLnOlfApdAAAAAElFTkSuQmCC", "luxury": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABIAAAAbCAYAAABxwd+fAAABnklEQVR42s2VQUsCQRTH/U7dgy6dDIrAoPZSICVCeRK7FAbCBklJh0SIhbC6eUgogxSiQ4fMTkqXPkWXiOLFb9a3kK5rtXuI4TGz+9785j+z897GJBauNc93ZL+YDQd5uHUkk94Q+iF69WxPSsd5s4pt22a8Wzowvb6n19ju46kw11CzuYwslW1xHEeKjbpUmy3X2h3Prl965t1hpSL5bReeLGQN2IDWUsuysJWTzdad9J7vpfv6Lm8f4mv4AWrPAghASAwiD6wGbL1Wc1X1VegE/IWjE2Oe6nbHxHuHzWClcWkcqZsnM8YIAq4TWBAI8KtPMT5va3rQyMNBgJ8BAMaY7QNXyDcQbTE9b5QMQlhA1fA8CBkC0Tj8QWVsV9/5QXxBo2AK4Qj85oy8tcBQ8hNIIEhh+vUsy5Kg2EDQRb1sLitGBvwZRFPQuLixoOnMqkwkC+FBQCJThEUCmo1P/TNFkYBI5EhAfDFKaigQBV4r4q9vNn8IcmwmPumW4H7xZ5xIzBkfMYEgFBBMkvoZCaxA8jBQEUWLMwkyv8L2BafEd+qeRkCuAAAAAElFTkSuQmCC", "science": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAcCAYAAABoMT8aAAAB2UlEQVR42p2UTStEYRTH52OwtMdHmNhYUaRGmGIWiizMahKiWaiZmgkrG5ryMklZeKlhQVlIGHYjJcVmvoCFl3D0O9O53Xm5445up/vynPN7/uflPgEJVF+x6agkV5Ylk8nofWwxJnyr5RvwAoRCfRqMDcxPy1Y25R/A1dMdLAWensnc7Ix4+XkCwuGwpI8PpfD6qSoaBgxN9juAlfV44wBqgPx/KyAFAyyubjQGuDnPiALydwrQVG63/XcBZzcAJcVCzj9gKR3TFp483SuAO0PlGzA+EdHCEfj+JQpJJBL+AXSAwuW+xQFQh4YASCbQANSj1jjXbB/53z9carCZVxpVgK5gh1wtXzi7V0JY8wQgvb2tVduGAoP8PJeCizuPMjIa8Qa0NDcJCramNtWZQNud54/rN4kvxMuGquwM+AuAkYL7cHEASMeik1NylDzwBKCCQlcB2N0vAIVMqwPo7e505ANAZj0A66bCke/O3wA41wKwxkYv+d1y+QawFHA2FW6AOw09ugxAjysVWKA7mDU2wV8nr54Cg9iz1YAUaKf+ugDcEBYNhDPGM99YY2dVm02VahAZ7hebA4NgjDZGxc3sfX9vTapGGSKFQRUWHexSmRjfOSsrf75fkP1n4/gNW58AAAAASUVORK5CYII=", "shield": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAAQCAYAAAAmlE46AAABEUlEQVR42n2SsWoCURBFtw9Z+1Tp0ied2KX3LywCYiNYpsoG7CIEJGAlppFgJTaxsBUk9n5CmpSpwoQz4eo8fIbH1bcz98zMDltY8Xc6s5mdjz6PVJ9/2dlg5/+TzYfJ7z93y62Vi5+sLlbmutqYw3gdbI7evTJJjLXXb1f5ZnsownhhituHiY+CmSD3nFSYO0zR6D5b+bhO3isHagruMN5RoLrmCkTQOwoUdAoGSkbVO5L4D1ZHnh28vp96goBXzRQQiJLlXLZfjsAIK84zXl8OR5uVIcIxhgdvNRwfwJtWdVhCRuTw4N1/coIZIwcT04jJt6pDRcFxGcTIRW8CxrExS7HTSZDTHzw5jFpVz3KeXyLPJrC9YU8uAAAAAElFTkSuQmCC", "upkeep": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABcAAAAWCAYAAAArdgcFAAABxUlEQVR42oWVzU3EMBCFHQFixYkuoIs9cuWIkGgiaSAVoK1he6CA1JESOPMTrcSg5/jzTkxwFI2cOPablzfPk2DhfL1dXVobgmkkphBijE0Tx/fdtZ2OR/P7/rvyjTZ+3N/Z5+Ozfe/31fHr6cWGpsnrq+BiqIXatAbEvfX94r2etU9RBfdMSGRdtwAFTPOZddeZYKqyPNxcRI2lrRLpFQkBzkHSNI5xfQW8TYXzxZsio3nMny+mKQGJpxpzHDIkUL5gcsAL7R1zJaqCv97uMviYpPBfYClgT1DwakHRG6alx+fNcwKcJa/7+DkcUnErBS0PkGetZ0kjoBKcOmwWVKdQUmlOgWwkKoF9eIkyuAAUXgqx9C7RGG3X9wvGflRE65bMvc54HXBtiAdrg/ncd4Ktak5BeVYSP69YK+aa9pk1MSWNAcWezCv0vMm+686SmJMC5hx/3kEgFtdpXOqvL9G+hSS5jyTL+QMzFc7R+y3XRNb+qK/9KGDvwdfYoz3dM8pOf6YJlQ0M5oAqAbKVBSWEGSUhAUm8x2lQJNccRVUi2bPUe2HFtmA1uIaFJIwC1Ro6JY7SfdnE/pxQ7whab+1XVrt+AR8cck2FDl2bAAAAAElFTkSuQmCC"};
 // Icon widths at the cell's 15 px height (from the PNG sizes)
 const ICON_W = { shield: 13, gold: 16, upkeep: 16, science: 9, luxury: 10, food: 16 };
-// An Effect cell: each part as that many game icons, as on the city screen (many icons overlap, to at most 64 px);
-// a loss other than upkeep has a red edge, zero is a faded icon. The text stays for search, CSV, the tooltip and as
-// the fallback.
+// An Effect cell: each net change as that many game icons, as on the city screen (many icons overlap, to at most 64
+// px); a gold loss is red coins, another loss has a red edge. The text stays for search, CSV, the tooltip and as the
+// fallback.
 function renderEffect (td, e) {
   if (! e.parts || ! e.parts.length || ! Object.keys (ICONS).length) return;
   td.textContent = '';
   for (const x of e.parts) {
     const n = Math.abs (parseInt (x.v.replace ('−', '-'), 10)) || 0, w = ICON_W[x.icon] || 14, span = document.createElement ('span');
-    span.className = 'yield' + (x.icon !== 'upkeep' && /^[−-]/.test (x.v) ? ' neg' : '') + (n === 0 ? ' zero' : '');
+    span.className = 'yield' + (! x.loss && /^[−-]/.test (x.v) ? ' neg' : '');
     span.title = x.text;
     const step = Math.min (w + 1, Math.max (3, 64 / Math.max (1, n)));
     for (let k = 0; k < Math.max (1, n); k++)
