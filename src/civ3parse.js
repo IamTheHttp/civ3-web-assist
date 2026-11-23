@@ -309,6 +309,20 @@ const Civ3Parse = (() => {
 			}
 			return base + best;
 		};
+		// The buildings that make up that multiplier (the best power plant only), for explanations
+		result.shieldMultNames = (set) => {
+			const names = []; let best = null;
+			if (! rules || ! set) return names;
+			for (const k of set) {
+				const bd = rules.buildings[k];
+				if (! bd || ! bd.production) continue;
+				if (bd.obsoleteBy >= 0 && result.knownTechs && result.knownTechs.has (bd.obsoleteBy)) continue;
+				if (bd.powerPlant) { if ((bd.requires < 0 || set.has (bd.requires)) && (! best || bd.production > best.production)) best = bd; }
+				else names.push (bd.name);
+			}
+			if (best) names.push (best.name);
+			return names;
+		};
 
 		// Cities: a "CITY" header with length 136 starts a real city record (other CITY headers are something else)
 		const CITY_FIXED = 556, CTZN_SIZE = 308;

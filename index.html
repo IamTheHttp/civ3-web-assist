@@ -162,6 +162,7 @@ body.drawer-full .drawergrip { display: none; }
 .fxtip td { border: 0; padding: 1px 6px 1px 0; white-space: nowrap; text-align: left; background: none; }
 .fxtip td.n { text-align: right; font-variant-numeric: tabular-nums; }
 .fxtip img { height: 15px; vertical-align: -3px; }
+.fxtip .how { margin-top: 4px; max-width: 34em; }
 .fxtip .foot { color: var(--muted); margin-top: 4px; font-size: 12px; }
 span.yield { white-space: nowrap; display: inline-block; margin-left: 8px; }
 span.yield img { height: 15px; vertical-align: -3px; position: relative; }
@@ -937,6 +938,20 @@ const Civ3Parse = (() => {
 				else base += bd.production;
 			}
 			return base + best;
+		};
+		// The buildings that make up that multiplier (the best power plant only), for explanations
+		result.shieldMultNames = (set) => {
+			const names = []; let best = null;
+			if (! rules || ! set) return names;
+			for (const k of set) {
+				const bd = rules.buildings[k];
+				if (! bd || ! bd.production) continue;
+				if (bd.obsoleteBy >= 0 && result.knownTechs && result.knownTechs.has (bd.obsoleteBy)) continue;
+				if (bd.powerPlant) { if ((bd.requires < 0 || set.has (bd.requires)) && (! best || bd.production > best.production)) best = bd; }
+				else names.push (bd.name);
+			}
+			if (best) names.push (best.name);
+			return names;
 		};
 
 		// Cities: a "CITY" header with length 136 starts a real city record (other CITY headers are something else)
@@ -1783,7 +1798,8 @@ function evaluate (c, ticks, rates, gov = null) {
   const res = state.result, m = res.model, econ = res.econ, rules = res.rules;
   const now = { corruption: c.corruption, waste: c.waste, corruptionPct: c.corruptionPct, wastePct: c.wastePct,
                 gold: c.gold, science: c.science, luxury: c.luxury, upkeep: c.upkeep, value: 0, changed: false,
-                ni: c.reducers ? c.reducers.length : 0, commerce: c.commerce, shields: c.shields, foodNet: c.foodNet, grow: c.grow, production: c.production };
+                ni: c.reducers ? c.reducers.length : 0, commerce: c.commerce, shields: c.shields, foodNet: c.foodNet, grow: c.grow, production: c.production,
+                set: c.buildings };
   if (! rules || ! c.buildings) return now;
   const want = (key) => (ticks && key in ticks) ? ticks[key] : ticked (c, key);
   const set = new Set (c.buildings);
@@ -1798,7 +1814,7 @@ function evaluate (c, ticks, rates, gov = null) {
   }
   if (gov !== null && ! c.tileYields) gov = null;
   if (! changed && ! rates && gov === null) return now;
-  const out = { ...now, upkeep, changed: true };
+  const out = { ...now, upkeep, changed: true, set };
 
   // Another government: the tiles' yields change (trade bonus, tile penalty); anchored to the game's own figures
   if (gov !== null) {
@@ -1886,7 +1902,21 @@ function effectOf (c, key) {
   const foot = [`Total ${sign (g (gain))} gold a turn (worth: shield ${g (V.shield)}, food ${g (V.food)}, gold ${g (V.gold)}, science ${g (V.science)}, luxury ${g (V.luxury)})`,
                 payback ? `Costs ${cost} shields = ${g (costG)} gold · pays back in ${payback} turns` : `Costs ${cost} shields · never pays back`];
   if (at.trim ()) foot.push (at.trim ());
-  return { value: gain, payback, sort: gain, text: parts.map ((x) => x.text).join (', ') || '0', parts, lines, foot,
+  // How it comes about: waste and corruption before → after, and the production multiplier (as on the city screen, the
+  // waste and corruption counts are before the multiplier and the slider)
+  const notes = [], mb = res.shieldMult (base.set), me = res.shieldMult (e.set), names = res.shieldMultNames (e.set).join (', ');
+  const mx = (q) => q % 4 ? (q / 4).toFixed (2).replace (/0$/, '') : String (q / 4);
+  if (base.waste !== e.waste) {
+    const kept = base.waste - e.waste;
+    notes.push (`Waste ${base.waste} → ${e.waste}: ${kept} ${Math.abs (kept) === 1 ? 'shield' : 'shields'} kept` +
+                (me !== 4 ? ` × ${mx (me)} (${names}) = ${sign (dsh)}` : ''));
+  }
+  if (mb !== me) notes.push (`Production ×${mx (mb)} → ×${mx (me)} (${names}): ${e.shields - e.waste} shields after waste become ${e.production}`);
+  if (base.corruption !== e.corruption) {
+    const kept = base.corruption - e.corruption;
+    notes.push (`Corruption ${base.corruption} → ${e.corruption}: ${kept} commerce kept, split by your slider and buildings into the lines above`);
+  }
+  return { value: gain, payback, sort: gain, text: parts.map ((x) => x.text).join (', ') || '0', parts, lines, notes, foot,
            tip: detail + '.\n' + (payback ? `Costs ${cost} shields = ${g (costG)} gold; gains ${g (gain)} gold a turn; pays back in ${payback} turns.`
                          : `Costs ${cost} shields; the gain doesn't cover its upkeep, so it never pays back.`) + at + '\n' + worth };
 }
@@ -1941,6 +1971,7 @@ function showFxTip (td, ev) {
   }
   if (! e.lines.length) t.insertRow ().insertCell ().textContent = 'No change';
   box.appendChild (t);
+  for (const n of e.notes || []) box.appendChild (Object.assign (document.createElement ('div'), { className: 'how', textContent: n }));
   for (const f of e.foot) box.appendChild (Object.assign (document.createElement ('div'), { className: 'foot', textContent: f }));
   box.hidden = false; moveFxTip (ev);
 }
