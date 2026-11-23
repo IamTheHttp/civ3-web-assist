@@ -17,7 +17,8 @@
 - **Score parts go in the tooltip,** not in their own column (the war-declarations column was removed; it showed the
   wrong direction anyway). No extra views unless asked (an "after peace" attitude view was declined).
 - **Checks in-game readily** when given exact predictions and the screen to read; reports back line by line.
-- **Signals over raw numbers:** payback turns for buildings; green / amber / grey.
+- **Signals over raw numbers:** Effect cells show the gain without turns, coloured by the gain in gold a turn: green
+  above 10, amber 5–10, grey 0–5, red a loss (editable in Tiers). Payback turns stay in the tooltip.
 - **Yields have a worth in gold** (Tiers → Building payback): shield and food 4, gold, science and luxury 1 by default.
   Payback = cost in shields × shield worth ÷ the gain's worth per turn (10 shields for +1 gold a turn = 40 turns).
   Why 4: gold is scarce for most of the game and buys shields; the player rushes only builds with some progress, at
