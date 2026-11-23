@@ -154,6 +154,8 @@ body.drawer-full .drawergrip { display: none; }
 @media (max-width: 760px) { body.drawer-full .drawer { left: 0; } .drawergrip { display: none; } }
 .searchbar { display: flex; gap: 10px; align-items: center; margin: 0 0 8px; }
 #search { flex: 0 1 460px; font-size: 14px; padding: 6px 10px; }
+span.yield { white-space: nowrap; }
+span.yield img { height: 15px; vertical-align: -3px; margin-left: 2px; }
 td.hit { background: color-mix(in srgb, var(--gold) 26%, transparent) !important; }
 .ms { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; margin: 6px 0; }
 .ms-met { border-left: 4px solid var(--green); } .ms-missed { border-left: 4px solid var(--red); } .ms-progress { border-left: 4px solid var(--accent); }
@@ -761,26 +763,28 @@ function effectOf (c, key) {
   const V = state.attention.values, df = (e.foodNet ?? 0) - (base.foodNet ?? 0);
   const gain = dg * V.gold + ds * V.science + dl * V.luxury + dsh * V.shield + df * V.food - du * V.gold;
   const at = (res.rates ? ` At ${rates ? 'the tried slider' : 'your slider'}: ${sliderText (rates || res.rates)}.` : '') + (gov !== null ? ` Under ${govName (gov)} (tried).` : '');
+  // Each part: its text (for search and CSV), its icon and its signed value
+  const item = (v, word, icon) => parts.push ({ text: `${sign (v)} ${word}`, icon, v: sign (v) });
   if (key === 'ch' || key === 'ps') {
     // What the commerce kept turns into (after Library, Marketplace etc.), and the shields kept
-    if (ds) parts.push (`${sign (ds)} sci`);
-    if (dg) parts.push (`${sign (dg)} gold`);
-    if (dl) parts.push (`${sign (dl)} lux`);
-    if (! ds && ! dg && ! dl) parts.push ('0 com');
-    parts.push (`${sign (dsh)} shd`);
+    if (ds) item (ds, 'sci', 'science');
+    if (dg) item (dg, 'gold', 'gold');
+    if (dl) item (dl, 'lux', 'luxury');
+    if (! ds && ! dg && ! dl) parts.push ({ text: '0 com', icon: 'gold', v: '0' });
+    item (dsh, 'shd', 'shield');
   } else {
     // Report what the building boosts, even when the gain rounds to zero
-    if (bd.science50 || bd.doublesScience || ds) parts.push (`${sign (ds)} sci`);
-    if (bd.gold50 || dg) parts.push (`${sign (dg)} gold`);
-    if (bd.luxury50 || dl) parts.push (`${sign (dl)} lux`);
-    if (bd.production || dsh) parts.push (`${sign (dsh)} shd`);
+    if (bd.science50 || bd.doublesScience || ds) item (ds, 'sci', 'science');
+    if (bd.gold50 || dg) item (dg, 'gold', 'gold');
+    if (bd.luxury50 || dl) item (dl, 'lux', 'luxury');
+    if (bd.production || dsh) item (dsh, 'shd', 'shield');
   }
-  if (df) parts.push (`${sign (df)} food`);
-  if (du) parts.push (`−${du} upk`);
+  if (df) item (df, 'food', 'food');
+  if (du) parts.push ({ text: `−${du} upk`, icon: 'upkeep', v: `−${du}` });
   // Payback: build cost ÷ net gain per turn, both in gold
   const cost = buildCost (id), costG = cost ? cost * V.shield : null, payback = gain > 0 && costG ? Math.ceil (costG / gain) : null;
   const g = (v) => +v.toFixed (2), worth = `Worth in gold: shield ${g (V.shield)}, food ${g (V.food)}, gold ${g (V.gold)}, science ${g (V.science)}, luxury ${g (V.luxury)} (set in Tiers).`;
-  return { value: gain, payback, sort: gain, text: parts.join (', '),
+  return { value: gain, payback, sort: gain, text: parts.map ((x) => x.text).join (', '), parts,
            tip: (payback ? `Costs ${cost} shields = ${g (costG)} gold; gains ${g (gain)} gold a turn; pays back in ${payback} turns.`
                          : `Costs ${cost} shields; the gain doesn't cover its upkeep, so it never pays back.`) + at + '\n' + worth };
 }
@@ -789,6 +793,19 @@ function buildCost (id) {
   const b = state.result.rules.buildings[id]; if (! b || ! b.cost) return null;
   const cost = b.cost * 10;
   return state.result.accelerated ? Math.ceil (cost / 2) : cost;
+}
+// Game icons (shield, gold, upkeep, science, luxury, food), inlined by build.py from src/icons
+const ICONS = /*ICONS*/{};
+// An Effect cell: each part as its number and the game's icon; the text stays for search, CSV and as the fallback
+function renderEffect (td, e) {
+  if (! e.parts || ! e.parts.length || ! Object.keys (ICONS).length) return;
+  td.textContent = '';
+  e.parts.forEach ((x, k) => {
+    if (k) td.append (' ');
+    const span = document.createElement ('span'); span.className = 'yield'; span.textContent = x.v;
+    if (ICONS[x.icon]) span.appendChild (Object.assign (document.createElement ('img'), { src: ICONS[x.icon], alt: x.text, title: x.text }));
+    td.appendChild (span);
+  });
 }
 // Colour by the gain per turn in gold: green above good, amber from ok, grey from 0, red below 0. Cells that can't
 // have the building (has one, needs another, capital) have no gain and stay grey.
@@ -800,7 +817,7 @@ function gainClass (e) {
 // An Effect column: sorts by the gain (largest first), coloured by it
 function effectColumn (key, extra) {
   return { ...extra, val: (c) => effectOf (c, key).sort ?? effectOf (c, key).value, show: (c) => effectOf (c, key).text, csv: (c) => effectOf (c, key).text,
-           cls: (c) => gainClass (effectOf (c, key)), tip: (c) => effectOf (c, key).tip || '', firstDir: -1 };
+           cls: (c) => gainClass (effectOf (c, key)), render: (c, td) => renderEffect (td, effectOf (c, key)), tip: (c) => effectOf (c, key).tip || '', firstDir: -1 };
 }
 
 // Commerce buildings from the rules that can be ticked: non-wonders that boost science, gold or luxury
@@ -2119,6 +2136,7 @@ function render () {
         continue;
       }
       td.textContent = col.show ? col.show (c) : col.val (c);
+      if (col.render) col.render (c, td);
       if (col.tip) { const t = col.tip (c); if (t) td.title = t; }
       td.className = [col.l ? 'l' : '', col.group ? 'group' : '', col.cls ? col.cls (c) : '', hit (td.textContent) ? 'hit' : ''].join (' ').trim ();
       tr.appendChild (td);

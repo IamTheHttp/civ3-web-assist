@@ -34,7 +34,7 @@ Save and rules layouts and the formulas the viewer uses are in `docs/REVERSE_ENG
   `tests/blast.c` and `tests/blast.h` are the original.
 - Save and rules layouts build on OpenCiv3's QueryCiv3 (MIT) and c3sat by Jim Nelson (MIT).
 - Corruption and culture-flip formulas come from community research at CivFanatics and Apolyton.
-- No game files are included except the yield icons (shield, commerce, upkeep, science, gold). You load your own
+- No game files are included except the yield icons in `src/icons/` (shield, gold, upkeep, science, luxury, food). You load your own
   `conquests.biq` and saves.
 
 ## Disclaimer

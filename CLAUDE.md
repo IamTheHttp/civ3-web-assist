@@ -9,8 +9,9 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
 - Current game: **Maya**, Republic, Monarch difficulty, Standard 100x100 map wrapping east–west, 42 cities, turn 194.
   Default rules (`conquests.biq`).
 - The save (`maya.SAV`) and `conquests.biq` go in `local-data/` (gitignored). Never commit game files or saves.
-  Exception (the player's decision): the yield icons (shield, commerce, upkeep, science, gold) cut from the game's art,
-  with the disclaimer in the README and the help dialog. No other game art.
+  Exception (the player's decision): the yield icons in `src/icons/` (shield, gold, upkeep, science, luxury, food), cut
+  from the game's `Art/city screen/CityIcons.pcx`, with the disclaimer in the README and the help dialog. No other game
+  art. `build.py` inlines them as data URIs.
 
 ## Rules
 - **Verify, don't guess.** Every formula and offset in the viewer was checked against the real save. Report what is
