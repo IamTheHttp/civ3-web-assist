@@ -1110,10 +1110,11 @@ const Civ3Parse = (() => {
 			           (unusual.length ? `; calibrated individually: ${unusual.map ((c) => c.name + (c.econ.extraCommerce ? ` (+${c.econ.extraCommerce} commerce)` : '') + (c.econ.offset.gold ? ` (${c.econ.offset.gold > 0 ? '+' : ''}${c.econ.offset.gold} gold${c.buildName === 'Wealth' ? ' from Wealth' : ''})` : '')).join (', ')}` : ''));
 		}
 
-		// Self-checks, verified on a real save: gold + luxury + science = the city's final commerce total, and
-		// gross shields - waste = net shields. If these fail, the field positions don't fit this file.
+		// Self-checks, verified on real saves: gold + luxury + science = the city's final commerce total, and
+		// (gross shields - waste) x the production multiplier = the production at CITY +508 (checked with Factory and
+		// Factory + Coal Plant: 5/5 cities of the 1140 AD save). If these fail, the field positions don't fit this file.
 		const okCommerce = result.cities.filter ((c) => c.gold + c.luxury + c.science === c.raw.finalTotal).length;
-		const okShields = result.cities.filter ((c) => c.shields - c.waste === c.raw.netShields).length;
+		const okShields = result.cities.filter ((c) => Math.floor ((c.shields - c.waste) * result.shieldMult (new Set (c.buildings)) / 4) === c.raw.netShields).length;
 		diag.push (`Field checks: commerce split adds up in ${okCommerce}/${result.cities.length} cities, shields add up in ${okShields}/${result.cities.length}`);
 		result.fieldsOk = okCommerce === result.cities.length && okShields === result.cities.length;
 
@@ -1211,8 +1212,10 @@ const Civ3Parse = (() => {
 					// Map_calc_food_yield_at 0x5D7180, Map_calc_shield_yield_at 0x5D75F0, Map_calc_commerce_yield_at 0x5D7AD0).
 					// A tile is worked by the city whose id is at tile +104 (OpenCiv3 CityIDOfCitizen); the city tile is one of
 					// them. Checked on a save: the sums reproduce every city's food, shields and commerce from tiles. Not on that
-					// save, so not checked: pollution (-1 on each yield), Commercial and Seafaring city tiles. Not transcribed:
-					// railroads and farmland (+1 with a tech), Golden Age (+1), Colossus-type wonders; a city that has them won't
+					// save, so not checked: pollution (-1 on each yield), Commercial and Seafaring city tiles. Railroad (TILE +52
+					// bit 1): +1 shield on a mined tile, +1 food on an irrigated one (checked: 21/21 cities of the 1140 AD save;
+					// the exe also asks for a tech, known wherever railroads exist; the order against the Despotism penalty isn't
+					// checked). Not transcribed: farmland, Golden Age (+1), Colossus-type wonders; a city that has them won't
 					// reproduce, and Diagnostics names it.
 					const ty = rules.terrainYields, goods = rules.goods, civ = rules.civs[playerRace] || {};
 					if (ty.length && rules.governments.every ((g) => g.tilePenalty !== undefined)) {
@@ -1223,19 +1226,21 @@ const Civ3Parse = (() => {
 						const bigSeaNear = (c) => around.some (([dx, dy]) => { const o = tile (c.x + dx, c.y + dy); return o >= 0 && isWater (o) && bodySize[bodyOf (o)] > 20; });
 						const yieldOf = (c, o, g) => {
 							const t = b[o + 57] >> 4, T = ty[t] || { irrigation: 0, mining: 0, road: 0, food: 0, shields: 0, commerce: 0 }, f2 = b[o + 52];
-							const road = f2 & 1, mine = f2 & 4, irrigated = f2 & 8, polluted = f2 & 64, river = b[o + 8] !== 0;
+							const road = f2 & 1, rail = f2 & 2, mine = f2 & 4, irrigated = f2 & 8, polluted = f2 & 64, river = b[o + 8] !== 0;
 							const water = isWater (o), bigWater = water && bodySize[bodyOf (o)] > 20, isCity = i16 (o + 30) === c.id;
 							const res = i32 (o + 12), gd = res >= 0 ? goods[res] : null;
 							const gOk = gd && (gd.prereq < 0 || (result.knownTechs && result.knownTechs.has (gd.prereq)));
 							const cls = c.size > maxCity ? 2 : (c.size > maxTown ? 1 : 0);
 							let food = T.food; if (food > 0 && polluted) food--;
 							if (irrigated || isCity) { food += T.irrigation; if (t === 0 && civ.agricultural) food++; } // a city tile counts as irrigated
+							if (irrigated && rail) food++; // railroad on an irrigated tile
 							if (gOk) food += gd.food;
 							if (water) food += bigWater ? flagCount (c, 'foodWater') : 1; // +1 on a lake (20 tiles or fewer)
 							if (isCity) food = CITY_FOOD + (civ.agricultural ? 1 : 0);
 							if (g.tilePenalty && ! (civ.agricultural && isCity && river) && food > 2) food--;
 							let sh = T.shields; if (sh > 0 && polluted) sh--;
 							if (mine) sh += T.mining;
+							if (mine && rail) sh++; // railroad on a mined tile
 							if (gOk) sh += gd.shields;
 							if (t === 2 && (b[o + 62] & 1)) sh++; // grassland bonus shield
 							if (bigWater) sh += flagCount (c, 'shieldsWater');

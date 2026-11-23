@@ -34,11 +34,12 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
 - Slider rate limit: GOVT +520 (OpenCiv3 `ScienceRateCap`, tenths) is 10 for every government in the default rules; the player
   confirmed 100% gold is possible under every government. The Effect columns use the save's slider, or the "Try slider" one.
 - Tile yields: the game's rule (`Map_calc_food/shield/commerce_yield_at` 0x5D7180 / 0x5D75F0 / 0x5D7AD0) reproduces every
-  city's food, shields and commerce from its worked tiles in **42/42**. Worked tile: TILE +104 = city id (city tile included).
+  city's food, shields and commerce from its worked tiles in **42/42** (Maya save) and **21/21** (1140 AD save). Worked tile: TILE +104 = city id (city tile included).
   City tile: food 2 (+1 Agricultural), +1 shield and +1 commerce above the town limit, capital commerce at least 4.
   GOVT +24 trade bonus (+1 commerce on a tile with commerce: Republic, Democracy), +20 tile penalty (−1 on a yield above 2:
   Despotism, Anarchy), +12 building maintenance (none under Anarchy). Anarchy wastes every coin and shield (exe 0x4B1239;
-  the player confirmed). Railroad, farmland, Golden Age and Colossus-type wonders aren't transcribed (not on the save).
+  the player confirmed). Railroad (TILE +52 bit 1): +1 shield on a mined tile, +1 food on an irrigated one (not the city
+  tile): 21/21 on the 1140 AD save. Farmland, Golden Age and Colossus-type wonders aren't transcribed (not on a save).
 - Units: UNIT records (length 472; +28 owner, +32 nationality = civ, +40 type) match LEAD +376 unit count for every player
   (Maya 141; LEAD +380 military 77). Gold support (`Leader_sum_unit_maintenance` 0x55D310, `get_unit_support_info` 0x53A960):
   (units − free − units of another nationality or a type without PRTO +208 support) × GOVT +556 gold; free = GOVT +540
@@ -58,7 +59,8 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
 - Production (`City_recompute_production` 0x4B05D0): shields = (raw − waste) × (4 + Σ BLDG +208 + best power plant) / 4,
   floored. Power plants (BLDG +237 bit5) count only with their required building (Factory), only the best one; a building
   obsolete by a known tech (+224) counts nothing. Default rules: Factory 2, Manufacturing Plant 2, Coal/Hydro/Solar 2,
-  Nuclear 4, Iron Works 4 (CivFanatics agrees: +50% each, Nuclear +100%). No city in the Maya save has one (not checked).
+  Nuclear 4, Iron Works 4 (CivFanatics agrees: +50% each, Nuclear +100%). CITY +508 is the production after the
+  multiplier: reproduced in 5/5 cities with Factory (×1.5) or Factory + Coal Plant (×2) on the 1140 AD save.
 - Specialist output is stored separately (fields 528/532/536) and is NOT in the city's gold/sci/lux.
 - Difficulty optimal-cities % (DIFF +108): Chieftain 100, Warlord 95, Regent 90, Monarch 85, Emperor 80, Demigod 70,
   Deity 60, Sid 50. Difficulty corruption % (DIFF +116): 100 at every level in the default rules.
@@ -90,7 +92,8 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
 - War weariness (`docs/learnings/war-weariness.md`): points per enemy at LEAD +3228 + 4k. Faces per city (exe 0x4BD780):
   base size (high) or size/2 (low; GOVT +560), per enemy at war ≤30 → 0, 31–60 → ½, 61–120 → 1, >120 → 2 × base, summed,
   at most the size. CITY +152..+160 store unhappiness causes in % (+153 base, +154 war weariness): the formula matches
-  **49/49** cities that have unhappy citizens (all civs, all Republic).
+  **49/49** cities that have unhappy citizens (Maya save, all civs, all Republic) and **59/59** on the 1140 AD save
+  (all civs: Republic low 28/28, Democracy high 29/29, Fascism none 2/2).
 - Trade (Diplomacy columns): the trade screen (exe 0x50FA60) lists a tech when one side knows it and the other can research it
   (0x561580: prerequisites TECH +88..+100 known, TECH +72 era ≤ the receiver's era LEAD +224) and TECH +104 lacks 0x80000
   (0x437F80; none in the default rules). No embassy needed (confirmed in-game). Luxuries: CITY +132 = bitmask of GOOD
@@ -116,16 +119,15 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
 
 ## Open items
 - Communism corruption is unverified (Anarchy: confirmed in-game).
-- Tile yields don't model railroads, farmland, Golden Age or Colossus-type wonders (none on the tested save, so any city
-  with them shows in Diagnostics as not reproduced). From the exe so far: a mined tile with a railroad +1 shield and an
-  irrigated one +1 food, both with a tech from the rules (+536 of the rules data); Golden Age (LEAD +40 = end turn) +1
+- Tile yields don't model farmland, Golden Age or Colossus-type wonders (none on the tested saves, so any city
+  with them shows in Diagnostics as not reproduced). From the exe so far: Golden Age (LEAD +40 = end turn) +1
   shield and +1 commerce on a tile that has some; wonders with flag 32 (`Leader_count_wonders_with_flag`) + commerce on a
   tile that has some. Verify each on a save that has it.
 - The model assumes every city is connected to the capital by trade (not read from the save; otherwise distance × 5/4;
   mismatches show "~").
 
-- War weariness: high (Democracy), Police Station (−size/4), Universal Suffrage (−1 per city) and the +size/4 content
-  for an enemy that declared war on you are read from the exe, not seen on a save.
+- War weariness: Police Station (−size/4), Universal Suffrage (−1 per city) and the +size/4 content for an enemy that
+  declared war on you are read from the exe, not seen on a save.
 
 - Attitude doesn't count resource deals (−5, helper 0x55E8E0: a table behind leader +5652, 96 bytes per entry, 3 per
   player). Its save layout is unknown: it isn't in the data after each LEAD in the memory layout. To locate it: two saves of

@@ -1,6 +1,7 @@
 # War weariness
 
-Read from the GOG exe. The face count is checked against the save (49/49 cities of all civilizations, CITY +153/+154).
+Read from the GOG exe. The face count is checked against the saves (CITY +153/+154): Maya 49/49 cities of all
+civilizations; 1140 AD 59/59 (Republic 28/28, Democracy 29/29, Fascism 2/2).
 
 ## Points
 
@@ -36,7 +37,8 @@ Read from the GOG exe. The face count is checked against the save (49/49 cities 
   unhappy citizen. +153 base unhappy = working citizens (size − specialists) − DIFF +68 content; +154 war weariness.
   Prediction matches 49/49 cities (Maya save, all civilizations, all Republic). This confirms the per-enemy counters,
   the thresholds, the low formula, the sum and the size limit.
-- Not on the tested save: high (Democracy), Police Station, Universal Suffrage, the negative-points bonus (it isn't a
+- High (Democracy) and none (Fascism) checked on the 1140 AD save.
+- Not on the tested saves: Police Station, Universal Suffrage, the negative-points bonus (it isn't a
   cause byte), the anarchy rule.
 - Happiness sum (not transcribed): luxury steps = (city luxury + specialist luxury) / RULE +176 (= 1), plus luxury
   resources (Marketplace table 0,1,2,4,6,9,12,16,20,24,28,32 at 0x665868), minus war weariness; content steps from
