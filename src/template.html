@@ -292,7 +292,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Sort</dt><dd>Click a column name. Click again to reverse.</dd>
         <dt>▾ Filter</dt><dd>On each column, as in a spreadsheet: sort, a condition (greater than, between, contains…) or tick the values to keep. A blue ▾ marks a filtered column. Filters and sorting use the real numbers, so a what-if tick never hides or moves a city; each view keeps its own filters.</dd>
         <dt>What-if ticks</dt><dd>Tick <b>CH</b>, <b>PS</b>, <b>Lib</b>, <b>Mkt</b>, <b>Fac</b>, <b>Power</b>, <b>Mfg</b>… to try a building (Power: Coal Plant; a city counts only its best power plant). Changed numbers show <i>now → then</i>; an amber outline marks a tick that isn't real.</dd>
-        <dt>Effect columns</dt><dd>What one building would gain the city per turn, after upkeep, and how many turns until it pays back its cost (cost and gain in gold, by the worth of a shield, food, gold, science and luxury set in Tiers; default a shield or food = 4 gold): <span class="green">green</span> fast, <span class="amber">amber</span> slow, grey never. They sort fastest payback first. Set the limits in Tiers.</dd>
+        <dt>Effect columns</dt><dd>What one building would gain the city per turn, after upkeep; the colour shows how fast it pays back its cost (point at a cell for the turns; cost and gain in gold, by the worth of a shield, food, gold, science and luxury set in Tiers; default a shield or food = 4 gold): <span class="green">green</span> fast, <span class="amber">amber</span> slow, grey never. They sort fastest payback first. Set the limits in Tiers.</dd>
         <dt>Tier</dt><dd>Pick a tier to fix it for that city; <i>(auto)</i> follows corruption.</dd>
         <dt>Attention</dt><dd><span class="amber">Amber</span>: missing. <span class="green">Green</span>: being built now.</dd>
         <dt>Colours</dt><dd><span class="red">Red</span>: serious (half or more lost, disorder). <span class="amber">Amber</span>: watch it. <b>~</b>: the corruption model doesn't match the game in that city.</dd>
@@ -778,9 +778,8 @@ function effectOf (c, key) {
   if (du) parts.push (`−${du} upk`);
   // Payback: build cost ÷ net gain per turn, both in gold
   const cost = buildCost (id), costG = cost ? cost * V.shield : null, payback = gain > 0 && costG ? Math.ceil (costG / gain) : null;
-  const tail = payback ? ` · ${payback} ${payback === 1 ? 'turn' : 'turns'}` : ' · never';
   const g = (v) => +v.toFixed (2), worth = `Worth in gold: shield ${g (V.shield)}, food ${g (V.food)}, gold ${g (V.gold)}, science ${g (V.science)}, luxury ${g (V.luxury)} (set in Tiers).`;
-  return { value: gain, payback, sort: payback ? -payback : -1e6 + gain, text: parts.join (', ') + tail,
+  return { value: gain, payback, sort: payback ? -payback : -1e6 + gain, text: parts.join (', '),
            tip: (payback ? `Costs ${cost} shields = ${g (costG)} gold; gains ${g (gain)} gold a turn; pays back in ${payback} turns.`
                          : `Costs ${cost} shields; the gain doesn't cover its upkeep, so it never pays back.`) + at + '\n' + worth };
 }
