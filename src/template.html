@@ -305,7 +305,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Sort</dt><dd>Click a column name. Click again to reverse.</dd>
         <dt>▾ Filter</dt><dd>On each column, as in a spreadsheet: sort, a condition (greater than, between, contains…) or tick the values to keep. A blue ▾ marks a filtered column. Filters and sorting use the real numbers, so a what-if tick never hides or moves a city; each view keeps its own filters.</dd>
         <dt>What-if ticks</dt><dd>Tick <b>CH</b>, <b>PS</b>, <b>Lib</b>, <b>Mkt</b>, <b>Fac</b>, <b>Power</b>, <b>Mfg</b>… to try a building (Power: Coal Plant; a city counts only its best power plant). Changed numbers show <i>now → then</i>; an amber outline marks a tick that isn't real.</dd>
-        <dt>Effect columns</dt><dd>What one building would gain the city per turn, after upkeep. The colour is the gain in gold a turn, by the worth of a shield, food, gold, science and luxury set in Settings (default a shield or food = 4 gold): <span class="green">green</span> above 10, <span class="amber">amber</span> 5–10, grey 0–5, <span class="red">red</span> a loss. Point at a cell for the cost and the turns to pay it back. They sort largest gain first. Set the limits, the worths and icons or words in Settings.</dd>
+        <dt>Effect columns</dt><dd>What one building would gain the city per turn, after upkeep. The colour is the gain in gold a turn, by the worth of a shield, food, gold, science and luxury set in Settings (default a shield or food = 4 gold): <span class="green">green</span> above 10, <span class="amber">amber</span> 5–10, grey 0–5, <span class="red">red</span> a loss. Point at a cell for the cost and the turns to pay it back. They sort largest gain first. A building that needs a tech you don't know shows the tech instead (Settings can show it anyway). Set the limits, the worths and icons or words in Settings.</dd>
         <dt>Tier</dt><dd>Pick a tier to fix it for that city; <i>(auto)</i> follows corruption.</dd>
         <dt>Attention</dt><dd><span class="amber">Amber</span>: missing. <span class="green">Green</span>: being built now.</dd>
         <dt>Colours</dt><dd><span class="red">Red</span>: serious (half or more lost, disorder). <span class="amber">Amber</span>: watch it. <b>~</b>: the corruption model doesn't match the game in that city.</dd>
@@ -767,6 +767,9 @@ function effectOf (c, key) {
   if ((key === 'ch' || key === 'ps') && triedGov () !== null && res.rules.governments[triedGov ()].corruption === 4) return { value: -1e9, text: 'Anarchy' };
   if (hasNow (c, key)) return { value: -1e8, text: 'has one' };
   const bd = res.rules.buildings[id];
+  // A building that needs a tech you don't know yet: no effect, unless Settings asks for it
+  if (bd && ! state.attention.showUnresearched && ! canBuild (id))
+    return { value: -1e7, text: res.knownTechs ? `needs ${(res.rules.techs[bd.requiredAdvance] || {}).name || 'a tech'}` : 'none built', tip: techNote (id) };
   if (bd && bd.requires >= 0 && ! c.buildings.has (bd.requires))
     return { value: -1e7, text: `needs ${res.rules.buildings[bd.requires] ? res.rules.buildings[bd.requires].name : '?'}` };
   const rates = triedRates (), gov = triedGov (), real = {};
@@ -926,6 +929,7 @@ const DEFAULT_ATTENTION = {
   expect: { Temple: [1, 1, 1, null], Library: [6, 1, null, null], Marketplace: [6, 1, null, null], Courthouse: [null, 1, 1, null],
             Aqueduct: [6, 6, 6, null], Hospital: [12, null, null, null], Factory: [12, null, null, null] },
   overrides: {}, // game id -> { city key -> tier index }
+  showUnresearched: false,                 // Effect cells of buildings that need a tech you don't know: hidden ('needs <tech>')
   effectStyle: 'icons',                    // Effect cells: 'icons' (the game's icons) or 'words' (+2 sci, +3 gold)
   gainColors: { good: 10, ok: 5 },         // Effect colours by gain in gold a turn: green above good, amber from ok, red below 0
   values: { shield: 4, food: 4, gold: 1, science: 1, luxury: 1 }, // worth of one of each, in gold, for payback
@@ -1048,6 +1052,10 @@ function renderSettings () {
   for (const [v, label] of [['icons', 'Icons'], ['words', 'Words (+2 sci, +3 gold)']]) style.appendChild (el ('option', { value: v, textContent: label, selected: A.effectStyle === v }));
   style.addEventListener ('change', () => { A.effectStyle = style.value; changed (); });
   row ('Show effects as', style);
+  const unres = el ('select', {});
+  for (const [v, label] of [['hide', 'Hide (show the tech it needs)'], ['show', 'Show']]) unres.appendChild (el ('option', { value: v, textContent: label, selected: (A.showUnresearched ? 'show' : 'hide') === v }));
+  unres.addEventListener ('change', () => { A.showUnresearched = unres.value === 'show'; changed (); });
+  row ('Effects without the tech', unres);
   const num = (value, onset) => { const n = el ('input', { type: 'number', min: 1, max: 999, value, className: 'num' }); n.addEventListener ('change', () => { onset (Math.max (1, Math.round (+n.value) || 1)); changed (); }); return n; };
   row ('Green above', num (A.gainColors.good, (v) => { A.gainColors.good = v; }), 'gold a turn');
   row ('Amber from', num (A.gainColors.ok, (v) => { A.gainColors.ok = v; }), 'gold a turn; grey from 0, red below 0');
@@ -1058,7 +1066,7 @@ function renderSettings () {
   for (const [key, label] of [['shield', 'Shield'], ['food', 'Food'], ['gold', 'Gold'], ['science', 'Science'], ['luxury', 'Luxury']]) row (label, worth (key));
   const reset = el ('button', { type: 'button', textContent: 'Restore defaults' });
   reset.addEventListener ('click', () => {
-    A.effectStyle = DEFAULT_ATTENTION.effectStyle; A.gainColors = { ...DEFAULT_ATTENTION.gainColors }; A.values = { ...DEFAULT_ATTENTION.values };
+    A.effectStyle = DEFAULT_ATTENTION.effectStyle; A.showUnresearched = DEFAULT_ATTENTION.showUnresearched; A.gainColors = { ...DEFAULT_ATTENTION.gainColors }; A.values = { ...DEFAULT_ATTENTION.values };
     changed (); renderSettings ();
   });
   g.appendChild (reset);
