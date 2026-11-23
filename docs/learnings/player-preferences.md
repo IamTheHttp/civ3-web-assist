@@ -20,6 +20,7 @@
 - **Signals over raw numbers:** payback turns for buildings; green / amber / grey.
 - **Yields have a worth in gold** (Tiers → Building payback): shield and food 4, gold, science and luxury 1 by default.
   Payback = cost in shields × shield worth ÷ the gain's worth per turn (10 shields for +1 gold a turn = 40 turns).
-  4 gold a shield is the game's buy price for a building not started: a Marketplace (100 shields) costs 400 gold
-  (seen in-game; the price for a partly built one isn't checked).
+  Why 4: gold is scarce for most of the game and buys shields; the player rushes only builds with some progress, at
+  BIQ RULE `ShieldCostPerGold` = 4 gold a shield. With no progress the price doubles (8; the player's rule, not read from
+  the exe), which no one pays.
 - Likes sane defaults that are editable (tiers, milestones, payback limits).
