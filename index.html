@@ -729,7 +729,10 @@ const Civ3Parse = (() => {
 			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84), requiresSupport: i32 (e + 208) !== 0,
 				defence: i32 (e + 88), attack: i32 (e + 96), bombard: i32 (e + 72),
 				// +120 upgrades to (may be another civilization's unique unit: the chain continues from it)
-				upgradeTo: i32 (e + 120) })) : [],
+				upgradeTo: i32 (e + 120),
+				// +176 worker actions: road, mine or irrigate (0x4 | 0x20 | 0x40) make a worker; its work rate is the float 12
+				// bytes before the record's end (after the variable-length lists; Worker 1.0 in the default rules)
+				worker: (i32 (e + 176) & 0x64) !== 0, workRate: new DataView (b.buffer, b.byteOffset + e + 4 + i32 (e) - 12, 4).getFloat32 (0, true) })) : [],
 			// OpenCiv3 Govt.cs: +12 buildings need maintenance, +20 tile penalty (-1 on a yield above 2), +24 trade bonus
 			// (+1 commerce on a tile with commerce). +396 is the number of governments, followed by 3 ints per government, so
 			// the fields after that table move with the count; q is the record as if it had the default 8 governments
@@ -1653,6 +1656,8 @@ const Civ3Parse = (() => {
 		if (rules && rules.units.length) {
 			const byType = {};
 			let total = 0, free = 0;
+			// Workers: own nationality and captured (another nationality), weighted by work rate
+			const workers = { own: 0, captured: 0, ownRate: 0, capturedRate: 0 };
 			result.myUnits = []; // [id (UNIT +8, unique), type] of each of your units, for losses between turns
 			for (const o of findAll (b, 'UNIT', gameOff)) {
 				if (i32 (o + 4) !== 472 || i32 (o + 28) !== player) continue;
@@ -1661,7 +1666,12 @@ const Civ3Parse = (() => {
 				total++;
 				byType[t ? t.name : '?'] = (byType[t ? t.name : '?'] || 0) + 1;
 				if (i32 (o + 32) !== playerRace || ! (t && t.requiresSupport)) free++;
+				if (t && t.worker) {
+					const rate = t.workRate > 0 ? t.workRate : 1;
+					if (i32 (o + 32) === playerRace) { workers.own++; workers.ownRate += rate; } else { workers.captured++; workers.capturedRate += rate; }
+				}
 			}
+			result.workers = workers;
 			const leadsAll = findAll (b, 'LEAD', gameOff).filter ((o) => i32 (o + 4) > 4300);
 			const myLead = leadsAll.find ((o) => i32 (o + 8) === player);
 			// Gold per turn from deals (GOG income 0x55DD50 adds, from every other player, its LEAD +3612 + 4 x your player
@@ -2207,6 +2217,7 @@ const DEFAULT_ATTENTION = {
   effectStyle: 'icons',                    // Effect cells: 'icons' (the game's icons) or 'words' (+2 sci, +3 gold)
   gainColors: { good: 10, ok: 5 },         // Effect colours by gain in gold a turn: green above good, amber from ok, red below 0
   values: { shield: 4, food: 4, gold: 1, science: 1, luxury: 1 }, // worth of one of each, in gold, for payback
+  workersPerCity: 1.5,                     // Workers card: the target work force per city (a captured worker counts ½)
   reducerPayback: 40                       // expect a Courthouse / Police Station only where it pays back within this (null: always)
 };
 function loadAttention () {
@@ -2331,9 +2342,14 @@ function renderSettings () {
   const worth = (key) => { const n = el ('input', { type: 'number', min: 0, max: 99, step: 0.25, value: A.values[key], className: 'num' });
     n.addEventListener ('change', () => { const v = +n.value; A.values[key] = Number.isFinite (v) && v >= 0 ? v : DEFAULT_ATTENTION.values[key]; changed (); }); return n; };
   for (const [key, label] of [['shield', 'Shield'], ['food', 'Food'], ['gold', 'Gold'], ['science', 'Science'], ['luxury', 'Luxury']]) row (label, worth (key));
+  g.appendChild (el ('h3', { textContent: 'Workers', style: 'margin-top:12px' }));
+  const wpc = el ('input', { type: 'number', min: 0, max: 10, step: 0.1, value: A.workersPerCity, className: 'num' });
+  wpc.addEventListener ('change', () => { const v = +wpc.value; A.workersPerCity = Number.isFinite (v) && v >= 0 ? v : DEFAULT_ATTENTION.workersPerCity; changed (); });
+  row ('Target per city', wpc, 'a captured worker counts ½');
   const reset = el ('button', { type: 'button', textContent: 'Restore defaults' });
   reset.addEventListener ('click', () => {
     A.effectStyle = DEFAULT_ATTENTION.effectStyle; A.showUnresearched = DEFAULT_ATTENTION.showUnresearched; A.gainColors = { ...DEFAULT_ATTENTION.gainColors }; A.values = { ...DEFAULT_ATTENTION.values };
+    A.workersPerCity = DEFAULT_ATTENTION.workersPerCity;
     changed (); renderSettings ();
   });
   g.appendChild (reset);
@@ -3412,7 +3428,7 @@ function renderSummary (res) {
   const sg = (v) => (v > 0 ? '+' : '') + fmt (v);
   $('summary').innerHTML =
     (whatIf ? `<p class="histnote">${note}Changed figures show now → then.</p>` : '') +
-    sizeCard (res, row, card) +
+    sizeCard (res, row, card) + workersCard (res, row, card) +
     card ('Economy', `All cities. ${note}`,
       row ('Commerce', both ('commerce'), 'Raw commerce from tiles' + (cs.some ((c) => c.touristCommerce) ? `, including ${cs.reduce ((n, c) => n + c.touristCommerce, 0)} from tourist attractions` : '') + ', before corruption') +
       row ('Corruption', both ('corruption') + pctBoth ('corruption', 'commerce'), 'Commerce lost to corruption') +
@@ -3461,6 +3477,20 @@ function sizeCard (res, row, card) {
     row ('Cities', cities.length, `Size ${t + 1}–${m}${cities.length ? ': ' + names (cities) : ''}`) +
     row ('Metropolises', metros.length, `Size ${m + 1} and above${metros.length ? ': ' + names (metros) : ''}`) +
     row ('Total', res.cities.length, 'All your cities'));
+}
+
+// Workers per city: own workers count their work rate, captured ones (another nationality) half of it
+function workersCard (res, row, card) {
+  const w = res.workers; if (! w || ! res.cities.length) return '';
+  const target = state.attention.workersPerCity ?? 1.5, force = w.ownRate + w.capturedRate / 2, per = force / res.cities.length;
+  const need = target * res.cities.length - force, r1 = (v) => Math.round (v * 10) / 10;
+  const cls = per >= target ? 'green' : per >= target * 0.75 ? 'amber' : 'red';
+  return card ('Workers', `Work force per city, target ${target} (Settings). A captured worker counts ½.`,
+    row ('Workers', w.own, 'Your workers of your own nationality') +
+    row ('Captured', w.captured, 'Workers of another nationality: each counts ½') +
+    row ('Work force', r1 (force), `${w.own} + ${w.captured} × ½${w.ownRate !== w.own || w.capturedRate !== w.captured ? ', by each unit\'s work rate' : ''}`) +
+    row ('Per city', `<span class="${cls}">${per.toFixed (2)}</span>`, `${r1 (force)} ÷ ${res.cities.length} cities; target ${target}` +
+      (need > 0 ? `: ${Math.ceil (need)} more workers needed (or ${Math.ceil (need * 2)} captured)` : '')));
 }
 
 function render () {

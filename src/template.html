@@ -1014,6 +1014,7 @@ const DEFAULT_ATTENTION = {
   effectStyle: 'icons',                    // Effect cells: 'icons' (the game's icons) or 'words' (+2 sci, +3 gold)
   gainColors: { good: 10, ok: 5 },         // Effect colours by gain in gold a turn: green above good, amber from ok, red below 0
   values: { shield: 4, food: 4, gold: 1, science: 1, luxury: 1 }, // worth of one of each, in gold, for payback
+  workersPerCity: 1.5,                     // Workers card: the target work force per city (a captured worker counts ½)
   reducerPayback: 40                       // expect a Courthouse / Police Station only where it pays back within this (null: always)
 };
 function loadAttention () {
@@ -1138,9 +1139,14 @@ function renderSettings () {
   const worth = (key) => { const n = el ('input', { type: 'number', min: 0, max: 99, step: 0.25, value: A.values[key], className: 'num' });
     n.addEventListener ('change', () => { const v = +n.value; A.values[key] = Number.isFinite (v) && v >= 0 ? v : DEFAULT_ATTENTION.values[key]; changed (); }); return n; };
   for (const [key, label] of [['shield', 'Shield'], ['food', 'Food'], ['gold', 'Gold'], ['science', 'Science'], ['luxury', 'Luxury']]) row (label, worth (key));
+  g.appendChild (el ('h3', { textContent: 'Workers', style: 'margin-top:12px' }));
+  const wpc = el ('input', { type: 'number', min: 0, max: 10, step: 0.1, value: A.workersPerCity, className: 'num' });
+  wpc.addEventListener ('change', () => { const v = +wpc.value; A.workersPerCity = Number.isFinite (v) && v >= 0 ? v : DEFAULT_ATTENTION.workersPerCity; changed (); });
+  row ('Target per city', wpc, 'a captured worker counts ½');
   const reset = el ('button', { type: 'button', textContent: 'Restore defaults' });
   reset.addEventListener ('click', () => {
     A.effectStyle = DEFAULT_ATTENTION.effectStyle; A.showUnresearched = DEFAULT_ATTENTION.showUnresearched; A.gainColors = { ...DEFAULT_ATTENTION.gainColors }; A.values = { ...DEFAULT_ATTENTION.values };
+    A.workersPerCity = DEFAULT_ATTENTION.workersPerCity;
     changed (); renderSettings ();
   });
   g.appendChild (reset);
@@ -2219,7 +2225,7 @@ function renderSummary (res) {
   const sg = (v) => (v > 0 ? '+' : '') + fmt (v);
   $('summary').innerHTML =
     (whatIf ? `<p class="histnote">${note}Changed figures show now → then.</p>` : '') +
-    sizeCard (res, row, card) +
+    sizeCard (res, row, card) + workersCard (res, row, card) +
     card ('Economy', `All cities. ${note}`,
       row ('Commerce', both ('commerce'), 'Raw commerce from tiles' + (cs.some ((c) => c.touristCommerce) ? `, including ${cs.reduce ((n, c) => n + c.touristCommerce, 0)} from tourist attractions` : '') + ', before corruption') +
       row ('Corruption', both ('corruption') + pctBoth ('corruption', 'commerce'), 'Commerce lost to corruption') +
@@ -2268,6 +2274,20 @@ function sizeCard (res, row, card) {
     row ('Cities', cities.length, `Size ${t + 1}–${m}${cities.length ? ': ' + names (cities) : ''}`) +
     row ('Metropolises', metros.length, `Size ${m + 1} and above${metros.length ? ': ' + names (metros) : ''}`) +
     row ('Total', res.cities.length, 'All your cities'));
+}
+
+// Workers per city: own workers count their work rate, captured ones (another nationality) half of it
+function workersCard (res, row, card) {
+  const w = res.workers; if (! w || ! res.cities.length) return '';
+  const target = state.attention.workersPerCity ?? 1.5, force = w.ownRate + w.capturedRate / 2, per = force / res.cities.length;
+  const need = target * res.cities.length - force, r1 = (v) => Math.round (v * 10) / 10;
+  const cls = per >= target ? 'green' : per >= target * 0.75 ? 'amber' : 'red';
+  return card ('Workers', `Work force per city, target ${target} (Settings). A captured worker counts ½.`,
+    row ('Workers', w.own, 'Your workers of your own nationality') +
+    row ('Captured', w.captured, 'Workers of another nationality: each counts ½') +
+    row ('Work force', r1 (force), `${w.own} + ${w.captured} × ½${w.ownRate !== w.own || w.capturedRate !== w.captured ? ', by each unit\'s work rate' : ''}`) +
+    row ('Per city', `<span class="${cls}">${per.toFixed (2)}</span>`, `${r1 (force)} ÷ ${res.cities.length} cities; target ${target}` +
+      (need > 0 ? `: ${Math.ceil (need)} more workers needed (or ${Math.ceil (need * 2)} captured)` : '')));
 }
 
 function render () {

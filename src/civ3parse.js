@@ -91,7 +91,10 @@ const Civ3Parse = (() => {
 			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84), requiresSupport: i32 (e + 208) !== 0,
 				defence: i32 (e + 88), attack: i32 (e + 96), bombard: i32 (e + 72),
 				// +120 upgrades to (may be another civilization's unique unit: the chain continues from it)
-				upgradeTo: i32 (e + 120) })) : [],
+				upgradeTo: i32 (e + 120),
+				// +176 worker actions: road, mine or irrigate (0x4 | 0x20 | 0x40) make a worker; its work rate is the float 12
+				// bytes before the record's end (after the variable-length lists; Worker 1.0 in the default rules)
+				worker: (i32 (e + 176) & 0x64) !== 0, workRate: new DataView (b.buffer, b.byteOffset + e + 4 + i32 (e) - 12, 4).getFloat32 (0, true) })) : [],
 			// OpenCiv3 Govt.cs: +12 buildings need maintenance, +20 tile penalty (-1 on a yield above 2), +24 trade bonus
 			// (+1 commerce on a tile with commerce). +396 is the number of governments, followed by 3 ints per government, so
 			// the fields after that table move with the count; q is the record as if it had the default 8 governments
@@ -1015,6 +1018,8 @@ const Civ3Parse = (() => {
 		if (rules && rules.units.length) {
 			const byType = {};
 			let total = 0, free = 0;
+			// Workers: own nationality and captured (another nationality), weighted by work rate
+			const workers = { own: 0, captured: 0, ownRate: 0, capturedRate: 0 };
 			result.myUnits = []; // [id (UNIT +8, unique), type] of each of your units, for losses between turns
 			for (const o of findAll (b, 'UNIT', gameOff)) {
 				if (i32 (o + 4) !== 472 || i32 (o + 28) !== player) continue;
@@ -1023,7 +1028,12 @@ const Civ3Parse = (() => {
 				total++;
 				byType[t ? t.name : '?'] = (byType[t ? t.name : '?'] || 0) + 1;
 				if (i32 (o + 32) !== playerRace || ! (t && t.requiresSupport)) free++;
+				if (t && t.worker) {
+					const rate = t.workRate > 0 ? t.workRate : 1;
+					if (i32 (o + 32) === playerRace) { workers.own++; workers.ownRate += rate; } else { workers.captured++; workers.capturedRate += rate; }
+				}
 			}
+			result.workers = workers;
 			const leadsAll = findAll (b, 'LEAD', gameOff).filter ((o) => i32 (o + 4) > 4300);
 			const myLead = leadsAll.find ((o) => i32 (o + 8) === player);
 			// Gold per turn from deals (GOG income 0x55DD50 adds, from every other player, its LEAD +3612 + 4 x your player
