@@ -102,10 +102,10 @@ tbody tr:hover td { background: color-mix(in srgb, var(--accent) 12%, transparen
 tfoot td { font-weight: 600; color: var(--gold); background: var(--head); border-bottom: 0; }
 .red { color: var(--red); font-weight: 600; } .amber { color: var(--amber); } .green { color: var(--green); } .dim { color: var(--muted); }
 .group { border-left: 2px solid var(--line); }
-td.chk, th.chk { text-align: center; padding: 4px 4px; }
-td.chk input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; margin: 0; }
-td.chk.whatif { background: color-mix(in srgb, var(--amber) 28%, transparent) !important; box-shadow: inset 0 0 0 2px var(--amber); }
-td.chk.whatif input { accent-color: var(--amber); }
+th.tick, td.tick { white-space: nowrap; text-align: left; }
+td.tick input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; margin: 0 4px 0 0; vertical-align: middle; }
+td.tick.whatif input { accent-color: var(--amber); }
+td.tick.whatif { background: color-mix(in srgb, var(--amber) 28%, transparent) !important; box-shadow: inset 0 0 0 2px var(--amber); }
 td.changed { background: color-mix(in srgb, var(--accent) 16%, transparent) !important; }
 .better { color: var(--green); font-weight: 600; }
 .worse { color: var(--red); font-weight: 600; }
@@ -298,7 +298,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Clear filters</dt><dd>Shows when a column is filtered; removes every filter in this view.</dd>
         <dt>Export CSV</dt><dd>The table as a spreadsheet file.</dd>
         <dt>Try government</dt><dd>Your cities under another government: the tiles' food, shields and commerce (Republic and Democracy add +1 commerce on tiles with commerce; Despotism and Anarchy take 1 off a yield above 2), corruption and waste, building upkeep and unit support. War weariness and happiness aren't included. The Governments panel compares them all.</dd>
-        <dt>Try slider</dt><dd>Off: gold, science, luxury and the Effect columns use the slider from your save. On: they use the slider you set, for example 50% science and 50% gold, so a Marketplace isn't judged by a low gold rate. Happy and unhappy citizens aren't recalculated.</dd>
+        <dt>Try slider</dt><dd>Off: gold, science, luxury and the building gains use the slider from your save. On: they use the slider you set, for example 50% science and 50% gold, so a Marketplace isn't judged by a low gold rate. Happy and unhappy citizens aren't recalculated.</dd>
         <dt>Reset what-ifs</dt><dd>Undo every tick you changed, and go back to your government and slider.</dd>
         <dt><span class="chip">◐ Auto</span></dt><dd>Theme: Auto (your system), Light or Dark.</dd>
       </dl>
@@ -307,8 +307,8 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <dl>
         <dt>Sort</dt><dd>Click a column name. Click again to reverse.</dd>
         <dt>▾ Filter</dt><dd>On each column, as in a spreadsheet: sort, a condition (greater than, between, contains…) or tick the values to keep. A blue ▾ marks a filtered column. Filters and sorting use the real numbers, so a what-if tick never hides or moves a city; each view keeps its own filters.</dd>
-        <dt>What-if ticks</dt><dd>Tick <b>CH</b>, <b>PS</b>, <b>Lib</b>, <b>Mkt</b>, <b>Fac</b>, <b>Power</b>, <b>Mfg</b>… to try a building (Power: Coal Plant; a city counts only its best power plant). Changed numbers show <i>now → then</i>; an amber outline marks a tick that isn't real.</dd>
-        <dt>Effect columns</dt><dd>What one building would gain the city per turn, after upkeep. The colour is the gain in gold a turn, by the worth of a shield, food, gold, science and luxury set in Settings (default a shield or food = 4 gold): <span class="green">green</span> above 10, <span class="amber">amber</span> 5–10, grey 0–5, <span class="red">red</span> a loss. Point at a cell for the cost and the turns to pay it back. They sort largest gain first. A building that needs a tech you don't know shows the tech instead (Settings can show it anyway). Set the limits, the worths and icons or words in Settings.</dd>
+        <dt>Building columns</dt><dd>One column per building from your game's rules: <b>CH</b>, <b>PS</b>, <b>Lib</b>, <b>Mkt</b>, <b>Fac</b>, <b>Power</b>… Ticked: the city has it. Tick a box to try a building (Power: Coal Plant; a city counts only its best power plant). Changed numbers show <i>now → then</i>; an amber outline marks a tick that isn't real. Buildings made obsolete by a tech you know aren't shown.</dd>
+        <dt>The gain next to a tick</dt><dd>What one building would gain the city per turn, after upkeep. The colour is the gain in gold a turn, by the worth of a shield, food, gold, science and luxury set in Settings (default a shield or food = 4 gold): <span class="green">green</span> above 10, <span class="amber">amber</span> 5–10, grey 0–5, <span class="red">red</span> a loss. Point at a cell for the cost and the turns to pay it back. The columns sort largest gain first. A building that needs a tech you don't know shows the tech instead (Settings can show it anyway). Set the limits, the worths and icons or words in Settings.</dd>
         <dt>Tier</dt><dd>Pick a tier to fix it for that city; <i>(auto)</i> follows corruption.</dd>
         <dt>Attention</dt><dd><span class="amber">Amber</span>: missing. <span class="green">Green</span>: being built now.</dd>
         <dt>Colours</dt><dd><span class="red">Red</span>: serious (half or more lost, disorder). <span class="amber">Amber</span>: watch it. <b>~</b>: the corruption model doesn't match the game in that city.</dd>
@@ -350,7 +350,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <select id="govsel" aria-label="Try government"></select>
     </span>
     <span class="sliderbox" id="sliderbox" hidden
-      title="Gold, science and luxury, and the Effect columns, use the slider from your save. Tick to try another one; happy and unhappy citizens are not recalculated">
+      title="Gold, science and luxury, and the building gains, use the slider from your save. Tick to try another one; happy and unhappy citizens are not recalculated">
       <label class="chk"><input id="slideron" type="checkbox"> Try slider</label>
       <label for="slsci">Science:</label> <select id="slsci"></select>
       <label for="sltax">Gold:</label> <select id="sltax"></select>
@@ -563,28 +563,27 @@ const BASE_COLUMNS = [
   { key: 'build', sec: 'build', label: 'Production', title: 'What the city builds, and turns to finish', l: true, val: (c) => c.buildName, show: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : ''),
     csv: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : '') },
 ];
-// Courthouse and Police Station: tick and Effect columns; placed with the other building columns in rebuildColumns
-const CHPS_TICKS = [
-  { key: 'ch', sec: 'bonus', label: 'CH', chk: 'ch', model: true, title: 'Courthouse (tick to try it)' },
-  { key: 'ps', sec: 'bonus', label: 'PS', chk: 'ps', model: true, title: 'Police Station (tick to try it)' },
+// A building column: a tick to try the building, and what one would gain the city per turn. Courthouse and Police
+// Station here; the others in rebuildColumns.
+const EFFECT_NOTE = 'The number: what one would gain this city per turn. Colour: the gain in gold a turn (limits in Settings). Uses your slider, or the one in Try slider. Sorts largest gain first';
+function buildingColumn (tick, extra) { return { ...effectColumn (tick, extra), tick, sec: 'bonus' }; }
+const CHPS_COLUMNS = [
+  buildingColumn ('ch', { key: 'ch', label: 'CH', model: true,
+    title: `Courthouse: tick to try it. ${EFFECT_NOTE} (science, gold and luxury from the commerce kept; shields kept; upkeep)` }),
+  buildingColumn ('ps', { key: 'ps', label: 'PS', model: true, title: `Police Station: tick to try it. ${EFFECT_NOTE}` }),
 ];
-const CHPS_EFFECTS = [
-  effectColumn ('ch', { key: 'chEffect', sec: 'bonusfx', label: 'CH Effect', model: true,
-    title: 'What a Courthouse would gain this city per turn (science, gold and luxury from the commerce kept, after its Library, Marketplace etc.; shields kept; upkeep). Colour: the gain in gold a turn (limits in Settings). Uses your slider, or the one in Try slider. Sorts largest gain first' }),
-  effectColumn ('ps', { key: 'psEffect', sec: 'bonusfx', label: 'PS Effect', model: true,
-    title: 'What a Police Station would gain this city per turn. Colour: the gain in gold a turn (limits in Settings). Sorts largest gain first' }),
-];
+// Column keys of views saved when the tick and the Effect were separate columns
+const OLD_KEYS = { chEffect: 'ch', psEffect: 'ps' };
+const columnKey = (k) => OLD_KEYS[k] || (k.startsWith ('be:') ? 'bt:' + k.slice (3) : k);
 let state = { result: null, sortKey: 'size', sortDir: -1, fileName: '', loadedAt: null, rules: null, toggles: {} };
 
 // ---------- views: named sets of columns, saved in this browser ----------
 const DEFAULT_VIEWS = [
   { name: 'Overview', columns: ['name', 'size', 'happy', 'content', 'unhappy', 'grow', 'foodNet', 'shields', 'commerce', 'corruptionPct', 'gold', 'luxury', 'science', 'flip', 'status', 'build'] },
   { name: 'Growth & happiness', columns: ['name', 'size', 'happy', 'content', 'unhappy', 'resisters', 'spec', 'foreign', 'grow', 'foodNet', 'box', 'luxury', 'status', 'build'] },
-  { name: 'Corruption management', columns: ['name', 'size', 'shields', 'waste', 'wastePct', 'netShields', 'commerce', 'corruption', 'corruptionPct', 'netCommerce', 'ch', 'ps', 'chEffect', 'psEffect', 'upkeep', 'build'] },
-  { name: 'Science & gold buildings', columns: ['name', 'size', 'commerce', 'corruptionPct', 'gold', 'science', 'bt:Library', 'bt:University', 'bt:Research Lab', 'bt:Marketplace', 'bt:Bank', 'bt:Stock Exchange',
-    'be:Library', 'be:University', 'be:Research Lab', 'be:Marketplace', 'be:Bank', 'be:Stock Exchange', 'upkeep'] },
-  { name: 'Production buildings', columns: ['name', 'size', 'shields', 'waste', 'wastePct', 'netShields', 'bt:Factory', 'bt:Coal Plant', 'bt:Manufacturing Plant',
-    'be:Factory', 'be:Coal Plant', 'be:Manufacturing Plant', 'upkeep', 'build'] },
+  { name: 'Corruption management', columns: ['name', 'size', 'shields', 'waste', 'wastePct', 'netShields', 'commerce', 'corruption', 'corruptionPct', 'netCommerce', 'ch', 'ps', 'upkeep', 'build'] },
+  { name: 'Science & gold buildings', columns: ['name', 'size', 'commerce', 'corruptionPct', 'gold', 'science', 'bt:Library', 'bt:University', 'bt:Research Lab', 'bt:Marketplace', 'bt:Bank', 'bt:Stock Exchange', 'upkeep'] },
+  { name: 'Production buildings', columns: ['name', 'size', 'shields', 'waste', 'wastePct', 'netShields', 'bt:Factory', 'bt:Coal Plant', 'bt:Manufacturing Plant', 'upkeep', 'build'] },
   { name: 'Attention', columns: ['name', 'size', 'tier', 'attention', 'corruptionPct', 'foodNet', 'grow', 'build'] },
   { name: 'All columns', columns: null },
 ];
@@ -609,7 +608,8 @@ function visibleColumns () {
   const avail = COLUMNS.filter ((c) => (! c.model || modelOn ()) && (! c.econ || econOn ()));
   if (! v.columns) return avail;
   // Always the standard column order, whatever order the view stored them in
-  return avail.filter ((c) => c.key === 'name' || v.columns.includes (c.key));
+  const keys = new Set (v.columns.map (columnKey));
+  return avail.filter ((c) => c.key === 'name' || keys.has (c.key));
 }
 function isGroupStart (cols, i) { return i > 0 && cols[i].sec !== cols[i - 1].sec; }
 
@@ -920,25 +920,31 @@ function bonusBuildings () {
   if (! rules) return [];
   const short = { 'Library': 'Lib', 'University': 'Univ', 'Research Lab': 'Lab', 'Marketplace': 'Mkt', 'Bank': 'Bank', 'Stock Exchange': 'SE',
                   'Factory': 'Fac', 'Manufacturing Plant': 'Mfg', 'Coal Plant': 'Power' };
-  const all = rules.buildings.map ((b, id) => ({ ...b, id })).filter ((b) => ! b.wonder);
+  const known = state.result.knownTechs;
+  const all = rules.buildings.map ((b, id) => ({ ...b, id })).filter ((b) => ! b.wonder && ! (b.obsoleteBy >= 0 && known && known.has (b.obsoleteBy)));
   const commerce = all.filter ((b) => b.science50 || b.gold50 || b.luxury50);
   const production = all.filter ((b) => b.production > 0 && ! b.powerPlant);
   const plant = all.filter ((b) => b.production > 0 && b.powerPlant).sort ((x, y) => x.cost - y.cost)[0];
-  return [...commerce, ...production, ...(plant ? [plant] : [])].map ((b) => ({ id: b.id, name: b.name, short: short[b.name] || b.name.slice (0, 5) }));
+  // A building with both kinds of bonus (a mod's Manor: gold and shields) gets one column. Labels from the rules: the
+  // first word, cut to 6 letters, plus the next word's initial when two would read the same.
+  const list = [...new Map ([...commerce, ...production, ...(plant ? [plant] : [])].map ((b) => [b.id, b])).values ()];
+  const word = (n) => n.split (/\s+/)[0].slice (0, 6), used = new Set (Object.values (short));
+  return list.map ((b) => {
+    let label = short[b.name] || word (b.name);
+    if (! short[b.name] && used.has (label)) label += (b.name.split (/\s+/)[1] || '').charAt (0) || String (b.id);
+    used.add (label);
+    return { id: b.id, name: b.name, short: label };
+  });
 }
 let COLUMNS = BASE_COLUMNS;
 function rebuildColumns () {
-  const extra = [...CHPS_TICKS], fx = [...CHPS_EFFECTS];
-  if (state.result && state.result.econ) {
-    const bb = bonusBuildings ();
-    for (const b of bb) extra.push ({ key: 'bt:' + b.name, sec: 'bonus', label: b.short, chk: 'b' + b.id, econ: true, title: `${b.name} (tick to try it)` });
-    for (const b of bb) fx.push (effectColumn ('b' + b.id, { key: 'be:' + b.name, sec: 'bonusfx', label: b.short + ' Effect', econ: true,
-      title: `What a ${b.name} would gain this city per turn (${state.result.rules.buildings[b.id].production ? 'shields' : 'science, gold, luxury'}). Colour: the gain in gold a turn (limits in Settings). Uses your slider, or the one in Try slider. Sorts largest gain first` }));
-  }
+  const extra = [...CHPS_COLUMNS];
+  if (state.result && state.result.econ)
+    for (const b of bonusBuildings ())
+      extra.push (buildingColumn ('b' + b.id, { key: 'bt:' + b.name, label: b.short, econ: true,
+        title: `${b.name}: tick to try it. ${EFFECT_NOTE} (${state.result.rules.buildings[b.id].production ? 'shields' : 'science, gold, luxury'})` }));
   const at = BASE_COLUMNS.findIndex ((c) => c.key === 'upkeep');
-  COLUMNS = [...BASE_COLUMNS.slice (0, at), ...extra, ...fx, ...BASE_COLUMNS.slice (at)];
-  // Tick columns sort by whether the city has the building (real, like every sort)
-  for (const col of COLUMNS) if (col.chk && ! col.val) col.val = (c) => (state.realValues ? hasNow (c, col.chk) : ticked (c, col.chk)) ? 1 : 0;
+  COLUMNS = [...BASE_COLUMNS.slice (0, at), ...extra, ...BASE_COLUMNS.slice (at)];
 }
 // Corruption above the cap: the formula's distance and rank parts, shown when their sum is over the cap
 function uncapped (c) {
@@ -1598,6 +1604,11 @@ function viewFilters () {
   const v = currentView (), f = v.filters || (v.filters = {});
   // Filters saved by the earlier filter row were text such as ">=10", "5-20", "core", "!a", "yes": convert them
   for (const [k, x] of Object.entries (f)) if (typeof x === 'string') f[k] = fromOldFilter (x);
+  // Filters on the separate tick columns (✓ / ✗) don't apply to building columns; Effect filters move to them
+  for (const [k, x] of Object.entries (f)) {
+    if (x.out && x.out.some ((v) => v === '✓' || v === '✗')) { delete f[k]; continue; }
+    if (columnKey (k) !== k) { f[columnKey (k)] = x; delete f[k]; }
+  }
   return f;
 }
 function fromOldFilter (t) {
@@ -1608,12 +1619,11 @@ function fromOldFilter (t) {
   if ((m = e.match (/^(>=|<=|!=|<>|>|<|=)?\s*(-?\d+(?:\.\d+)?)%?$/))) return { op: m[1] === '<>' ? '!=' : (m[1] || '='), a: m[2] };
   return e.startsWith ('!') ? { op: '!contains', a: e.slice (1).trim () } : { op: 'contains', a: e };
 }
-function isNumberColumn (col) { return ! col.l && ! col.chk; }
+function isNumberColumn (col) { return ! col.l; }
 function filterOn (x) { return !! x && ((x.op && x.a !== undefined && x.a !== '') || (x.out && x.out.length)); }
 function activeFilters (cols) { const f = viewFilters (); return cols.filter ((col) => filterOn (f[col.key])); }
-function cellText (col, c) { return col.chk ? (hasNow (c, col.chk) ? '✓' : '✗') : String (col.show ? col.show (c) : col.val (c)); }
+function cellText (col, c) { return String (col.show ? col.show (c) : col.val (c)); }
 function conditionPasses (x, col, c) {
-  if (col.chk) return true; // tick columns have only the value list
   const v = col.val (c), text = cellText (col, c);
   if (! x.op || x.a === undefined || x.a === '') return true;
   if (x.op === 'contains') return text.toLowerCase ().includes (x.a.toLowerCase ());
@@ -1663,15 +1673,14 @@ function openFilterMenu (col, btn) {
   // Sort
   {
     const num = isNumberColumn (col);
-    const label = (dir) => col.chk ? (dir > 0 ? 'Sort ✗ first' : 'Sort ✓ first')
-      : (dir > 0 ? (num ? 'Sort smallest to largest' : 'Sort A to Z') : (num ? 'Sort largest to smallest' : 'Sort Z to A'));
+    const label = (dir) => dir > 0 ? (num ? 'Sort smallest to largest' : 'Sort A to Z') : (num ? 'Sort largest to smallest' : 'Sort Z to A');
     const sort = (dir) => el ('button', { type: 'button', textContent: label (dir),
       onclick: () => { state.sortKey = col.key; state.sortDir = dir; closeFilterMenu (); render (); } });
     menu.append (el ('div', { className: 'fmsort' }, [sort (-1), sort (1)].sort (() => 0)));
   }
 
   // Condition
-  if (! col.chk) {
+  {
     const ops = isNumberColumn (col) ? NUM_OPS : TEXT_OPS;
     const sel = el ('select', { ariaLabel: 'Condition' });
     for (const [v, t] of ops) sel.append (el ('option', { value: v, textContent: t }));
@@ -1692,7 +1701,7 @@ function openFilterMenu (col, btn) {
   const cities = res.cities.filter ((c) => passesFilters (c, COLS, col.key));
   state.realValues = true;
   const values = new Map ();
-  try { for (const c of cities) { const t = cellText (col, c); if (! values.has (t)) values.set (t, col.chk ? (t === '✓' ? 1 : 0) : col.val (c)); } }
+  try { for (const c of cities) { const t = cellText (col, c); if (! values.has (t)) values.set (t, col.val (c)); } }
   finally { state.realValues = false; }
   const sorted = [...values.entries ()].sort ((p, q) => typeof p[1] === 'number' && typeof q[1] === 'number' ? p[1] - q[1] : String (p[0]).localeCompare (String (q[0])));
   const search = el ('input', { type: 'search', placeholder: 'Search values', ariaLabel: 'Search values' });
@@ -2247,7 +2256,7 @@ function render () {
     fb.addEventListener ('click', (e) => { e.stopPropagation (); openFilterMenu (col, fb); });
     fb.addEventListener ('keydown', (e) => e.stopPropagation ());
     th.append (fb);
-    th.className = (col.l ? 'l ' : '') + (col.group ? 'group ' : '') + (col.chk ? 'chk' : '');
+    th.className = (col.l ? 'l ' : '') + (col.group ? 'group ' : '') + (col.tick ? 'tick' : '');
     if (col.title) th.title = col.title;
     th.tabIndex = 0;
     th.setAttribute ('aria-sort', state.sortKey === col.key ? (state.sortDir > 0 ? 'ascending' : 'descending') : 'none');
@@ -2261,7 +2270,7 @@ function render () {
   // Accents don't matter: "copan" finds Copán
   const fold = (t) => String (t).normalize ('NFD').replace (/[\u0300-\u036f]/g, '').toLowerCase ();
   const words = fold ($('search').value.trim ()).split (/\s+/).filter (Boolean);
-  const cellTexts = (c) => COLS.filter ((col) => ! col.chk).map ((col) => fold (col.show ? col.show (c) : col.val (c)));
+  const cellTexts = (c) => COLS.map ((col) => fold (col.show ? col.show (c) : col.val (c)));
   const matches = (c) => { const t = cellTexts (c); return words.every ((w) => t.some ((x) => x.includes (w))); };
   const hit = (text) => words.length && words.some ((w) => fold (text).includes (w));
   let sortCol = COLS.find ((c) => c.key === state.sortKey);
@@ -2316,29 +2325,12 @@ function render () {
         tr.appendChild (td);
         continue;
       }
-      if (col.chk) {
-        td.className = 'chk' + (col.group ? ' group' : '');
-        const key = col.chk, id = buildingIdOf (c, key);
-        const bd = id !== undefined && state.result.rules ? state.result.rules.buildings[id] : null;
-        if (bd && ! ((key === 'ch' || key === 'ps') && c.isCapital)) {
-          const box = document.createElement ('input');
-          box.type = 'checkbox'; box.checked = ticked (c, key);
-          box.setAttribute ('aria-label', `${bd.name} in ${c.name}`);
-          const built = hasNow (c, key), whatIf = ticked (c, key) !== built;
-          box.title = whatIf
-            ? (built ? `What-if: ${bd.name} removed (the city has one). Tick again to undo` : `What-if: ${bd.name} added (the city doesn't have one). Untick to undo`)
-            : (built ? `${bd.name}: built. Untick to see the city without it` : `${bd.name}: not built. Tick to see the effect of building it`);
-          if (whatIf) td.classList.add ('whatif');
-          box.addEventListener ('change', () => { setTick (c, key, box.checked); render (); });
-          td.appendChild (box);
-        }
-        tr.appendChild (td);
-        continue;
-      }
       td.textContent = col.show ? col.show (c) : col.val (c);
+      if (col.tick && hasNow (c, col.tick)) td.textContent = ''; // built: the tick says it
       if (col.render) col.render (c, td);
       if (col.tip) { const t = col.tip (c); if (t) td.title = t; }
       td.className = [col.l ? 'l' : '', col.group ? 'group' : '', col.cls ? col.cls (c) : '', hit (td.textContent) ? 'hit' : ''].join (' ').trim ();
+      if (col.tick) addTick (td, c, col.tick);
       tr.appendChild (td);
     }
     body.appendChild (tr);
@@ -2349,21 +2341,37 @@ function render () {
     const td = document.createElement ('td');
     td.className = [col.l ? 'l' : '', col.group ? 'group' : ''].join (' ').trim ();
     if (col.key === 'name') td.textContent = list.length === res.cities.length ? 'Total' : `Total (${list.length} shown)`;
-    else if (col.chk) td.className += ' chk';
-    else if (col.key === 'chEffect' || col.key === 'psEffect' || col.key.startsWith ('be:') || col.key === 'status' || col.key === 'build') td.textContent = '';
+    else if (col.tick || col.key === 'status' || col.key === 'build') td.textContent = '';
     else if (col.ratio) {
       const num = list.reduce ((s, c) => s + wi (c)[col.ratio[0]], 0), den = list.reduce ((s, c) => s + (col.ratio[1] === 'shieldsGross' ? wi (c).shields : wi (c)[col.ratio[1]]), 0);
       td.textContent = den > 0 ? Math.round (100 * num / den) + '%' : '0%';
     }
     else if (['size', 'happy', 'content', 'unhappy', 'resisters', 'foreign'].includes (col.key) || col.total)
       td.textContent = list.reduce ((s, c) => s + col.val (c), 0);
-    if (! col.chk && ['waste', 'corruption', 'gold', 'science', 'luxury', 'upkeep', 'shields', 'commerce', 'foodNet'].includes (col.key)) {
+    if (['waste', 'corruption', 'gold', 'science', 'luxury', 'upkeep', 'shields', 'commerce', 'foodNet'].includes (col.key)) {
       const now = list.reduce ((s, c) => s + c[col.key], 0), then = list.reduce ((s, c) => s + wi (c)[col.key], 0);
       td.textContent = arrow (now, then);
     }
     foot.appendChild (td);
   }
   fitTable ();
+}
+
+// The tick in front of a building cell's effect: ticked = the city has it (or you added it as a what-if)
+function addTick (td, c, key) {
+  const id = buildingIdOf (c, key), bd = id !== undefined && state.result.rules ? state.result.rules.buildings[id] : null;
+  td.classList.add ('tick');
+  if (! bd || ((key === 'ch' || key === 'ps') && c.isCapital)) return;
+  const box = document.createElement ('input');
+  box.type = 'checkbox'; box.checked = ticked (c, key);
+  box.setAttribute ('aria-label', `${bd.name} in ${c.name}`);
+  const built = hasNow (c, key), whatIf = ticked (c, key) !== built;
+  box.title = whatIf
+    ? (built ? `What-if: ${bd.name} removed (the city has one). Tick again to undo` : `What-if: ${bd.name} added (the city doesn't have one). Untick to undo`)
+    : (built ? `${bd.name}: built. Untick to see the city without it` : `${bd.name}: not built. Tick to see the effect of building it`);
+  if (whatIf) td.classList.add ('whatif');
+  box.addEventListener ('change', () => { setTick (c, key, box.checked); render (); });
+  td.prepend (box);
 }
 
 function fitTable () {
@@ -2456,7 +2464,7 @@ function renderViewPicker () {
 }
 $('viewsel').addEventListener ('change', () => { state.views.current = +$('viewsel').value; saveViews (); renderViewEditor (); render (); });
 const SECTION_NAMES = { city: 'City', attn: 'Attention', mood: 'Citizens', food: 'Food & growth', shields: 'Shields', corr: 'Courthouse & Police',
-  commerce: 'Commerce & corruption', output: 'Gold, luxury, science', bonus: 'Building what-ifs (tick)', bonusfx: 'Building effects',
+  commerce: 'Commerce & corruption', output: 'Gold, luxury, science', bonus: 'Buildings (tick to try; the gain per turn)',
   other: 'Other', build: 'Production' };
 function columnAvailable (col) { return (! col.model || modelOn ()) && (! col.econ || econOn ()); }
 function setViewColumns (keys) {
@@ -2650,7 +2658,7 @@ $('csv').addEventListener ('click', () => {
   const res = state.result; if (! res) return;
   const esc = (v) => /[",\n]/.test (String (v)) ? `"${String (v).replace (/"/g, '""')}"` : String (v);
   const COLS = visibleColumns ();
-  const cell = (col, c) => col.chk ? (ticked (c, col.chk) ? 'yes' : '') : (col.csv ? col.csv (c) : (col.show ? col.show (c) : col.val (c)));
+  const cell = (col, c) => col.csv ? col.csv (c) : (col.show ? col.show (c) : col.val (c));
   const lines = [COLS.map ((c) => esc (c.label)).join (',')];
   for (const c of res.cities) lines.push (COLS.map ((col) => esc (cell (col, c))).join (','));
   download (lines.join ('\r\n'), (state.fileName || 'cities').replace (/\.sav$/i, '') + '.csv', 'text/csv');
