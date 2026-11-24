@@ -88,7 +88,9 @@ const Civ3Parse = (() => {
 				prereqs: [0, 1, 2, 3].map ((j) => i32 (e + 88 + 4 * j)).filter ((x) => x >= 0), noTrade: (i32 (e + 104) & 0x80000) !== 0 })) : [],
 			// +208: the unit needs support (C3X UnitType.requires_support)
 			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84), requiresSupport: i32 (e + 208) !== 0,
-				defence: i32 (e + 88), attack: i32 (e + 96) })) : [],
+				defence: i32 (e + 88), attack: i32 (e + 96), bombard: i32 (e + 72),
+				// +120 upgrades to (may be another civilization's unique unit: the chain continues from it)
+				upgradeTo: i32 (e + 120) })) : [],
 			// OpenCiv3 Govt.cs: +12 buildings need maintenance, +20 tile penalty (-1 on a yield above 2), +24 trade bonus
 			// (+1 commerce on a tile with commerce)
 			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380), maintenance: i32 (e + 12) !== 0,
@@ -996,9 +998,11 @@ const Civ3Parse = (() => {
 		if (rules && rules.units.length) {
 			const byType = {};
 			let total = 0, free = 0;
+			result.myUnits = []; // [id (UNIT +8, unique), type] of each of your units, for losses between turns
 			for (const o of findAll (b, 'UNIT', gameOff)) {
 				if (i32 (o + 4) !== 472 || i32 (o + 28) !== player) continue;
 				const t = rules.units[i32 (o + 40)];
+				result.myUnits.push ([i32 (o + 8), i32 (o + 40)]);
 				total++;
 				byType[t ? t.name : '?'] = (byType[t ? t.name : '?'] || 0) + 1;
 				if (i32 (o + 32) !== playerRace || ! (t && t.requiresSupport)) free++;

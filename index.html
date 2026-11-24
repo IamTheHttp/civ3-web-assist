@@ -720,7 +720,9 @@ const Civ3Parse = (() => {
 				prereqs: [0, 1, 2, 3].map ((j) => i32 (e + 88 + 4 * j)).filter ((x) => x >= 0), noTrade: (i32 (e + 104) & 0x80000) !== 0 })) : [],
 			// +208: the unit needs support (C3X UnitType.requires_support)
 			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84), requiresSupport: i32 (e + 208) !== 0,
-				defence: i32 (e + 88), attack: i32 (e + 96) })) : [],
+				defence: i32 (e + 88), attack: i32 (e + 96), bombard: i32 (e + 72),
+				// +120 upgrades to (may be another civilization's unique unit: the chain continues from it)
+				upgradeTo: i32 (e + 120) })) : [],
 			// OpenCiv3 Govt.cs: +12 buildings need maintenance, +20 tile penalty (-1 on a yield above 2), +24 trade bonus
 			// (+1 commerce on a tile with commerce)
 			governments: govt.map ((e) => ({ name: readAscii (b, e + 28, 64), corruption: i32 (e + 380), maintenance: i32 (e + 12) !== 0,
@@ -1628,9 +1630,11 @@ const Civ3Parse = (() => {
 		if (rules && rules.units.length) {
 			const byType = {};
 			let total = 0, free = 0;
+			result.myUnits = []; // [id (UNIT +8, unique), type] of each of your units, for losses between turns
 			for (const o of findAll (b, 'UNIT', gameOff)) {
 				if (i32 (o + 4) !== 472 || i32 (o + 28) !== player) continue;
 				const t = rules.units[i32 (o + 40)];
+				result.myUnits.push ([i32 (o + 8), i32 (o + 40)]);
 				total++;
 				byType[t ? t.name : '?'] = (byType[t ? t.name : '?'] || 0) + 1;
 				if (i32 (o + 32) !== playerRace || ! (t && t.requiresSupport)) free++;
@@ -2429,7 +2433,15 @@ function snapshotOf (res, fileName) {
     totals.buildings = {};
     for (const c of res.cities) if (c.buildings) for (const k of c.buildings) { const n = (rules.buildings[k] || {}).name; if (n) totals.buildings[n] = (totals.buildings[n] || 0) + 1; }
   }
-  return { game: gameIdOf (res), turn: res.turn, savedAt: Date.now (), fileName,
+  // Army: your military units (attack, defence or bombard above 0), in shields; their ids, to find losses between turns
+  let units = null;
+  if (rules && res.myUnits) {
+    const mil = res.myUnits.filter (([, t]) => isMilitary (rules, t));
+    units = new Int32Array (mil.flat ());
+    totals.armyShields = mil.reduce ((n, [, t]) => n + unitShields (res, t), 0);
+    totals.armyUnits = mil.length;
+  }
+  return { game: gameIdOf (res), turn: res.turn, savedAt: Date.now (), fileName, units,
            civ: rules && rules.civs[res.playerRace] ? rules.civs[res.playerRace].noun : '',
            totals,
            // Other civilizations' totals and their cost factor, for the comparison line
@@ -2439,6 +2451,41 @@ function snapshotOf (res, fileName) {
 async function recordTurn (res, fileName) {
   if (! res.ok || ! gameIdOf (res) || ! window.indexedDB) return;
   try { await HistoryStore.put (snapshotOf (res, fileName)); } catch (e) { setHistStatus ('History could not be saved in this browser: ' + e.message); }
+}
+
+// A military unit: attack, defence or bombard above 0 (Workers, Settlers, Scouts don't count)
+function isMilitary (rules, t) { const u = rules.units[t]; return !! u && (u.attack > 0 || u.defence > 0 || u.bombard > 0); }
+// Shields to build a unit (accelerated production halves costs)
+function unitShields (res, t) { const u = res.rules.units[t]; if (! u) return 0; return res.accelerated ? Math.ceil (u.cost / 2) : u.cost; }
+// Can type a become type b by upgrading? Follows the upgrade chain (PRTO +120), through unique units
+function upgradesTo (rules, a, b) {
+  const seen = new Set ();
+  for (let t = (rules.units[a] || {}).upgradeTo; t >= 0 && ! seen.has (t); t = (rules.units[t] || {}).upgradeTo) { if (t === b) return true; seen.add (t); }
+  return false;
+}
+// Military units lost between stored turns: units (by id) in the previous stored turn that this one doesn't have. The
+// game reuses a dead unit's id, so an id that now has a type the old unit can't upgrade to also counts as lost (an
+// upgrade keeps the id). A disbanded unit counts as lost; turns stored before this existed have no unit list.
+function addLosses (snaps) {
+  const res = state.result; if (! res || ! res.rules) return;
+  let prev = null;
+  for (const s of snaps) {
+    delete s.totals.unitsLost; s.lostDetail = null;
+    if (! s.units) continue;
+    if (prev) {
+      const now = new Map (); for (let i = 0; i < s.units.length; i += 2) now.set (s.units[i], s.units[i + 1]);
+      const byType = {}; let shields = 0;
+      for (let i = 0; i < prev.units.length; i += 2) {
+        const id = prev.units[i], t = prev.units[i + 1], t2 = now.get (id);
+        if (t2 === t || (t2 !== undefined && upgradesTo (res.rules, t, t2))) continue;
+        shields += unitShields (res, t); byType[t] = (byType[t] || 0) + 1;
+      }
+      s.totals.unitsLost = shields;
+      const list = Object.entries (byType).sort ((a, b) => b[1] - a[1]).map (([t, n]) => `${n} ${(res.rules.units[t] || {}).name || '?'}`).join (', ');
+      s.lostDetail = (list ? `Lost: ${list}` : 'No units lost') + (s.turn - prev.turn > 1 ? ` (since turn ${prev.turn})` : '');
+    }
+    prev = s;
+  }
 }
 
 const pct = (a, b) => b ? Math.round (1000 * a / b) / 10 : 0;
@@ -2452,7 +2499,9 @@ const HIST_CHARTS = [
   { key: 'citizens', name: 'Citizens', series: [['Citizens', (m) => m.citizens, 'citizens']] },
   { key: 'cities', name: 'Cities', empireOnly: true, series: [['Cities', (m) => m.cities, 'cities']] },
   { key: 'culture', name: 'Culture per turn', series: [['Culture', (m) => m.culture, 'culture']] },
-  { key: 'techs', name: 'Techs known', empireOnly: true, series: [['Techs', (m) => m.techs ?? null, 'techs']] }
+  { key: 'techs', name: 'Techs known', empireOnly: true, series: [['Techs', (m) => m.techs ?? null, 'techs']] },
+  { key: 'army', name: 'Army (shields)', empireOnly: true, detail: (s) => s.lostDetail,
+    series: [['Army size', (m) => m.armyShields ?? null], ['Units lost', (m) => m.unitsLost ?? null]] }
 ];
 let histSnaps = [];
 
@@ -2500,7 +2549,7 @@ async function refreshHistory () {
   const res = state.result, game = res && res.ok ? gameIdOf (res) : null;
   $('history').hidden = ! game || ! window.indexedDB;
   if ($('history').hidden) return;
-  try { histSnaps = (await HistoryStore.list (game)).sort ((a, b) => a.turn - b.turn); }
+  try { histSnaps = (await HistoryStore.list (game)).sort ((a, b) => a.turn - b.turn); addLosses (histSnaps); }
   catch (e) { histSnaps = []; setHistStatus ('History is not available in this browser: ' + e.message); }
   const n = histSnaps.length;
   $('histcount').textContent = n ? `(${n} ${n === 1 ? 'turn' : 'turns'}${n > 1 ? `: ${histSnaps[0].turn}–${histSnaps[n - 1].turn}` : ''})` : '';
@@ -2645,6 +2694,10 @@ function drawHistory () {
       row.appendChild (Object.assign (document.createElement ('i'), { className: 's' + (s.k + 1) }));
       row.appendChild (document.createTextNode (`${s.name}: ${v.toLocaleString ()}${chart.unit || ''}`));
       tip.appendChild (row);
+    }
+    if (chart.detail && cityId === null) {
+      const snap = histSnaps.find ((x) => x.turn === best.turn), d = snap && chart.detail (snap);
+      if (d) tip.appendChild (Object.assign (document.createElement ('div'), { textContent: d }));
     }
     for (const s of cmpSeries) {
       const hit = s.values.find ((p) => p.turn === best.turn);

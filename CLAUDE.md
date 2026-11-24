@@ -114,6 +114,11 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   position) × DIFF +120 (1). Flips if random(D) < P, D = 2000 × dist(k's capital) / dist(owner's capital), 500..8000;
   dist = max − ((dx+dy)/2 − min + 1)/2 on wrapped |dx|, |dy|. Not counted: ×1.4 the turn after the owner lost a city by
   capture (Leader +5576, not in the LEAD record).
+- Unit ids (UNIT +8): unique within a save (1454/1454 on the WWI save). An upgrade keeps the id (12 Cannon → Artillery
+  between the 1140 and 1270 AD saves); the game reuses a dead unit's id (a Spearman's id later on a Cavalry). PRTO +72
+  bombard, +120 upgrades to (may be another civ's unique unit: Cannon → Hwach'a; the chain continues from it).
+  History's Army chart: military units (attack, defence or bombard > 0) in shields, and losses by id between stored
+  turns (an id with a type off the old unit's upgrade chain counts as lost; a reused id of the same type can't be told).
 - Current buildings = BITM bitmap, not BINF history (captured cities keep the history of destroyed Palaces etc.).
 
 ## How to work here
