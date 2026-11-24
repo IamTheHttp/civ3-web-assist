@@ -35,7 +35,8 @@ Sections: name(4) + count + entries each starting with their length. Offsets fro
   +72 road bonus, +84 food, +88 shields, +92 commerce. **GOOD**: +4 name, +76 prerequisite tech, +80 food, +84 shields,
   +88 commerce. BLDG: +208 production (quarters), +224 obsolete by tech; flag bits: +237 bit5 power plant, +250 bit1 tourist attraction, +238 bit7 shields on water, +239 bit0 food on water (Harbor), bit1 commerce on water.
 - **PRTO**: +8 name[32], +84 cost (plain shields), +208 needs support (C3X `UnitType.requires_support`). **GOVT**: +28 name, +380 corruption level (0 minimal, 1 nuisance,
-  2 problematic, 3 rampant, 4 catastrophic, 5 communal), +396 number of governments, +516 required advance, +520 slider rate limit
+  2 problematic, 3 rampant, 4 catastrophic, 5 communal), +396 number of governments, then 3 ints per government; the offsets after it here are for the default 8 and move
+  12 bytes per further government (11 in the EME mod: +36). +516 required advance, +520 slider rate limit
   (tenths; 10 in every default government, matching the game). **DIFF**: +4 name, +68 content citizens, +108 optimal cities %. GOVT +560 war weariness (0 none, 1 low, 2 high).
   BLDG +236 bit 22 reduces war weariness (Police Station), +248 bit 11 wonder: reduces war weariness (Universal Suffrage). **WSIZ**: +4 optimal city number.
 - **RULE**: +288 max town size, +292 max city size (OpenCiv3's 248/252 are 40 bytes off).
@@ -53,7 +54,7 @@ Agricultural) / mine / road + river +1 commerce + resource (with its tech) + lak
 water buildings. City tile: food set to 2 (+1 Agricultural); +1 shield and +1 commerce above the town limit (+2 above the
 city limit; Commercial +3/+5 commerce, Industrious +3 shields); at least 1 shield and 1 commerce (capital: 4). Then the
 government: trade bonus +1 commerce on a tile with commerce; tile penalty −1 on a yield above 2 (not food on an Agricultural
-river city tile). Never below 0.
+city tile with fresh water: `Map.has_fresh_water`, vtable +96, river or lake). Never below 0.
 
 **Unit support** (gold, the game's rule): max(0, units − free − units of another nationality − units of a type without
 support) × GOVT +556; free = GOVT +540 + Σ cities (+544 town, +548 city, +552 metropolis); GOVT +540 = −1: none (Anarchy).

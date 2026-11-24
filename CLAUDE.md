@@ -35,7 +35,7 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   confirmed 100% gold is possible under every government. The Effect columns use the save's slider, or the "Try slider" one.
 - Tile yields: the game's rule (`Map_calc_food/shield/commerce_yield_at` 0x5D7180 / 0x5D75F0 / 0x5D7AD0) reproduces every
   city's food, shields and commerce from its worked tiles in **42/42** (Maya save) and **21/21** (1140 AD save). Worked tile: TILE +104 = city id (city tile included).
-  City tile: food 2 (+1 Agricultural), +1 shield and +1 commerce above the town limit, capital commerce at least 4.
+  City tile: food 2 (+1 Agricultural; exempt from the tile penalty with fresh water, river or lake: exe vtable call at 0x5D75A9), +1 shield and +1 commerce above the town limit, capital commerce at least 4.
   GOVT +24 trade bonus (+1 commerce on a tile with commerce: Republic, Democracy), +20 tile penalty (−1 on a yield above 2:
   Despotism, Anarchy), +12 building maintenance (none under Anarchy). Anarchy wastes every coin and shield (exe 0x4B1239;
   the player confirmed). Railroad (TILE +52 bit 1): +1 shield on a mined tile, +1 food on an irrigated one (not the city
@@ -119,6 +119,10 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   bombard, +120 upgrades to (may be another civ's unique unit: Cannon → Hwach'a; the chain continues from it).
   History's Army chart: military units (attack, defence or bombard > 0) in shields, and losses by id between stored
   turns (an id with a type off the old unit's upgrade chain counts as lost; a reused id of the same type can't be told).
+- Custom rules (embedded in the save): GOVT +396 = number of governments, then 3 ints each, so every GOVT field after
+  it moves 12 bytes per government above 8 (read only when the record is long enough). A building obsolete by a known tech
+  adds no commerce bonus and doesn't reduce corruption (fits every city of the EME mod save: gold/sci/lux 41/41, corruption
+  41/41; Scribe and Castle are obsolete there). Other civs' production uses the owner's known techs (AI cities 356/356).
 - Current buildings = BITM bitmap, not BINF history (captured cities keep the history of destroyed Palaces etc.).
 
 ## How to work here
