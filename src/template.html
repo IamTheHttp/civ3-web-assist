@@ -32,7 +32,12 @@
 html { scroll-padding-top: env(safe-area-inset-top, 0px); }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 13.5px/1.4 var(--sans); }
 main { padding: 12px 14px 30px; }
-header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; margin-bottom: 12px; }
+/* One full-width bar at the top; the side menu, the page and the panels start below it (--toph: its height, set by script) */
+:root { --toph: 52px; }
+header.top { position: fixed; top: 0; left: 0; right: 0; z-index: 16; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px;
+             padding: 9px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header.top .topright { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+main { padding-top: calc(var(--toph) + 12px) !important; }
 h1 { font-size: 20px; margin: 0; letter-spacing: .2px; }
 .sub { color: var(--muted); }
 .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--panel); border: 1px solid var(--line);
@@ -124,8 +129,7 @@ summary { cursor: pointer; color: var(--muted); }
 .kv > span.k { color: var(--muted); }
 .kv.three > span.h { color: var(--gold); font-size: 12px; text-align: right; }
 .kv > span.v, .kv.three > span:not(.k) { text-align: right; }
-#helpbtn { margin-left: auto; }
-#sidenav { position: fixed; top: 0; left: 0; bottom: 0; width: 132px; padding: 14px 8px; display: flex; flex-direction: column; gap: 6px;
+#sidenav { position: fixed; top: var(--toph); left: 0; bottom: 0; width: 132px; padding: 14px 8px; display: flex; flex-direction: column; gap: 6px;
            background: var(--panel); border-right: 1px solid var(--line); z-index: 12; }
 #sidenav button { text-align: left; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
 #sidenav button.active { border-color: var(--accent); color: var(--accent); }
@@ -134,7 +138,7 @@ main { margin-left: 132px; }
 :root { --drawer-w: min(640px, 46vw); }
 /* On wide screens an open panel pushes the page aside, so the table and toolbar stay usable */
 @media (min-width: 1100px) { body.drawer-open main { margin-right: var(--drawer-w); } }
-.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer-w); z-index: 14; display: flex; flex-direction: column;
+.drawer { position: fixed; top: var(--toph); right: 0; bottom: 0; width: var(--drawer-w); z-index: 14; display: flex; flex-direction: column;
           background: var(--panel); border-left: 1px solid var(--line); box-shadow: -8px 0 24px rgba(0,0,0,.18); }
 .drawerhead { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .drawerhead h2 { font-size: 17px; margin: 0; flex: 1; }
@@ -143,10 +147,12 @@ main { margin-left: 132px; }
 .drawer .card { max-width: none; }
 .panelnote { color: var(--muted); }
 @media (max-width: 760px) {
+  header.top { position: static; }
+  main { padding-top: 12px !important; }
   #sidenav { position: static; width: auto; flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px 14px; }
   #sidenav button { flex-direction: row; align-items: baseline; gap: 4px; }
   main { margin-left: 0; }
-  .drawer { width: 100vw; }
+  .drawer { width: 100vw; top: 0; }
 }
 @media (max-width: 1099px) { .drawer { width: min(var(--drawer-w), 100vw); } }
 /* Drag the left edge to set the panel's width; ⤢ fills the window beside the side menu */
@@ -254,6 +260,21 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
 </script>
 </head>
 <body>
+  <header class="top" id="topbar">
+    <h1>Civ3 Empire Viewer</h1>
+    <span class="sub" id="title">Open a save to see your cities</span>
+    <span id="playerbox" hidden><label for="playersel">Player:</label> <select id="playersel" title="A hot-seat game has several human players: pick yours"></select></span>
+    <span class="topright">
+      <span class="sub" id="rulesstatus"></span>
+      <label class="filebtn primary" for="file">Open save…</label>
+      <input id="file" type="file" accept=".sav,.SAV" hidden>
+      <button id="watch" type="button" title="Pick your Saves\Auto folder; the newest save is reloaded automatically">Watch autosave folder…</button>
+      <label class="filebtn" for="rulesfile" title="Your game's conquests.biq (in the Conquests folder). Needed for names and the Courthouse what-if; remembered for next time.">Load rules (conquests.biq)…</label>
+      <input id="rulesfile" type="file" accept=".biq,.BIQ" hidden>
+      <button id="helpbtn" type="button" title="How the buttons and columns work">? Help</button>
+      <button id="theme" type="button"></button>
+    </span>
+  </header>
   <nav id="sidenav" aria-label="Panels">
     <button type="button" data-open="summary">Summary</button>
     <button type="button" data-open="milestones">Milestones <span class="navsub" id="mscount"></span></button>
@@ -265,14 +286,6 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <button type="button" data-open="diagnostics">Diagnostics</button>
   </nav>
 <main>
-  <header class="top">
-    <h1>Civ3 Empire Viewer</h1>
-    <span class="sub" id="title">Open a save to see your cities</span>
-    <span id="playerbox" hidden><label for="playersel">Player:</label> <select id="playersel" title="A hot-seat game has several human players: pick yours"></select></span>
-    <span class="sub" id="rulesstatus"></span>
-    <button id="helpbtn" type="button" title="How the buttons and columns work">? Help</button>
-    <button id="theme" type="button"></button>
-  </header>
 
   <dialog id="help" aria-labelledby="helptitle">
     <div class="helphead"><h2 id="helptitle">How it works</h2><button id="helpclose" type="button">Close</button></div>
@@ -337,11 +350,6 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
   </dialog>
 
   <div class="bar">
-    <label class="filebtn primary" for="file">Open save…</label>
-    <input id="file" type="file" accept=".sav,.SAV" hidden>
-    <label class="filebtn" for="rulesfile" title="Your game's conquests.biq (in the Conquests folder). Needed for names and the Courthouse what-if; remembered for next time.">Load rules (conquests.biq)…</label>
-    <input id="rulesfile" type="file" accept=".biq,.BIQ" hidden>
-    <button id="watch" type="button" title="Pick your Saves\Auto folder; the newest save is reloaded automatically">Watch autosave folder…</button>
     <label class="chk" for="viewsel">View</label>
     <select id="viewsel" aria-label="View"></select>
     <button id="editview" type="button">Columns…</button>
@@ -2500,6 +2508,8 @@ function load (bytes, name) {
 function setStatus (s) { $('status').textContent = s; }
 
 async function loadFile (file) { load (new Uint8Array (await file.arrayBuffer ()), file.name); }
+{ const bar = $('topbar'), setH = () => document.documentElement.style.setProperty ('--toph', bar.offsetHeight + 'px');
+  setH (); if (window.ResizeObserver) new ResizeObserver (setH).observe (bar); }
 $('file').addEventListener ('change', (e) => { if (e.target.files[0]) loadFile (e.target.files[0]); });
 const drop = $('drop');
 for (const t of [document.body]) {
@@ -2649,7 +2659,7 @@ function setTick (c, key, on) {
 // Where the rules in use come from: the save's own (custom rules) win over the loaded file
 function showRulesSource () {
   const res = state.result;
-  $('rulesstatus').textContent = res && res.rulesFromSave ? '· rules: from the save (custom rules)' : (state.rulesName ? `· rules: ${state.rulesName}` : '');
+  $('rulesstatus').textContent = res && res.rulesFromSave ? 'Rules: from the save (custom rules)' : (state.rulesName ? `Rules: ${state.rulesName}` : '');
 }
 function useRules (bytes, name, remember) {
   const r = Civ3Parse.parseRulesFile (bytes);
