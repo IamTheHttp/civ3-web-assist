@@ -2465,6 +2465,7 @@ function load (bytes, name) {
     for (const k of Object.keys (state.toggles)) if (! live.has (k)) delete state.toggles[k];
   }
   state.result = res; state.fileName = name; state.loadedAt = new Date ();
+  showRulesSource ();
   rebuildColumns ();
   renderViewEditor ();
   renderAttentionEditor ();
@@ -2625,11 +2626,16 @@ function setTick (c, key, on) {
   if (! Object.keys (t).length) delete state.toggles[tickKey (c)];
 }
 
+// Where the rules in use come from: the save's own (custom rules) win over the loaded file
+function showRulesSource () {
+  const res = state.result;
+  $('rulesstatus').textContent = res && res.rulesFromSave ? '· rules: from the save (custom rules)' : (state.rulesName ? `· rules: ${state.rulesName}` : '');
+}
 function useRules (bytes, name, remember) {
   const r = Civ3Parse.parseRulesFile (bytes);
   if (! r.rules) { setStatus (`${name}: ${r.diag.join ('; ')}`); return false; }
   state.rules = r.rules;
-  $('rulesstatus').textContent = `· rules: ${name}`;
+  state.rulesName = name; showRulesSource ();
   if (remember) {
     try {
       let bin = ''; for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode (bytes[i]);
