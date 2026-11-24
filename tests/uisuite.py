@@ -56,11 +56,9 @@ with sync_playwright() as p:
     check('"Problems only" shows its count', lbl=='Problems only (0)', lbl)
     check('"Problems only" with no problem cities explains why', n_on==1 and 'No cities with problems' in empty)
     check('"Problems only" toggled off (twice) restores all cities', n_off==42 and n_off2==42, f'{n_off}, {n_off2}')
-    # 6. search + export follow the view
+    # 6. search follows the view
     pg.fill('#search','was'); n=len(pg.query_selector_all('#rows tr')); pg.fill('#search','')
     check('search filters (Washington)', n==1)
-    with pg.expect_download() as d: pg.click('#csv')
-    hdr=open(d.value.path()).read().splitlines()[0].split(','); check('CSV columns match the current view', hdr==consistency(pg)['heads'], f'{len(hdr)} columns')
     # 7. ticks survive switching views, reset clears
     pg.select_option('#viewsel', str(views.index('Corruption management'))); h=consistency(pg)['heads']
     row=lambda n: next(r for r in pg.query_selector_all('#rows tr') if r.query_selector('td').inner_text()==n)

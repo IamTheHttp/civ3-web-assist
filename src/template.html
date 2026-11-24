@@ -34,8 +34,10 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 13.5px/1.4 var
 main { padding: 12px 14px 30px; }
 /* One full-width bar at the top; the side menu, the page and the panels start below it (--toph: its height, set by script) */
 :root { --toph: 52px; }
-header.top { position: fixed; top: 0; left: 0; right: 0; z-index: 16; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px;
-             padding: 9px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header.top { position: fixed; top: 0; left: 0; right: 0; z-index: 16; background: var(--panel); border-bottom: 1px solid var(--line); }
+header.top .toprow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; padding: 9px 14px; }
+.empirebar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 7px 14px; border-top: 1px solid var(--line); background: var(--bg); }
+.empirebar:not(:has(> :not([hidden]))) { display: none; }
 header.top .topright { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 main { padding-top: calc(var(--toph) + 12px) !important; }
 h1 { font-size: 20px; margin: 0; letter-spacing: .2px; }
@@ -135,10 +137,18 @@ summary { cursor: pointer; color: var(--muted); }
 #sidenav button.active { border-color: var(--accent); color: var(--accent); }
 .navsub { font-size: 11px; color: var(--muted); }
 main { margin-left: 132px; }
-:root { --drawer-w: min(640px, 46vw); }
-/* On wide screens an open panel pushes the page aside, so the table and toolbar stay usable */
-@media (min-width: 1100px) { body.drawer-open main { margin-right: var(--drawer-w); } }
-.drawer { position: fixed; top: var(--toph); right: 0; bottom: 0; width: var(--drawer-w); z-index: 14; display: flex; flex-direction: column;
+/* A page (any menu item but Cities) replaces the Cities page in the main area */
+body.page-open #citiespage { display: none; }
+.drawer.page { position: static; width: auto; border: 0; box-shadow: none; background: transparent; z-index: auto; }
+.drawer.page #drawerclose { display: none; }
+.drawer.page .drawerhead { padding: 0 0 10px; border: 0; }
+.drawer.page .drawerhead h2 { font-size: 20px; flex: none; }
+#pagenote { flex: 1; }
+.drawer.page .drawerbody { overflow: visible; padding: 0; }
+/* Columns and Tiers: a modal over the Cities page */
+.drawer.modal { top: calc(var(--toph) + 24px); bottom: auto; left: 50%; right: auto; transform: translateX(-50%); width: min(980px, 94vw);
+                max-height: calc(100vh - var(--toph) - 48px); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
+.drawer { position: fixed; top: var(--toph); right: 0; bottom: 0; z-index: 14; display: flex; flex-direction: column;
           background: var(--panel); border-left: 1px solid var(--line); box-shadow: -8px 0 24px rgba(0,0,0,.18); }
 .drawerhead { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .drawerhead h2 { font-size: 17px; margin: 0; flex: 1; }
@@ -154,15 +164,6 @@ main { margin-left: 132px; }
   main { margin-left: 0; }
   .drawer { width: 100vw; top: 0; }
 }
-@media (max-width: 1099px) { .drawer { width: min(var(--drawer-w), 100vw); } }
-/* Drag the left edge to set the panel's width; ⤢ fills the window beside the side menu */
-.drawergrip { position: absolute; top: 0; bottom: 0; left: -4px; width: 8px; cursor: col-resize; z-index: 1; }
-.drawergrip:hover, body.drawer-resizing .drawergrip { background: color-mix(in srgb, var(--accent) 45%, transparent); }
-body.drawer-resizing { user-select: none; cursor: col-resize; }
-body.drawer-full .drawer { left: 132px; width: auto; }
-body.drawer-full .drawergrip { display: none; }
-#drawerfull.active { border-color: var(--accent); color: var(--accent); }
-@media (max-width: 760px) { body.drawer-full .drawer { left: 0; } .drawergrip { display: none; } }
 .searchbar { display: flex; gap: 10px; align-items: center; margin: 0 0 8px; }
 #search { flex: 0 1 460px; font-size: 14px; padding: 6px 10px; }
 .fxtip { position: fixed; z-index: 40; pointer-events: none; background: var(--panel); border: 1px solid var(--line);
@@ -261,6 +262,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
 </head>
 <body>
   <header class="top" id="topbar">
+    <div class="toprow">
     <h1>Civ3 Empire Viewer</h1>
     <span class="sub" id="title">Open a save to see your cities</span>
     <span id="playerbox" hidden><label for="playersel">Player:</label> <select id="playersel" title="A hot-seat game has several human players: pick yours"></select></span>
@@ -274,14 +276,31 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <button id="helpbtn" type="button" title="How the buttons and columns work">? Help</button>
       <button id="theme" type="button"></button>
     </span>
+    </div>
+    <!-- Empire controls: what-ifs that apply on every page -->
+    <div class="empirebar" id="empirebar">
+    <span class="sliderbox" id="govbox" hidden
+      title="Your cities under another government: tile yields (trade bonus, tile penalty), corruption and waste, building upkeep and unit support. War weariness and happiness are not included">
+      <label class="chk" for="govsel">Try government</label>
+      <select id="govsel" aria-label="Try government"></select>
+    </span>
+    <span class="sliderbox" id="sliderbox" hidden
+      title="Gold, science and luxury, and the building gains, use the slider from your save. Tick to try another one; happy and unhappy citizens are not recalculated">
+      <label class="chk"><input id="slideron" type="checkbox"> Try slider</label>
+      <label for="slsci">Science:</label> <select id="slsci"></select>
+      <label for="sltax">Gold:</label> <select id="sltax"></select>
+      <label for="sllux">Luxury:</label> <select id="sllux"></select>
+    </span>
+    <button id="resetwhatif" type="button" hidden>Reset what-ifs</button>
+    </div>
   </header>
   <nav id="sidenav" aria-label="Panels">
     <button type="button" data-open="summary">Summary</button>
+    <button type="button" data-open="cities">Cities</button>
     <button type="button" data-open="milestones">Milestones <span class="navsub" id="mscount"></span></button>
     <button type="button" data-open="history">History <span class="navsub" id="histcount"></span></button>
     <button type="button" data-open="diplomacy">Diplomacy <span class="navsub" id="diplocount"></span></button>
     <button type="button" data-open="governments">Governments</button>
-    <button type="button" data-open="tiers">Tiers</button>
     <button type="button" data-open="settings">Settings</button>
     <button type="button" data-open="diagnostics">Diagnostics</button>
   </nav>
@@ -306,13 +325,12 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>View</dt><dd>Switch between sets of columns.</dd>
         <dt>Columns…</dt><dd>Choose this view's columns. <b>Clear all columns</b> starts from empty; <b>New view</b> makes your own.</dd>
         <dt>Player</dt><dd>Shown only for a hot-seat game (several human players): pick your civilization. The choice is kept per game, and History, Milestones and what-ifs are kept per player.</dd>
-        <dt>Side menu</dt><dd>Summary, Milestones, History, Diplomacy, Governments, Tiers, Settings and Diagnostics open in a panel on the right; the table stays where it is. Drag its left edge to resize it (double-click: default width), or ⤢ Expand to fill the window; each panel remembers its own. Esc returns an expanded panel to the side, then shuts it.</dd>
-        <dt>Tiers</dt><dd>Name corruption tiers and set which buildings each tier should have, from which city size.</dd>
+        <dt>Side menu</dt><dd>Summary, Cities, Milestones, History, Diplomacy, Governments, Settings and Diagnostics: each is a page. Cities is the table.</dd>
+        <dt>Tiers…</dt><dd>Name corruption tiers and set which buildings each tier should have, from which city size.</dd>
         <dt>Search (above the table)</dt><dd>Matches any text in the table: <code>library</code>, a city name, <code>max</code>, <code>no temple</code>. Several words must all match. Press <b>/</b> to jump there, Esc to clear.</dd>
         <dt>Problems only</dt><dd>Cities in disorder or close to it, starving, or with resisters.</dd>
         <dt>Needs attention</dt><dd>Cities missing a building their tier expects.</dd>
         <dt>Clear filters</dt><dd>Shows when a column is filtered; removes every filter in this view.</dd>
-        <dt>Export CSV</dt><dd>The table as a spreadsheet file.</dd>
         <dt>Try government</dt><dd>Your cities under another government: the tiles' food, shields and commerce (a government with a trade bonus, such as Republic, adds +1 commerce on tiles with commerce; one with a tile penalty, such as Despotism, takes 1 off a yield above 2), corruption and waste, building upkeep and unit support. War weariness and happiness aren't included. The Governments panel compares them all.</dd>
         <dt>Try slider</dt><dd>Off: gold, science, luxury and the building gains use the slider from your save. On: they use the slider you set, for example 50% science and 50% gold, so a Marketplace isn't judged by a low gold rate. Happy and unhappy citizens aren't recalculated.</dd>
         <dt>Reset what-ifs</dt><dd>Undo every tick you changed, and go back to your government and slider.</dd>
@@ -349,27 +367,15 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     </div>
   </dialog>
 
+  <div id="citiespage">
   <div class="bar">
     <label class="chk" for="viewsel">View</label>
     <select id="viewsel" aria-label="View"></select>
     <button id="editview" type="button">Columns…</button>
     <label class="chk" title="Only cities that need attention: in disorder, more unhappy than happy citizens (disorder next turn), starving, or with resisters"><input id="problems" type="checkbox"> <span id="problemslabel">Problems only</span></label>
     <label class="chk" title="Cities missing a building their tier expects (see Tiers)"><input id="attnonly" type="checkbox"> <span id="attnlabel">Needs attention</span></label>
+    <button id="tiersbtn" type="button" title="Name corruption tiers and set which buildings each tier should have">Tiers…</button>
     <button id="clearfilters" type="button" hidden title="Remove every column filter in this view">Clear filters</button>
-    <button id="csv" type="button" disabled>Export CSV</button>
-    <span class="sliderbox" id="govbox" hidden
-      title="Your cities under another government: tile yields (trade bonus, tile penalty), corruption and waste, building upkeep and unit support. War weariness and happiness are not included">
-      <label class="chk" for="govsel">Try government</label>
-      <select id="govsel" aria-label="Try government"></select>
-    </span>
-    <span class="sliderbox" id="sliderbox" hidden
-      title="Gold, science and luxury, and the building gains, use the slider from your save. Tick to try another one; happy and unhappy citizens are not recalculated">
-      <label class="chk"><input id="slideron" type="checkbox"> Try slider</label>
-      <label for="slsci">Science:</label> <select id="slsci"></select>
-      <label for="sltax">Gold:</label> <select id="sltax"></select>
-      <label for="sllux">Luxury:</label> <select id="sllux"></select>
-    </span>
-    <button id="resetwhatif" type="button" hidden>Reset what-ifs</button>
     <span class="status" id="status" aria-live="polite"></span>
   </div>
 
@@ -402,11 +408,11 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <tfoot><tr id="totals"></tr></tfoot>
     </table>
   </div>
+  </div>
 
 
   <aside id="drawer" class="drawer" aria-labelledby="drawertitle" hidden>
-    <div class="drawergrip" id="drawergrip" title="Drag to resize"></div>
-    <div class="drawerhead"><h2 id="drawertitle"></h2><button id="drawerfull" type="button" title="Fill the window (Esc returns)">⤢ Expand</button><button id="drawerclose" type="button" title="Close (Esc)">Close</button></div>
+    <div class="drawerhead"><h2 id="drawertitle"></h2><span class="sub" id="pagenote"></span><button id="drawerclose" type="button" title="Close (Esc)">Close</button></div>
     <div class="drawerbody">
     <div class="panel" data-panel="summary" hidden>
       <p class="panelnote" hidden>Open a save to see this.</p>
@@ -452,10 +458,12 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <th class="l" title="Your units may move through their territory">Right of passage</th>
       <th class="l" title="Civilizations allied with you against them">Your allies against them</th>
       <th class="l">Allied against you with</th>
-      <th class="l" title="Techs they know that you can receive in the trade screen: you know the prerequisites and the tech's era isn't later than yours">Techs they can trade</th>
-      <th class="l" title="Techs you know that they can receive: they know the prerequisites and the tech's era isn't later than theirs">Techs you can trade</th>
-      <th class="l" title="Luxuries from their own sources that you don't have">Their luxuries</th>
-      <th class="l" title="Luxuries from your own sources that they don't have. Luxuries you already give them still show: current deals aren't read">Your luxuries they lack</th>
+      <th class="l" title="Techs they know that you can receive in the trade screen: you know the prerequisites and the tech's era isn't later than yours">Techs you can buy</th>
+      <th class="l" title="Luxuries they have 2 or more sources of (nobody sells their last one) and you don't have">Luxuries you can buy</th>
+      <th class="l" title="Strategic resources they have 2 or more sources of and you don't have">Resources you can buy</th>
+      <th class="l" title="Techs you know that they can receive: they know the prerequisites and the tech's era isn't later than theirs">Techs you can sell</th>
+      <th class="l" title="Luxuries you have and they don't (you can sell your last one). Ones you already give them still show: current deals aren't read">Luxuries you can sell</th>
+      <th class="l" title="Strategic resources you have and they don't (you can sell your last one)">Resources you can sell</th>
       <th title="Gold in their treasury: the most they can pay at once">Treasury</th>
       <th title="The most gold per turn they agree to pay in a deal: their net gold per turn − their cities − 1. Point at a value for the parts">Most gold per turn</th>
     </tr></thead><tbody id="diplorows"></tbody></table></div>
@@ -527,9 +535,9 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
 <script>
 const $ = (id) => document.getElementById (id);
 const BASE_COLUMNS = [
-  { key: 'name', sec: 'city', label: 'City', title: 'City name', l: true, val: (c) => c.name, csv: (c) => c.name },
+  { key: 'name', sec: 'city', label: 'City', title: 'City name', l: true, val: (c) => c.name },
   { key: 'size', sec: 'city', label: 'Size', title: 'Citizens in the city', val: (c) => c.size },
-  { key: 'tier', sec: 'attn', label: 'Tier', l: true, val: (c) => tierOf (c), show: (c) => tierName (tierOf (c)), csv: (c) => tierName (tierOf (c)), cell: tierCell,
+  { key: 'tier', sec: 'attn', label: 'Tier', l: true, val: (c) => tierOf (c), show: (c) => tierName (tierOf (c)), cell: tierCell,
     title: 'Tier by corruption (see Tiers). Pick a tier to fix it for this city' },
   { key: 'attention', sec: 'attn', label: 'Attention', l: true, val: (c) => missingCount (c), show: (c) => warningsFor (c).map ((w) => w.text).join ('; '),
     cell: attentionCell, total: true, firstDir: -1,
@@ -548,7 +556,7 @@ const BASE_COLUMNS = [
     show: (c) => arrow (c.foodTiles, c.foodTiles + wi (c).foodNet - c.foodNet), cls: (c) => wiCls (c, 'foodNet', true), total: true },
   { key: 'foodNet', sec: 'food', label: 'Net Food', title: 'Food per turn after the citizens eat: what goes into the food box', val: (c) => wi (c).foodNet, show: (c) => { const s = (v) => (v > 0 ? '+' : '') + v; return arrow (s (c.foodNet), s (wi (c).foodNet)); },
     cls: (c) => wiCls (c, 'foodNet', true) || (c.foodNet < 0 ? 'red' : ''), total: true },
-  { key: 'box', sec: 'food', label: 'Box', title: 'Food stored / food needed to grow', val: (c) => c.storedFood / c.foodBox, show: (c) => `${c.storedFood}/${c.foodBox}`, csv: (c) => `${c.storedFood}/${c.foodBox}` },
+  { key: 'box', sec: 'food', label: 'Box', title: 'Food stored / food needed to grow', val: (c) => c.storedFood / c.foodBox, show: (c) => `${c.storedFood}/${c.foodBox}` },
   { key: 'shields', sec: 'shields', label: 'Shields', val: (c) => wi (c).shields, show: (c) => arrow (c.shields, wi (c).shields), cls: (c) => wiCls (c, 'shields', true), total: true, title: 'Raw shields from tiles, before waste' },
   { key: 'waste', sec: 'shields', label: 'Waste', title: 'Shields lost to waste', val: (c) => wi (c).waste, show: (c) => arrow (c.waste, wi (c).waste), cls: (c) => wiCls (c, 'waste') || (c.waste ? 'amber' : 'dim'), total: true },
   { key: 'wastePct', sec: 'shields', label: 'Waste %', val: (c) => wi (c).wastePct, show: (c) => arrow (c.wastePct, wi (c).wastePct, '%'), cls: (c) => wiCls (c, 'wastePct') || pctClass (c.wastePct),
@@ -577,8 +585,7 @@ const BASE_COLUMNS = [
     tip: (c) => flipTip (c) },
   { key: 'status', sec: 'other', label: 'Status', title: 'In disorder, or celebrating (We Love the King Day)', l: true, val: (c) => c.disorder ? 2 : (c.celebrating ? 1 : 0),
     show: (c) => c.disorder ? 'Disorder' : (c.celebrating ? 'Celebrating' : ''), cls: (c) => c.disorder ? 'red' : 'green' },
-  { key: 'build', sec: 'build', label: 'Production', title: 'What the city builds, and turns to finish', l: true, val: (c) => c.buildName, show: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : ''),
-    csv: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : '') },
+  { key: 'build', sec: 'build', label: 'Production', title: 'What the city builds, and turns to finish', l: true, val: (c) => c.buildName, show: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : '') },
 ];
 // A building column (made in rebuildColumns from the rules): a tick to try the building, and what one would gain the
 // city per turn
@@ -590,7 +597,7 @@ const BUILDING_GROUPS = [['@buildings', 'All buildings'], ['@corruption', 'Corru
 // Column keys of views saved with separate tick and Effect columns, or the fixed Courthouse / Police Station columns
 const OLD_KEYS = { ch: 'bt:Courthouse', ps: 'bt:Police Station', chEffect: 'bt:Courthouse', psEffect: 'bt:Police Station' };
 const columnKey = (k) => OLD_KEYS[k] || (k.startsWith ('be:') ? 'bt:' + k.slice (3) : k);
-let state = { result: null, sortKey: 'size', sortDir: -1, fileName: '', loadedAt: null, rules: null, toggles: {} };
+let state = { result: null, sortKey: 'size', sortDir: -1, fileName: '', loadedAt: null, rules: null, toggles: {}, pageNotes: {} };
 
 // ---------- views: named sets of columns, saved in this browser ----------
 const DEFAULT_VIEWS = [
@@ -894,7 +901,7 @@ function gainClass (e) {
 }
 // An Effect column: sorts by the gain (largest first), coloured by it
 function effectColumn (key, extra) {
-  return { ...extra, val: (c) => effectOf (c, key).sort ?? effectOf (c, key).value, show: (c) => effectOf (c, key).text, csv: (c) => effectOf (c, key).text,
+  return { ...extra, val: (c) => effectOf (c, key).sort ?? effectOf (c, key).value, show: (c) => effectOf (c, key).text,
            cls: (c) => gainClass (effectOf (c, key)), render: (c, td) => renderEffect (td, effectOf (c, key)), tip: (c) => effectOf (c, key).lines ? '' : effectOf (c, key).tip || '', firstDir: -1 };
 }
 
@@ -1022,8 +1029,7 @@ const DEFAULT_ATTENTION = {
   effectStyle: 'icons',                    // Effect cells: 'icons' (the game's icons) or 'words' (+2 sci, +3 gold)
   gainColors: { good: 10, ok: 5 },         // Effect colours by gain in gold a turn: green above good, amber from ok, red below 0
   values: { shield: 4, food: 4, gold: 1, science: 1, luxury: 1 }, // worth of one of each, in gold, for payback
-  workersPerCity: 1.5,                     // Workers card: the target work force per city (a captured worker counts ½)
-  reducerPayback: 40                       // expect a Courthouse / Police Station only where it pays back within this (null: always)
+  workersPerCity: 1.5                      // Workers card: the target work force per city (a captured worker counts ½)
 };
 function loadAttention () {
   const d = JSON.parse (JSON.stringify (DEFAULT_ATTENTION));
@@ -1095,14 +1101,8 @@ function computeWarnings (c) {
   for (const [name, sizes] of Object.entries (A.expect)) {
     const from = sizes[t], id = byName[name];
     if (from == null || id === undefined || c.size < from || has (id) || ! canBuild (id) || pastCap (id) || ! placeable (id)) continue;
-    // A Courthouse / Police Station is only worth it where it pays back
-    let pays = '';
-    if (rules.buildings[id].reducesCorruption && res.model && A.reducerPayback) {
-      const key = BONUS.some ((b) => b.id === id) ? 'b' + id : null;
-      if (key) { const e = effectOf (c, key); if (! e.payback || e.payback > A.reducerPayback) continue; pays = ` (pays back in ${e.payback})`; }
-    }
     if (c.buildType === 1 && c.buildId === id) out.push ({ text: `Building ${name}${c.buildTurns ? ` (${c.buildTurns})` : ''}`, building: true });
-    else out.push ({ text: `No ${name}${pays}` });
+    else out.push ({ text: `No ${name}` });
   }
   return out;
 }
@@ -1206,13 +1206,6 @@ function renderAttentionEditor () {
     });
     tiers.appendChild (add);
   }
-  // Courthouse / Police Station expectation by payback
-  const num = (value, onset) => { const n = el ('input', { type: 'number', min: 1, max: 999, value, className: 'num' }); n.addEventListener ('change', () => { onset (Math.max (1, Math.round (+n.value) || 1)); changed (); }); return n; };
-  const rp = el ('input', { type: 'checkbox', checked: !! A.reducerPayback });
-  rp.addEventListener ('change', () => { A.reducerPayback = rp.checked ? (A.lastReducerPayback || 40) : null; changed (); renderAttentionEditor (); });
-  const rpRow = el ('label', { title: 'Without this, a tier that expects a corruption reducer warns in every city of that tier' }, [rp, ' Expect a corruption reducer (Courthouse…) only where it pays back within ']);
-  if (A.reducerPayback) rpRow.append (num (A.reducerPayback, (v) => { A.reducerPayback = v; A.lastReducerPayback = v; }), ' turns');
-  tiers.appendChild (rpRow);
   box.appendChild (tiers);
 
   // Expected buildings
@@ -1828,13 +1821,16 @@ function renderDiplomacy (res) {
 
 // Trade columns: techs and luxuries each side can give, the gold they hold and can pay per turn. At war or destroyed: dimmed
 function tradeCells (p) {
-  if (! p.alive) return [[''], [''], [''], [''], [''], ['']];
+  if (! p.alive) return [[''], [''], [''], [''], [''], [''], [''], ['']];
   const noTrade = p.atWar ? 'At war: no trade until peace' : '';
   const list = (xs, tone) => xs === null ? ['?', 'l dim', 'Known techs not read from this save']
     : [xs.join (', '), 'l wrap ' + (noTrade ? 'dim' : xs.length ? tone : ''), noTrade];
+  // Resources: the source count in the hover text (tiles in their borders; the game also needs a road connection)
+  const goods = (xs, tone) => [xs.map ((x) => x.name).join (', '), 'l wrap ' + (noTrade ? 'dim' : xs.length ? tone : ''),
+    [...xs.map ((x) => `${x.name}: ${x.sources ?? '?'} sources`), noTrade].filter (Boolean).join ('\n')];
   return [
-    list (p.techsTheyGive, 'green'), list (p.techsYouGive, ''),
-    list (p.luxTheyHave, 'green'), list (p.luxYouHave, ''),
+    list (p.techsTheyGive, 'green'), goods (p.luxBuy, 'green'), goods (p.resBuy, 'green'),
+    list (p.techsYouGive, ''), goods (p.luxSell, ''), goods (p.resSell, ''),
     [p.treasury, noTrade ? 'dim' : '', 'Gold in their treasury: the most they can pay at once' + (noTrade ? '\n' + noTrade : '')],
     [p.maxGpt, noTrade ? 'dim' : '',
      `Net gold per turn ${p.income.net} = cities ${p.income.cities} + received ${p.income.received} − paid ${p.income.paid} − upkeep ${p.income.upkeep} − units ${p.income.units}\n` +
@@ -2074,18 +2070,26 @@ $('msreset').addEventListener ('click', () => {
   setGameMilestones (freshDefaults ()); state.msEdit = null; refreshMilestoneViews ();
 });
 
-// ---------- side menu and drawer: one panel at a time, beside the table ----------
+// ---------- side menu: pages; Columns and Tiers open as a modal over the Cities page ----------
 const PANEL_TITLES = { summary: 'Summary', milestones: 'Milestones', history: 'History', diplomacy: 'Diplomacy', governments: 'Governments', columns: 'Columns', tiers: 'Tiers', settings: 'Settings', diagnostics: 'Diagnostics' };
 const PANEL_CONTENT = { summary: 'summary', milestones: 'milestones', history: 'history', diplomacy: 'diplomacy', governments: 'governments', columns: 'viewedit', tiers: 'attnedit', settings: 'settingsbox', diagnostics: 'diagnostics' };
+const MODALS = new Set (['columns', 'tiers']);
 function panelOpen (key) { return ! $('drawer').hidden && state.panel === key; }
+function markNav (key) { for (const b of document.querySelectorAll ('#sidenav button')) b.classList.toggle ('active', b.dataset.open === key); }
+// The page last shown, kept in this browser
+function savePage (key) { try { localStorage.setItem ('civ3viewer.page', key); } catch (e) { /* ignore */ } }
 function openPanel (key) {
-  if (panelOpen (key)) { closePanel (); return; }
+  const modal = MODALS.has (key);
+  if (panelOpen (key)) { if (modal) closePanel (); return; }
+  if (modal && state.panel && ! MODALS.has (state.panel)) showCities ();
   state.panel = key;
-  $('drawer').hidden = false; document.body.classList.add ('drawer-open');
-  $('drawertitle').textContent = PANEL_TITLES[key];
-  applyDrawerLayout ();
+  const d = $('drawer');
+  d.hidden = false; d.classList.toggle ('modal', modal); d.classList.toggle ('page', ! modal);
+  document.body.classList.toggle ('page-open', ! modal);
+  if (! modal) { markNav (key); savePage (key); window.scrollTo (0, 0); }
+  $('drawertitle').textContent = PANEL_TITLES[key]; syncPageNote ();
   for (const p of document.querySelectorAll ('.panel')) p.hidden = p.dataset.panel !== key;
-  for (const b of document.querySelectorAll ('#sidenav button, #editview')) b.classList.toggle ('active', (b.dataset.open || (b.id === 'editview' ? 'columns' : '')) === key);
+  $('editview').classList.toggle ('active', key === 'columns'); $('tiersbtn').classList.toggle ('active', key === 'tiers');
   // Editors draw only while open
   $('viewedit').hidden = key !== 'columns'; $('attnedit').hidden = key !== 'tiers';
   if (key === 'columns') renderViewEditor ();
@@ -2096,58 +2100,37 @@ function openPanel (key) {
   if (key === 'governments' && state.result && state.result.ok) renderGovernments (state.result);
   fitTable ();
 }
+// Back to the Cities page (also closes a modal)
 function closePanel () {
-  $('drawer').hidden = true; state.panel = null; document.body.classList.remove ('drawer-open', 'drawer-full');
+  const d = $('drawer');
+  d.hidden = true; d.classList.remove ('modal', 'page'); state.panel = null; document.body.classList.remove ('page-open');
   $('viewedit').hidden = true; $('attnedit').hidden = true;
-  for (const b of document.querySelectorAll ('#sidenav button, #editview')) b.classList.remove ('active');
+  $('editview').classList.remove ('active'); $('tiersbtn').classList.remove ('active');
+  markNav ('cities');
   fitTable ();
 }
+// A page's note beside its title (the Summary's what-if note)
+function syncPageNote () { $('pagenote').textContent = (state.panel && state.pageNotes[state.panel]) || ''; }
+function showCities () { closePanel (); savePage ('cities'); }
 // A panel whose content needs a save says so
 function syncPanelNote () {
   const key = state.panel; if (! key) return;
   const content = $(PANEL_CONTENT[key]), note = document.querySelector (`.panel[data-panel="${key}"] .panelnote`);
   if (note) note.hidden = ! (content.hidden && ['summary', 'milestones', 'history', 'diplomacy', 'governments'].includes (key));
 }
-for (const b of document.querySelectorAll ('#sidenav button')) b.addEventListener ('click', () => openPanel (b.dataset.open));
+for (const b of document.querySelectorAll ('#sidenav button')) b.addEventListener ('click', () => b.dataset.open === 'cities' ? showCities () : openPanel (b.dataset.open));
 $('drawerclose').addEventListener ('click', closePanel);
+$('tiersbtn').addEventListener ('click', () => openPanel ('tiers'));
+// Esc closes a modal; a click on the dimmed page around it too
 document.addEventListener ('keydown', (e) => {
-  if (e.key !== 'Escape' || $('drawer').hidden || ! $('fmenu').hidden || $('help').open) return;
-  if (document.body.classList.contains ('drawer-full')) setDrawerLayout ({ full: false }); else closePanel ();
+  if (e.key !== 'Escape' || ! MODALS.has (state.panel) || ! $('fmenu').hidden || $('help').open) return;
+  closePanel ();
 });
-
-// Each panel keeps its own width and expanded state in this browser
-const DRAWER_DEFAULT_W = { diplomacy: 1000, history: 820, governments: 820 };
-function loadDrawerLayouts () { try { return JSON.parse (localStorage.getItem ('civ3viewer.drawer') || '{}') || {}; } catch (e) { return {}; } }
-function drawerLayout (key) { return { w: DRAWER_DEFAULT_W[key] || 640, full: false, ...(loadDrawerLayouts ()[key] || {}) }; }
-function setDrawerLayout (change) {
-  const key = state.panel; if (! key) return;
-  const all = loadDrawerLayouts (); all[key] = { ...drawerLayout (key), ...change };
-  try { localStorage.setItem ('civ3viewer.drawer', JSON.stringify (all)); } catch (e) { /* ignore */ }
-  applyDrawerLayout ();
-}
-const maxDrawerW = () => Math.max (320, window.innerWidth - 132 - 280);
-function applyDrawerLayout () {
-  const l = drawerLayout (state.panel);
-  document.documentElement.style.setProperty ('--drawer-w', Math.min (l.w, maxDrawerW ()) + 'px');
-  document.body.classList.toggle ('drawer-full', l.full);
-  $('drawerfull').classList.toggle ('active', l.full);
-  $('drawerfull').textContent = l.full ? '⤡ Side' : '⤢ Expand';
-  $('drawerfull').title = l.full ? 'Back to the side (Esc)' : 'Fill the window (Esc returns)';
-  fitTable ();
-}
-$('drawerfull').addEventListener ('click', () => setDrawerLayout ({ full: ! drawerLayout (state.panel).full }));
-$('drawergrip').addEventListener ('pointerdown', (e) => {
-  e.preventDefault (); $('drawergrip').setPointerCapture (e.pointerId); document.body.classList.add ('drawer-resizing');
-  const move = (ev) => document.documentElement.style.setProperty ('--drawer-w', Math.round (Math.max (320, Math.min (maxDrawerW (), window.innerWidth - ev.clientX))) + 'px');
-  const up = () => {
-    $('drawergrip').removeEventListener ('pointermove', move); $('drawergrip').removeEventListener ('pointerup', up);
-    document.body.classList.remove ('drawer-resizing');
-    setDrawerLayout ({ w: parseInt (getComputedStyle (document.documentElement).getPropertyValue ('--drawer-w'), 10) });
-  };
-  $('drawergrip').addEventListener ('pointermove', move); $('drawergrip').addEventListener ('pointerup', up);
+document.addEventListener ('pointerdown', (e) => {
+  if (MODALS.has (state.panel) && ! $('drawer').contains (e.target) && ! e.target.closest ('#fmenu, #editview, #tiersbtn, dialog')) closePanel ();
 });
-$('drawergrip').addEventListener ('dblclick', () => setDrawerLayout ({ w: DRAWER_DEFAULT_W[state.panel] || 640 }));
-window.addEventListener ('resize', () => { if (state.panel) applyDrawerLayout (); });
+{ let page = 'cities'; try { page = localStorage.getItem ('civ3viewer.page') || 'cities'; } catch (e) { /* ignore */ }
+  if (PANEL_TITLES[page] && ! MODALS.has (page)) openPanel (page); else markNav ('cities'); }
 
 // Governments: the empire's totals under each one, with the slider in use; your own buildings (ticks not included)
 function renderGovernments (res) {
@@ -2231,8 +2214,9 @@ function renderSummary (res) {
   for (const st of [N, T]) { st.deals = deals; st.goldNet = st.gold + deals - st.upkeep - st.units; st.total = st.luxury + st.science + st.gold; st.mult = st.netCommerce ? st.afterBonus / st.netCommerce : 0;
     st.prodUsable = st.foodUsable + st.netShields + st.netCommerce; st.prodAll = st.food + st.shields + st.commerce; st.modProd = st.foodUsable + st.netShields + st.afterBonus; st.surplus = st.usableSurplus + st.wasted; }
   const sg = (v) => (v > 0 ? '+' : '') + fmt (v);
+  // The what-if note sits on the page's title line, so the cards don't move when it appears
+  state.pageNotes.summary = whatIf ? `${note}Changed figures show now → then.` : ''; syncPageNote ();
   $('summary').innerHTML =
-    (whatIf ? `<p class="histnote">${note}Changed figures show now → then.</p>` : '') +
     sizeCard (res, row, card) + workersCard (res, row, card) +
     card ('Economy', `All cities. ${note}`,
       row ('Commerce', both ('commerce'), 'Raw commerce from tiles' + (cs.some ((c) => c.touristCommerce) ? `, including ${cs.reduce ((n, c) => n + c.touristCommerce, 0)} from tourist attractions` : '') + ', before corruption') +
@@ -2302,7 +2286,7 @@ function render () {
   warnCache.clear ();
   const res = state.result;
   if (! res || ! res.ok) return;
-  $('drop').hidden = true; $('tablewrap').hidden = false; $('searchbar').hidden = false; $('csv').disabled = false;
+  $('drop').hidden = true; $('tablewrap').hidden = false; $('searchbar').hidden = false;
   $('title').textContent = `${state.fileName} · turn ${res.turn} · ${res.cities.length} ${res.cities.length === 1 ? 'city' : 'cities'}`;
 
   renderSummary (res);
@@ -2772,16 +2756,6 @@ $('watch').addEventListener ('click', async () => {
   clearInterval (watchTimer);
   await poll ();
   watchTimer = setInterval (poll, 3000);
-});
-
-$('csv').addEventListener ('click', () => {
-  const res = state.result; if (! res) return;
-  const esc = (v) => /[",\n]/.test (String (v)) ? `"${String (v).replace (/"/g, '""')}"` : String (v);
-  const COLS = visibleColumns ();
-  const cell = (col, c) => col.csv ? col.csv (c) : (col.show ? col.show (c) : col.val (c));
-  const lines = [COLS.map ((c) => esc (c.label)).join (',')];
-  for (const c of res.cities) lines.push (COLS.map ((col) => esc (cell (col, c))).join (','));
-  download (lines.join ('\r\n'), (state.fileName || 'cities').replace (/\.sav$/i, '') + '.csv', 'text/csv');
 });
 
 $('debug').addEventListener ('click', () => {

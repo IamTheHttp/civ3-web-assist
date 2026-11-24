@@ -629,6 +629,15 @@ const Civ3Parse = (() => {
 					}
 					result.tiles = true;
 					result.tileOwnerAt = (x, y) => { const o = tile (x, y); return o < 0 ? -1 : b[o + 9]; }; // TILE +9: territory owner
+					// Resource tiles in each civ's territory (TILE +12 GOOD, +9 owner), for trade: the game keeps per civ and
+					// resource a byte of spare sources (sources − 1; its readers add 1); an AI sells a resource only when it is
+					// above 0 (exe 0x55EAE0, Leader +5656). The save doesn't store that byte: this counts the tiles, without the
+					// road connection the game also needs.
+					result.resourceTiles = {};
+					for (let k = 0; k < count; k++) {
+						const o = first + 212 * k, g = i32 (o + 12), own = b[o + 9];
+						if (g >= 0 && own > 0) { const m = result.resourceTiles[own] = result.resourceTiles[own] || {}; m[g] = (m[g] || 0) + 1; }
+					}
 
 					// Worked tiles and their yields under every government, transcribed from the game (GOG
 					// Map_calc_food_yield_at 0x5D7180, Map_calc_shield_yield_at 0x5D75F0, Map_calc_commerce_yield_at 0x5D7AD0).
@@ -826,8 +835,13 @@ const Civ3Parse = (() => {
 			const canReceive = (lo, p, t) => ! knows (p, t) && ! rules.techs[t].noTrade && rules.techs[t].era <= i32 (lo + 224) &&
 				rules.techs[t].prereqs.every ((x) => knows (p, x));
 			const tradeTechs = (from, to, toLead) => techsOk ? rules.techs.map ((t, k) => knows (from, k) && canReceive (toLead, to, k) ? t.name : null).filter (Boolean) : null;
-			const luxuries = (p) => rules.goods.map ((g, k) => g.type === 1 && ((resMask[p] >>> k) & 1) ? g.name : null).filter (Boolean);
-			const myLux = luxuries (player);
+			// Resources a civ reaches from its own sources (GOOD +60 class: 1 luxury, 2 strategic), with its source count
+			const sourcesOf = (p, k) => result.resourceTiles ? ((result.resourceTiles[p] || {})[k] || 0) : null;
+			const reached = (p, type) => rules.goods.map ((g, k) => g.type === type && ((resMask[p] >>> k) & 1) ? { name: g.name, k, sources: sourcesOf (p, k) } : null).filter (Boolean);
+			// What 'from' can sell 'to': reached by 'from', not by 'to'. An AI needs a spare source (2 or more; unknown count:
+			// listed); you can sell your last one (checked in-game)
+			const sellable = (from, to, type) => { const theirs = new Set (reached (to, type).map ((x) => x.k));
+				return reached (from, type).filter ((x) => ! theirs.has (x.k) && (from === player || x.sources === null || x.sources >= 2)); };
 			// Net gold per turn of a player (GOG Leader_compute_income 0x55DD50): cities' gold with tax collectors + gold per
 			// turn received - paid (living players only) - building upkeep - unit support. Unit support (0x55D310): an AI
 			// player gets DIFF +92 more free units, and DIFF +96 per city. Left out: a per-city term (City +624 in memory) and
@@ -878,7 +892,8 @@ const Civ3Parse = (() => {
 					// Your war weariness points toward them (LEAD +3228; Leader +0xCB0 in memory)
 					warWeariness: i32 (mine + 3228 + 4 * id),
 					techsTheyGive: tradeTechs (id, player, mine), techsYouGive: tradeTechs (player, id, o),
-					luxTheyHave: luxuries (id).filter ((x) => ! myLux.includes (x)), luxYouHave: myLux.filter ((x) => ! luxuries (id).includes (x)),
+					luxBuy: sellable (id, player, 1), luxSell: sellable (player, id, 1),
+					resBuy: sellable (id, player, 2), resSell: sellable (player, id, 2),
 					// Treasury: LEAD +48 + +52 (GOG Leader_set_treasury 0x4C2350 splits it in two)
 					treasury: i32 (o + 48) + i32 (o + 52),
 					// Most gold per turn an AI agrees to pay (GOG Leader_consider_trade 0x440EE0): more than its net gold per
