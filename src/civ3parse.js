@@ -201,7 +201,8 @@ const Civ3Parse = (() => {
 		return { dist: x.D / m.maxD, rank: x.rankNum / (Y * x.nopt), cap: Math.max (0, 9 - x.NiTotal) / 10, share: x.lost / Y };
 	}
 
-	function parse (fileBytes, loadedRules) {
+	// options.player: which human player to read (hot-seat games have several); default the lowest-numbered human
+	function parse (fileBytes, loadedRules, options = {}) {
 		const diag = [], result = { diag, cities: [], ok: false };
 		let b = fileBytes;
 		const magic = readAscii (b, 0, 4);
@@ -245,7 +246,14 @@ const Civ3Parse = (() => {
 		const humanBits = i32 (gameOff + 80) >>> 0, flags5 = u8 (gameOff + 17);
 		const accelerated = (flags5 & 2) !== 0, cultureFlips = (flags5 & 128) !== 0;
 		let player = -1;
-		for (let c = 1; c < 32; c++) if (humanBits & (1 << c)) { player = c; break; }
+		const humans = []; for (let c = 1; c < 32; c++) if (humanBits & (1 << c)) humans.push (c);
+		player = humans.includes (options.player) ? options.player : (humans[0] ?? -1);
+		// Each human's civilization, for the player choice (LEAD +8 player, +12 race)
+		result.humans = humans.map ((id) => {
+			const o = findAll (b, 'LEAD', gameOff).find ((x) => i32 (x + 4) > 4300 && i32 (x + 8) === id);
+			const race = o === undefined ? -1 : i32 (o + 12);
+			return { id, name: (rules && rules.civs[race] && rules.civs[race].noun) || `Player ${id}` };
+		});
 		result.turn = i32 (gameOff + 64);
 		result.difficultyId = i32 (gameOff + 24);
 		result.numberOfCities = i32 (gameOff + 36);
@@ -258,7 +266,7 @@ const Civ3Parse = (() => {
 			result.year = cal && cal.unit === 0 ? yearAt (cal, result.turn) : null;
 		}
 		result.cultureFlips = cultureFlips;
-		diag.push (`GAME at byte ${gameOff}: turn ${result.turn}, ${result.numberOfCities} cities in the world, human player ${player}${accelerated ? ', accelerated production' : ''}`);
+		diag.push (`GAME at byte ${gameOff}: turn ${result.turn}, ${result.numberOfCities} cities in the world, human player ${player}${humans.length > 1 ? ` (hot-seat: humans ${humans.join (', ')})` : ''}${accelerated ? ', accelerated production' : ''}`);
 		if (player < 0) { diag.push ('No human player found'); return result; }
 
 		// Known techs (layout from OpenCiv3 QueryCiv3 Sav.cs): after the 856-byte Conquests GAME block come one int per

@@ -21,6 +21,8 @@
   above 10, amber 5–10, grey 0–5, red a loss (editable in Settings). Payback turns stay in the tooltip.
 - **The hover box explains shields and commerce** as the city screen counts them: waste and corruption before → after
   (before the multiplier and the slider), then × the production multiplier and the buildings behind it.
+- **Hot-seat:** a save with several human players shows a Player drop-down; the choice is kept per game, and the
+  game id (History, Milestones, what-ifs) already includes the player.
 - **Flip %** (Overview): the culture-flip chance per turn by the game's rule; unmet civilizations aren't named.
 - **No effects for buildings you can't build yet:** the cell shows the tech it needs ("needs Computers"); Settings can
   show them anyway.

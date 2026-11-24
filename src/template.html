@@ -265,6 +265,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
   <header class="top">
     <h1>Civ3 Empire Viewer</h1>
     <span class="sub" id="title">Open a save to see your cities</span>
+    <span id="playerbox" hidden><label for="playersel">Player:</label> <select id="playersel" title="A hot-seat game has several human players: pick yours"></select></span>
     <span class="sub" id="rulesstatus"></span>
     <button id="helpbtn" type="button" title="How the buttons and columns work">? Help</button>
     <button id="theme" type="button"></button>
@@ -288,6 +289,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Watch autosave folder…</dt><dd>Pick <code>Saves\Auto</code>; the newest save loads by itself.</dd>
         <dt>View</dt><dd>Switch between sets of columns.</dd>
         <dt>Columns…</dt><dd>Choose this view's columns. <b>Clear all columns</b> starts from empty; <b>New view</b> makes your own.</dd>
+        <dt>Player</dt><dd>Shown only for a hot-seat game (several human players): pick your civilization. The choice is kept per game, and History, Milestones and what-ifs are kept per player.</dd>
         <dt>Side menu</dt><dd>Summary, Milestones, History, Diplomacy, Governments, Tiers, Settings and Diagnostics open in a panel on the right; the table stays where it is. Drag its left edge to resize it (double-click: default width), or ⤢ Expand to fill the window; each panel remembers its own. Esc returns an expanded panel to the side, then shuts it.</dd>
         <dt>Tiers</dt><dd>Name corruption tiers and set which buildings each tier should have, from which city size.</dd>
         <dt>Search (above the table)</dt><dd>Matches any text in the table: <code>library</code>, a city name, <code>max</code>, <code>no temple</code>. Several words must all match. Press <b>/</b> to jump there, Esc to clear.</dd>
@@ -1497,7 +1499,7 @@ async function addSavesToHistory (files) {
   for (const f of files) {
     setHistStatus (`Reading ${f.name}…`);
     try {
-      const res = Civ3Parse.parse (new Uint8Array (await f.arrayBuffer ()), state.rules);
+      const res = Civ3Parse.parse (new Uint8Array (await f.arrayBuffer ()), state.rules, { player: state.result && state.result.player });
       if (! res.ok || ! gameIdOf (res)) { failed++; continue; }
       await recordTurn (res, f.name);
       if (gameIdOf (res) === current) added++; else other++;
@@ -2298,11 +2300,33 @@ function showDiag () {
   $('debug').disabled = ! r;
 }
 
+// Hot-seat: the human player picked for each game (by world seed and map size), kept in this browser
+const playerKey = (res) => `${res.world.seed}|${res.world.width}x${res.world.height}`;
+function loadPlayerChoice () { try { return JSON.parse (localStorage.getItem ('civ3viewer.player') || '{}') || {}; } catch (e) { return {}; } }
+function savePlayerChoice (key, id) { const st = loadPlayerChoice (); st[key] = id; try { localStorage.setItem ('civ3viewer.player', JSON.stringify (st)); } catch (e) { /* ignore */ } }
+function syncPlayerBox (res) {
+  const humans = res.humans || [], box = $('playerbox'), sel = $('playersel');
+  box.hidden = humans.length < 2;
+  sel.textContent = '';
+  for (const h of humans) sel.appendChild (Object.assign (document.createElement ('option'), { value: h.id, textContent: h.name, selected: h.id === res.player }));
+}
+$('playersel').addEventListener ('change', () => {
+  const r = state.result; if (! r || ! r.world || ! state.lastBytes) return;
+  savePlayerChoice (playerKey (r), +$('playersel').value);
+  load (state.lastBytes, state.fileName);
+});
+
 function load (bytes, name) {
   let res;
   state.lastBytes = bytes;
-  try { res = Civ3Parse.parse (bytes, state.rules); }
+  try {
+    res = Civ3Parse.parse (bytes, state.rules);
+    // A hot-seat game: read the human picked for this game before, if it isn't the default
+    const want = res.world && (res.humans || []).length > 1 ? loadPlayerChoice ()[playerKey (res)] : undefined;
+    if (want !== undefined && want !== res.player && res.humans.some ((h) => h.id === want)) res = Civ3Parse.parse (bytes, state.rules, { player: want });
+  }
   catch (e) { res = { ok: false, cities: [], diag: ['Error while reading: ' + e.message] }; }
+  syncPlayerBox (res);
   const gameId = gameIdOf (res);
   if (gameId !== state.gameId) { state.toggles = {}; state.slider.on = false; state.govTry = null; } // a different game: what-ifs from the previous one don't apply
   state.gameId = gameId;
