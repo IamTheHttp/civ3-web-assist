@@ -690,6 +690,7 @@ const Civ3Parse = (() => {
 			buildings: bldg.map ((e) => ({
 				name: readAscii (b, e + 68, 32), cost: i32 (e + 148), upkeep: i32 (e + 172), requires: i32 (e + 144),
 				center: (b[e + 236] & 1) !== 0, reducesCorruption: (b[e + 237] & 1) !== 0, forbiddenPalace: ((b[e + 244] >> 5) & 1) !== 0,
+				government: i32 (e + 212), // required government (-1: any)
 				science50: ((b[e + 236] >> 2) & 1) !== 0, luxury50: ((b[e + 236] >> 3) & 1) !== 0, gold50: ((b[e + 236] >> 4) & 1) !== 0,
 				doublesScience: ((b[e + 248] >> 4) & 1) !== 0, capitalization: ((b[e + 238] >> 3) & 1) !== 0,
 				// Size caps (OpenCiv3 QueryCiv3 Bldg.cs): Aqueduct-type buildings allow size level 2, Hospital-type level 3
@@ -1165,7 +1166,9 @@ const Civ3Parse = (() => {
 			};
 			const capital = result.cities.find ((c) => c.id === capitalId);
 			const reducing = rules.buildings.map ((x, k) => x.reducesCorruption ? k : -1).filter ((k) => k >= 0);
-			const fpLike = rules.buildings.map ((x, k) => x.forbiddenPalace ? k : -1).filter ((k) => k >= 0);
+			// Forbidden Palace-type wonders count only under their required government (exe 0x55AA10 and 0x4B139A: BLDG +212
+			// is the owner's government or -1): the Secret Police HQ does nothing outside Communism
+			const fpLike = rules.buildings.map ((x, k) => x.forbiddenPalace && (x.government === -1 || x.government === government) ? k : -1).filter ((k) => k >= 0);
 			const has = (c, k) => c.buildings && c.buildings.has (k);
 			const civ = rules.civs[playerRace];
 			const diffRow = rules.difficulties[result.difficultyId], gov = rules.governments[government];

@@ -42,6 +42,9 @@ N = OCN
 N = N × (the player's difficulty: "optimal cities %") / 100
 ```
 
+A Forbidden Palace-type wonder (BLDG +244 bit 5) counts here and in step 3 only when its required government (BLDG +212)
+is the player's government or −1 (any): the Secret Police HQ (Communism) does nothing under another government.
+
 **2. Courthouse count.** `Ni` = corruption-reducing buildings in the city (Courthouse, Police Station) **+ 10 if the
 city is the capital**. Then, for this city only:
 
