@@ -416,6 +416,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <select id="histchart" aria-label="Chart"></select>
       <select id="histcity" aria-label="City"></select>
       <select id="histcmp" aria-label="Compare with"></select>
+      <select id="histrange" aria-label="Turns shown"></select>
       <label class="filebtn" for="histfiles" title="Read older saves of this game and store their turns. The page keeps showing the save you opened.">Add saves…</label>
       <input id="histfiles" type="file" accept=".sav,.SAV" multiple hidden>
       <button id="histclear" type="button" title="Delete every stored turn of this game from this browser">Delete this game's history</button>
@@ -1393,6 +1394,12 @@ async function refreshHistory () {
     cmp.appendChild (Object.assign (document.createElement ('option'), { value: v, textContent: t }));
   cmp.value = [...cmp.options].some ((o) => o.value === keepCmp) ? keepCmp : '';
   cmp.title = cmpNote ();
+  // Turns shown: all, or the last 10, 20, ... turns (in steps of 10, up to the stored span)
+  const rng = $('histrange'), keepRng = state.histRange || '', span = n ? histLastTurn () - histSnaps[0].turn : 0;
+  rng.textContent = '';
+  rng.appendChild (Object.assign (document.createElement ('option'), { value: '', textContent: 'All turns' }));
+  for (let k = 10; k < span; k += 10) rng.appendChild (Object.assign (document.createElement ('option'), { value: k, textContent: `Last ${k} turns` }));
+  rng.value = [...rng.options].some ((o) => o.value === keepRng) ? keepRng : '';
   drawHistory ();
   renderMilestones (); // history decides whether past deadlines were met
 }
@@ -1401,13 +1408,22 @@ function niceStep (max, ticks) {
   const raw = max / ticks, mag = Math.pow (10, Math.floor (Math.log10 (raw || 1))), f = raw / mag;
   return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * mag;
 }
+// The latest turn: the last stored one, or the loaded save's if later
+function histLastTurn () {
+  const last = histSnaps.length ? histSnaps[histSnaps.length - 1].turn : -Infinity;
+  return Math.max (last, (state.result && state.result.turn) ?? -Infinity);
+}
+// The first turn the chart shows (the Turns shown picker)
+function histFromTurn () { const k = +$('histrange').value; return k ? histLastTurn () - k : -Infinity; }
+
 function drawHistory () {
   const box = $('histchartbox'), legend = $('histlegend');
   box.textContent = ''; legend.textContent = '';
   const chart = HIST_CHARTS.find ((c) => c.key === $('histchart').value) || HIST_CHARTS[0];
   const cityId = $('histcity').value === '' ? null : +$('histcity').value;
   for (const c of HIST_CHARTS) if (c.empireOnly) $('histchart').querySelector (`option[value="${c.key}"]`).disabled = cityId !== null;
-  const points = histSnaps.map ((s) => ({ turn: s.turn, m: cityId === null ? s.totals : (s.cities.find ((c) => c.id === cityId) || null) })).filter ((p) => p.m);
+  const from = histFromTurn (), shown = histSnaps.filter ((s) => s.turn >= from);
+  const points = shown.map ((s) => ({ turn: s.turn, m: cityId === null ? s.totals : (s.cities.find ((c) => c.id === cityId) || null) })).filter ((p) => p.m);
   const loaded = state.result && state.result.turn;
   if (histSnaps.length < 2)
     box.appendChild (Object.assign (document.createElement ('p'), { className: 'histnote',
@@ -1419,7 +1435,7 @@ function drawHistory () {
   // The comparison line: whole empire only
   $('histcmp').disabled = cityId !== null;
   const cmp = cityId === null ? $('histcmp').value : '';
-  const cmpSeries = ! cmp ? [] : chart.series.map (([name, f], k) => ({ name, k, values: histSnaps.map ((s) => {
+  const cmpSeries = ! cmp ? [] : chart.series.map (([name, f], k) => ({ name, k, values: shown.map ((s) => {
     const x = cmpValue (s, cmp, f); return x ? { turn: s.turn, v: x.v, who: x.who } : null; }).filter (Boolean) }));
   if (series.length > 1) for (const s of series) {
     const item = document.createElement ('span'); item.className = 'histkey';
@@ -1561,6 +1577,7 @@ async function addSavesToHistory (files) {
 for (const c of HIST_CHARTS) $('histchart').appendChild (Object.assign (document.createElement ('option'), { value: c.key, textContent: c.name }));
 $('histchart').addEventListener ('change', drawHistory);
 $('histcity').addEventListener ('change', drawHistory);
+$('histrange').addEventListener ('change', () => { state.histRange = $('histrange').value; drawHistory (); });
 $('histcmp').addEventListener ('change', () => { state.histCmp = $('histcmp').value; drawHistory (); });
 $('histfiles').addEventListener ('change', (e) => { const f = [...e.target.files]; e.target.value = ''; if (f.length) addSavesToHistory (f); });
 $('histclear').addEventListener ('click', async () => {
