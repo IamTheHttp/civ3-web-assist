@@ -3273,6 +3273,7 @@ function renderSummary (res) {
   const sg = (v) => (v > 0 ? '+' : '') + fmt (v);
   $('summary').innerHTML =
     (whatIf ? `<p class="histnote">${note}Changed figures show now → then.</p>` : '') +
+    sizeCard (res, row, card) +
     card ('Economy', `All cities. ${note}`,
       row ('Commerce', both ('commerce'), 'Raw commerce from tiles' + (cs.some ((c) => c.touristCommerce) ? `, including ${cs.reduce ((n, c) => n + c.touristCommerce, 0)} from tourist attractions` : '') + ', before corruption') +
       row ('Corruption', both ('corruption') + pctBoth ('corruption', 'commerce'), 'Commerce lost to corruption') +
@@ -3309,6 +3310,18 @@ function renderSummary (res) {
       `<span class="k" title="Food + shields + commerce">Productivity</span><span>${perBoth ('prodAll')}</span><span>${perBoth ('prodUsable')}</span>` +
       `<span class="k" title="Usable food + shields after waste + gold, science and luxury after Library, Marketplace etc. Specialists' output not included.">Modified productivity</span><span>–</span><span>${perBoth ('modProd')}</span>`, true);
   $('summary').hidden = false;
+}
+
+// Towns, cities and metropolises by the rules' size limits (RULE: town up to maxTown, city up to maxCity)
+function sizeCard (res, row, card) {
+  const t = res.rules ? res.rules.maxTown : 6, m = res.rules ? res.rules.maxCity : 12;
+  const names = (list) => list.map ((c) => c.name).join (', ');
+  const towns = res.cities.filter ((c) => c.size <= t), cities = res.cities.filter ((c) => c.size > t && c.size <= m), metros = res.cities.filter ((c) => c.size > m);
+  return card ('Cities', `By size: town up to ${t}, city up to ${m}, metropolis above ${m}`,
+    row ('Towns', towns.length, `Size 1–${t}${towns.length ? ': ' + names (towns) : ''}`) +
+    row ('Cities', cities.length, `Size ${t + 1}–${m}${cities.length ? ': ' + names (cities) : ''}`) +
+    row ('Metropolises', metros.length, `Size ${m + 1} and above${metros.length ? ': ' + names (metros) : ''}`) +
+    row ('Total', res.cities.length, 'All your cities'));
 }
 
 function render () {
