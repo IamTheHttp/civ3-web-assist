@@ -1283,14 +1283,33 @@ const Civ3Parse = (() => {
 					}
 					result.tiles = true;
 					result.tileOwnerAt = (x, y) => { const o = tile (x, y); return o < 0 ? -1 : b[o + 9]; }; // TILE +9: territory owner
-					// Resource tiles in each civ's territory (TILE +12 GOOD, +9 owner), for trade: the game keeps per civ and
-					// resource a byte of spare sources (sources − 1; its readers add 1); an AI sells a resource only when it is
-					// above 0 (exe 0x55EAE0, Leader +5656). The save doesn't store that byte: this counts the tiles, without the
-					// road connection the game also needs.
+					// Sources per civ: resource tiles in its territory (TILE +12 GOOD, +9 owner) connected to one of its cities.
+					// The game keeps per civ and resource a byte of spare sources (sources − 1; its readers add 1); an AI sells a
+					// resource only when it is above 0 (exe 0x55EAE0, Leader +5656). A tile counts only when connected: the game
+					// keeps per tile and civ the connected city (Tile +110 connected_city_ids, −1: none; Trade_Net_recompute_resources
+					// 0x57E450), not in the save. Here: a chain of tiles with a road or railroad (TILE +52 bits 0-1), a river
+					// (+8) or a city (+30) from the resource tile to a city of the owner; harbours and airports aren't followed.
+					const cols = W / 2, linked = (o) => (b[o + 52] & 3) !== 0 || b[o + 8] !== 0 || i16 (o + 30) >= 0;
+					const reach = {}; // owner -> Set of tile offsets connected to its cities
+					const connectedFor = (own) => {
+						if (reach[own]) return reach[own];
+						const seen = new Set (), queue = [];
+						for (let k = 0; k < count; k++) { const o = first + 212 * k; if (i16 (o + 30) >= 0 && b[o + 9] === own) { seen.add (o); queue.push (k); } }
+						while (queue.length) {
+							const k = queue.pop (), y = Math.floor (k / cols), x = 2 * (k % cols) + (y & 1);
+							for (const [dx, dy] of around) {
+								const o = tile (x + dx, y + dy);
+								if (o < 0 || seen.has (o) || ! linked (o)) continue;
+								seen.add (o); queue.push ((o - first) / 212);
+							}
+						}
+						return (reach[own] = seen);
+					};
 					result.resourceTiles = {};
 					for (let k = 0; k < count; k++) {
 						const o = first + 212 * k, g = i32 (o + 12), own = b[o + 9];
-						if (g >= 0 && own > 0) { const m = result.resourceTiles[own] = result.resourceTiles[own] || {}; m[g] = (m[g] || 0) + 1; }
+						if (g < 0 || own <= 0 || ! connectedFor (own).has (o)) continue;
+						const m = result.resourceTiles[own] = result.resourceTiles[own] || {}; m[g] = (m[g] || 0) + 1;
 					}
 
 					// Worked tiles and their yields under every government, transcribed from the game (GOG

@@ -100,7 +100,8 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   (+60 class: 1 luxury) a city reaches from its civ's own sources, imports not included; France shows only Dyes
   (confirmed in-game). Strategic resources: GOOD +60 class 2. An AI sells a resource only with a spare source: the game keeps
   per civ a byte of sources − 1 (Leader +5656, readers add 1; trade check exe 0x55EAE0); the viewer counts resource tiles
-  (TILE +12) in the civ's borders (TILE +9), road connection not checked. You can sell your last one (confirmed in-game).
+  (TILE +12) in the civ's borders (TILE +9) linked to one of its cities by road, railroad, river or city tiles (the game's
+  per-tile connected_city_ids, Tile +110, aren't in the save; rivers assumed to connect; harbours not followed). You can sell your last one (confirmed in-game).
   Treasury = LEAD +48 + +52 (`Leader_set_treasury` 0x4C2350; France 100, confirmed in-game). 0x55DA60 caps only the gold per turn
   that you offer. An AI refuses to pay more gold per turn than its net gold per turn − its cities − 1
   (`Leader_consider_trade` 0x440EE0; each gold per turn counts 18 in its deal value): France 80 − 12 − 1 = 67, confirmed
