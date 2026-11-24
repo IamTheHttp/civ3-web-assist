@@ -61,6 +61,9 @@ td select.tiersel:hover { border-color: var(--line); }
 .vehead { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
 .vecols { display: flex; flex-wrap: wrap; gap: 10px 26px; }
 .vegroup { min-width: 140px; }
+.vegroups { padding-bottom: 4px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.vegroups label { font-weight: 600; }
+.attnbody .note.amber { color: var(--amber); }
 .vegroup h3 { font-size: 12px; font-weight: 600; color: var(--gold); margin: 0 0 3px; text-transform: uppercase; letter-spacing: .4px; }
 .vecols label { display: flex; gap: 6px; align-items: center; white-space: nowrap; padding: 1px 0; }
 .vecols label.na { color: var(--muted); }
@@ -285,7 +288,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <h3>Buttons</h3>
       <dl>
         <dt>Open save…</dt><dd>Read a save file.</dd>
-        <dt>Load rules…</dt><dd>Read conquests.biq: names, corruption model, what-ifs, tiers.</dd>
+        <dt>Load rules…</dt><dd>Read conquests.biq: names, corruption model, what-ifs, tiers. A save with custom rules (a mod or scenario) uses its own rules instead; Help lists them under <i>In these rules</i>.</dd>
         <dt>Watch autosave folder…</dt><dd>Pick <code>Saves\Auto</code>; the newest save loads by itself.</dd>
         <dt>View</dt><dd>Switch between sets of columns.</dd>
         <dt>Columns…</dt><dd>Choose this view's columns. <b>Clear all columns</b> starts from empty; <b>New view</b> makes your own.</dd>
@@ -297,7 +300,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Needs attention</dt><dd>Cities missing a building their tier expects.</dd>
         <dt>Clear filters</dt><dd>Shows when a column is filtered; removes every filter in this view.</dd>
         <dt>Export CSV</dt><dd>The table as a spreadsheet file.</dd>
-        <dt>Try government</dt><dd>Your cities under another government: the tiles' food, shields and commerce (Republic and Democracy add +1 commerce on tiles with commerce; Despotism and Anarchy take 1 off a yield above 2), corruption and waste, building upkeep and unit support. War weariness and happiness aren't included. The Governments panel compares them all.</dd>
+        <dt>Try government</dt><dd>Your cities under another government: the tiles' food, shields and commerce (a government with a trade bonus, such as Republic, adds +1 commerce on tiles with commerce; one with a tile penalty, such as Despotism, takes 1 off a yield above 2), corruption and waste, building upkeep and unit support. War weariness and happiness aren't included. The Governments panel compares them all.</dd>
         <dt>Try slider</dt><dd>Off: gold, science, luxury and the building gains use the slider from your save. On: they use the slider you set, for example 50% science and 50% gold, so a Marketplace isn't judged by a low gold rate. Happy and unhappy citizens aren't recalculated.</dd>
         <dt>Reset what-ifs</dt><dd>Undo every tick you changed, and go back to your government and slider.</dd>
         <dt><span class="chip">◐ Auto</span></dt><dd>Theme: Auto (your system), Light or Dark.</dd>
@@ -307,7 +310,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <dl>
         <dt>Sort</dt><dd>Click a column name. Click again to reverse.</dd>
         <dt>▾ Filter</dt><dd>On each column, as in a spreadsheet: sort, a condition (greater than, between, contains…) or tick the values to keep. A blue ▾ marks a filtered column. Filters and sorting use the real numbers, so a what-if tick never hides or moves a city; each view keeps its own filters.</dd>
-        <dt>Building columns</dt><dd>One column per building from your game's rules: <b>CH</b>, <b>PS</b>, <b>Lib</b>, <b>Mkt</b>, <b>Fac</b>, <b>Power</b>… Ticked: the city has it. Tick a box to try a building (Power: Coal Plant; a city counts only its best power plant). Changed numbers show <i>now → then</i>; an amber outline marks a tick that isn't real. Buildings made obsolete by a tech you know aren't shown.</dd>
+        <dt>Building columns</dt><dd>One column per building of your game's rules that reduces corruption or adds science, gold, luxury or shields, with a short name such as <b>CH</b> (Courthouse) or <b>Lib</b> (Library). Ticked: the city has it. Tick a box to try a building (a city counts only its best power plant). In <b>Columns…</b>, a group (Science, Production…) takes every such building. Changed numbers show <i>now → then</i>; an amber outline marks a tick that isn't real. Buildings made obsolete by a tech you know aren't shown.</dd>
         <dt>The gain next to a tick</dt><dd>What one building would gain the city per turn, after upkeep. The colour is the gain in gold a turn, by the worth of a shield, food, gold, science and luxury set in Settings (default a shield or food = 4 gold): <span class="green">green</span> above 10, <span class="amber">amber</span> 5–10, grey 0–5, <span class="red">red</span> a loss. Point at a cell for the cost and the turns to pay it back. The columns sort largest gain first. A building that needs a tech you don't know shows the tech instead (Settings can show it anyway). Set the limits, the worths and icons or words in Settings.</dd>
         <dt>Tier</dt><dd>Pick a tier to fix it for that city; <i>(auto)</i> follows corruption.</dd>
         <dt>Attention</dt><dd><span class="amber">Amber</span>: missing. <span class="green">Green</span>: being built now.</dd>
@@ -325,6 +328,8 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Diagnostics</dt><dd>What the page read from your files. <b>Download debug report</b> if something looks wrong.</dd>
       </dl>
 
+      <h3>In these rules</h3>
+      <dl id="helprules"><dd>Load the rules to see the buildings they define.</dd></dl>
       <h3>Columns</h3>
       <dl id="helpcols"></dl>
       <p class="histnote">Not affiliated with or endorsed by Firaxis Games, 2K or Take-Two Interactive Software. CIV and CIVILIZATION are registered trademarks of Take-Two Interactive Software, Inc. The yield icons are from Sid Meier's Civilization III and are the property of their owners; they are used in this non-commercial fan tool for personal use.</p>
@@ -870,6 +875,7 @@ const Civ3Parse = (() => {
 		const scenarioTo = biqEnd;
 
 		let rules = readRules (b, BIQ_START, scenarioTo, []);
+		result.rulesFromSave = !! rules;
 		if (rules) diag.push ('Rules: from the save (custom rules)');
 		else if (loadedRules) { rules = loadedRules; diag.push ('Rules: from the loaded conquests.biq'); }
 		else diag.push ('Rules: not loaded. Load conquests.biq to see building and unit names and the Courthouse what-if');
@@ -1208,8 +1214,7 @@ const Civ3Parse = (() => {
 				};
 				const m = modelAt (lvl), byLevel = {};
 				const mAt = (g) => { const l = rules.governments[g].corruption; return byLevel[l] || (byLevel[l] = modelAt (l)); };
-				const courthouse = reducing.find ((k) => /courthouse/i.test (rules.buildings[k].name)), police = reducing.find ((k) => /police/i.test (rules.buildings[k].name));
-				for (const c of result.cities) {
+								for (const c of result.cities) {
 					c.isCapital = c === capital;
 					c.palaceWondersHere = fpLike.filter ((k) => has (c, k)).length;
 					c.reducers = reducing.filter ((k) => has (c, k));
@@ -1221,7 +1226,7 @@ const Civ3Parse = (() => {
 					if (corruptedYield (m, c, ni, c.commerce, false).lost === c.corruption && corruptedYield (m, c, ni, c.shields, true).lost === c.waste) match++;
 					else c.modelOff = true;
 				}
-				result.model = { m, courthouse, police, reducing, match, checked,
+				result.model = { m, reducing, match, checked,
 				                 lostFor: (c, ni, forWaste) => corruptedYield (m, c, ni, forWaste ? c.shields : c.commerce, forWaste).lost,
 				                 // Coins or shields lost from yield Y under government g (an index into the rules' governments)
 				                 lostAt: (c, ni, forWaste, Y, g) => corruptedYield (mAt (g), c, ni, Y, forWaste).lost,
@@ -1724,7 +1729,9 @@ const BASE_COLUMNS = [
   { key: 'foreign', sec: 'mood', label: 'Foreign', title: 'Citizens of another nationality: culture-flip risk', val: (c) => c.foreign, cls: (c) => c.foreign ? 'amber' : 'dim' },
   { key: 'grow', sec: 'food', label: 'Grow', title: 'Turns until the city grows, as on the city screen. –: not growing. max: food box full, waiting for an Aqueduct or Hospital', val: (c) => { const g = wi (c).grow; return g === null ? 9998 : (g === 'max' ? 9999 : g); },
     show: (c) => { const t = (g) => g === null ? '–' : g; return arrow (t (c.grow), t (wi (c).grow)); }, cls: (c) => { const e = wi (c); return e.grow !== c.grow ? 'changed' : (e.grow === null ? (e.foodNet < 0 ? 'red' : 'dim') : (e.grow === 'max' ? 'amber' : '')); } },
-  { key: 'foodNet', sec: 'food', label: 'Food', title: 'Net food per turn', val: (c) => wi (c).foodNet, show: (c) => { const s = (v) => (v > 0 ? '+' : '') + v; return arrow (s (c.foodNet), s (wi (c).foodNet)); },
+  { key: 'foodRaw', sec: 'food', label: 'Food', title: 'Food from worked tiles, before the citizens eat', val: (c) => c.foodTiles + wi (c).foodNet - c.foodNet,
+    show: (c) => arrow (c.foodTiles, c.foodTiles + wi (c).foodNet - c.foodNet), cls: (c) => wiCls (c, 'foodNet', true), total: true },
+  { key: 'foodNet', sec: 'food', label: 'Net Food', title: 'Food per turn after the citizens eat: what goes into the food box', val: (c) => wi (c).foodNet, show: (c) => { const s = (v) => (v > 0 ? '+' : '') + v; return arrow (s (c.foodNet), s (wi (c).foodNet)); },
     cls: (c) => wiCls (c, 'foodNet', true) || (c.foodNet < 0 ? 'red' : ''), total: true },
   { key: 'box', sec: 'food', label: 'Box', title: 'Food stored / food needed to grow', val: (c) => c.storedFood / c.foodBox, show: (c) => `${c.storedFood}/${c.foodBox}`, csv: (c) => `${c.storedFood}/${c.foodBox}` },
   { key: 'shields', sec: 'shields', label: 'Shields', val: (c) => wi (c).shields, show: (c) => arrow (c.shields, wi (c).shields), cls: (c) => wiCls (c, 'shields', true), total: true, title: 'Raw shields from tiles, before waste' },
@@ -1745,7 +1752,9 @@ const BASE_COLUMNS = [
   { key: 'luxury', sec: 'output', label: 'Lux', title: 'Luxury after Marketplace etc.', val: (c) => wi (c).luxury, show: (c) => arrow (c.luxury, wi (c).luxury), cls: (c) => wiCls (c, 'luxury', true), total: true },
   { key: 'science', sec: 'output', label: 'Sci', title: 'Science after Library etc.', val: (c) => wi (c).science, show: (c) => arrow (c.science, wi (c).science), cls: (c) => wiCls (c, 'science', true), total: true },
   { key: 'upkeep', sec: 'other', label: 'Upkeep', val: (c) => wi (c).upkeep, show: (c) => arrow (c.upkeep, wi (c).upkeep), cls: (c) => wiCls (c, 'upkeep'), total: true, title: 'Building maintenance per turn' },
-  { key: 'culture', sec: 'other', label: 'Culture', val: (c) => c.culture, total: true, title: 'Culture per turn' },
+  { key: 'cultureTotal', sec: 'other', label: 'Culture', val: (c) => (c.cultureBy || [])[c.owner] || 0, total: true,
+    title: 'Culture the city has gathered for you (CITY +224 + 4 × your player number; grows by the culture per turn)' },
+  { key: 'culture', sec: 'other', label: 'Culture/turn', val: (c) => c.culture, total: true, title: 'Culture per turn' },
   { key: 'flip', sec: 'other', label: 'Flip %', title: 'Chance per turn that the city flips to another civilization by culture (the game\'s rule). Point at a value for the reasons',
     val: (c) => c.flip ? (c.flip.immune || c.flip.capital ? -1 : c.flip.chance * 100) : -2,
     show: (c) => ! c.flip ? '' : c.flip.capital ? 'capital' : c.flip.immune ? `immune ${c.flipImmunity}` : c.flip.chance ? (c.flip.chance * 100).toFixed (2) + '%' : '0',
@@ -1756,28 +1765,25 @@ const BASE_COLUMNS = [
   { key: 'build', sec: 'build', label: 'Production', title: 'What the city builds, and turns to finish', l: true, val: (c) => c.buildName, show: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : ''),
     csv: (c) => c.buildName + (c.buildTurns ? ` (${c.buildTurns})` : '') },
 ];
-// A building column: a tick to try the building, and what one would gain the city per turn. Courthouse and Police
-// Station here; the others in rebuildColumns.
+// A building column (made in rebuildColumns from the rules): a tick to try the building, and what one would gain the
+// city per turn
 const EFFECT_NOTE = 'The number: what one would gain this city per turn. Colour: the gain in gold a turn (limits in Settings). Uses your slider, or the one in Try slider. Sorts largest gain first';
 function buildingColumn (tick, extra) { return { ...effectColumn (tick, extra), tick, sec: 'bonus' }; }
-const CHPS_COLUMNS = [
-  buildingColumn ('ch', { key: 'ch', label: 'CH', model: true,
-    title: `Courthouse: tick to try it. ${EFFECT_NOTE} (science, gold and luxury from the commerce kept; shields kept; upkeep)` }),
-  buildingColumn ('ps', { key: 'ps', label: 'PS', model: true, title: `Police Station: tick to try it. ${EFFECT_NOTE}` }),
-];
-// Column keys of views saved when the tick and the Effect were separate columns
-const OLD_KEYS = { chEffect: 'ch', psEffect: 'ps' };
+// Groups of building columns a view can hold ('@science' …): they take every such building of the loaded rules
+const BUILDING_GROUPS = [['@buildings', 'All buildings'], ['@corruption', 'Corruption reducers'], ['@science', 'Science'], ['@gold', 'Gold'],
+                         ['@luxury', 'Luxury'], ['@production', 'Production']];
+// Column keys of views saved with separate tick and Effect columns, or the fixed Courthouse / Police Station columns
+const OLD_KEYS = { ch: 'bt:Courthouse', ps: 'bt:Police Station', chEffect: 'bt:Courthouse', psEffect: 'bt:Police Station' };
 const columnKey = (k) => OLD_KEYS[k] || (k.startsWith ('be:') ? 'bt:' + k.slice (3) : k);
 let state = { result: null, sortKey: 'size', sortDir: -1, fileName: '', loadedAt: null, rules: null, toggles: {} };
 
 // ---------- views: named sets of columns, saved in this browser ----------
 const DEFAULT_VIEWS = [
-  { name: 'Overview', columns: ['name', 'size', 'happy', 'content', 'unhappy', 'grow', 'foodNet', 'shields', 'commerce', 'corruptionPct', 'gold', 'luxury', 'science', 'flip', 'status', 'build'] },
-  { name: 'Growth & happiness', columns: ['name', 'size', 'happy', 'content', 'unhappy', 'resisters', 'spec', 'foreign', 'grow', 'foodNet', 'box', 'luxury', 'status', 'build'] },
-  { name: 'Corruption management', columns: ['name', 'size', 'shields', 'waste', 'wastePct', 'netShields', 'commerce', 'corruption', 'corruptionPct', 'netCommerce', 'ch', 'ps', 'upkeep', 'build'] },
-  { name: 'Science & gold buildings', columns: ['name', 'size', 'commerce', 'corruptionPct', 'gold', 'science', 'bt:Library', 'bt:University', 'bt:Research Lab', 'bt:Marketplace', 'bt:Bank', 'bt:Stock Exchange', 'upkeep'] },
-  { name: 'Production buildings', columns: ['name', 'size', 'shields', 'waste', 'wastePct', 'netShields', 'bt:Factory', 'bt:Coal Plant', 'bt:Manufacturing Plant', 'upkeep', 'build'] },
-  { name: 'Attention', columns: ['name', 'size', 'tier', 'attention', 'corruptionPct', 'foodNet', 'grow', 'build'] },
+  { name: 'Effects', columns: ['name', 'size', '@buildings'] },
+  { name: 'Corruption management', columns: ['name', 'size', 'shields', 'waste', 'wastePct', 'netShields', 'commerce', 'corruption', 'corruptionPct', 'netCommerce', '@corruption', 'upkeep', 'build'] },
+  { name: 'Build next', columns: ['name', 'size', 'attention', 'corruptionPct', 'build'] },
+  { name: 'Net production', columns: ['name', 'foodRaw', 'foodNet', 'shields', 'wastePct', 'netShields', 'commerce', 'corruptionPct', 'netCommerce', 'gold', 'science'] },
+  { name: 'Culture', columns: ['name', 'cultureTotal', 'culture', 'flip'] },
   { name: 'All columns', columns: null },
 ];
 function loadViews () {
@@ -1802,17 +1808,22 @@ function visibleColumns () {
   if (! v.columns) return avail;
   // Always the standard column order, whatever order the view stored them in
   const keys = new Set (v.columns.map (columnKey));
-  return avail.filter ((c) => c.key === 'name' || keys.has (c.key));
+  return avail.filter ((c) => c.key === 'name' || keys.has (c.key) || (c.groups || []).some ((g) => keys.has (g)));
 }
 function isGroupStart (cols, i) { return i > 0 && cols[i].sec !== cols[i - 1].sec; }
 
 // ---------- what-if ----------
-// A tick key is 'ch', 'ps', or 'b<id>' for a commerce building (Library, Marketplace, ...)
-function buildingIdOf (c, key) {
-  const m = state.result && state.result.model;
-  if (key === 'ch') return m ? m.courthouse : undefined;
-  if (key === 'ps') return m ? m.police : undefined;
-  return key[0] === 'b' ? +key.slice (1) : undefined;
+// A tick key is 'b<id>' for a building that has a column
+function buildingIdOf (c, key) { return key[0] === 'b' ? +key.slice (1) : undefined; }
+// A building whose only modelled effect is reducing corruption: nothing to gain in the capital (it counts as 10)
+const onlyReducer = (bd) => !! bd && bd.reducesCorruption && ! (bd.science50 || bd.gold50 || bd.luxury50 || bd.doublesScience || bd.production > 0);
+// Why this city can't have the building where it stands (from the map), or ''
+function placeNote (c, bd) {
+  if (! state.result.tiles || ! bd) return '';
+  if (bd.coastal && ! c.coastal) return 'needs coast';
+  if (bd.nearRiver && ! c.river) return 'needs a river';
+  if (bd.nearWater && ! (c.coastal || c.freshWater)) return 'needs water';
+  return '';
 }
 function hasNow (c, key) {
   const id = buildingIdOf (c, key);
@@ -1824,11 +1835,7 @@ function tickCount () { return Object.values (state.toggles).reduce ((n, t) => n
 function ticked (c, key) {
   const t = state.toggles[tickKey (c)]; return (t && key in t) ? t[key] : hasNow (c, key);
 }
-function tickKeysFor (c) {
-  const keys = ['ch', 'ps'];
-  if (state.result && state.result.econ) for (const col of bonusBuildings ()) keys.push ('b' + col.id);
-  return keys;
-}
+function tickKeysFor (c) { return BONUS.map ((b) => 'b' + b.id); }
 
 // ---------- tried slider: an empire-wide what-if for gold, science and luxury ----------
 // Rates in tenths, as the save stores them. The values are remembered in this browser; whether it is on is not.
@@ -1966,15 +1973,17 @@ function effectOf (c, key) {
   const res = state.result;
   const id = buildingIdOf (c, key);
   if (! res || ! res.rules || id === undefined) return { value: -1e9, text: '' };
-  if ((key === 'ch' || key === 'ps') && c.isCapital) return { value: -1e9, text: 'capital' };
-  if ((key === 'ch' || key === 'ps') && triedGov () !== null && res.rules.governments[triedGov ()].corruption === 4) return { value: -1e9, text: 'Anarchy' };
-  if (hasNow (c, key)) return { value: -1e8, text: 'has one' };
   const bd = res.rules.buildings[id];
+  if (onlyReducer (bd) && c.isCapital) return { value: -1e9, text: 'capital' };
+  if (onlyReducer (bd) && triedGov () !== null && res.rules.governments[triedGov ()].corruption === 4) return { value: -1e9, text: 'Anarchy' };
+  if (hasNow (c, key)) return { value: -1e8, text: 'has one' };
   // A building that needs a tech you don't know yet: no effect, unless Settings asks for it
   if (bd && ! state.attention.showUnresearched && ! canBuild (id))
     return { value: -1e7, text: res.knownTechs ? `needs ${(res.rules.techs[bd.requiredAdvance] || {}).name || 'a tech'}` : 'none built', tip: techNote (id) };
   if (bd && bd.requires >= 0 && ! c.buildings.has (bd.requires))
     return { value: -1e7, text: `needs ${res.rules.buildings[bd.requires] ? res.rules.buildings[bd.requires].name : '?'}` };
+  const where = placeNote (c, bd);
+  if (where) return { value: -1e7, text: where };
   const rates = triedRates (), gov = triedGov (), real = {};
   for (const k of tickKeysFor (c)) real[k] = hasNow (c, k);
   const base = evaluate (c, real, rates, gov), e = evaluate (c, { ...real, [key]: true }, rates, gov);
@@ -2104,38 +2113,65 @@ document.addEventListener ('mouseover', (ev) => {
 document.addEventListener ('mousemove', (ev) => { if (! $('fxtip').hidden) moveFxTip (ev); });
 window.addEventListener ('scroll', () => { $('fxtip').hidden = true; }, true);
 
-// Commerce buildings from the rules that can be ticked: non-wonders that boost science, gold or luxury
-// Buildings that can be ticked: non-wonders that boost science, gold or luxury, then the production buildings (Factory,
-// Manufacturing Plant) and one power plant (the cheapest: Coal Plant; the others give the same +50%, Nuclear +100%, and a
-// city counts only its best one)
+// Buildings that get a column: non-wonders with an effect the viewer models (reducing corruption, +50% science, gold
+// or luxury, production, power plants), unless a tech you know made them obsolete. In group order, then rules order.
+let BONUS = [];
 function bonusBuildings () {
   const rules = state.result && state.result.rules;
   if (! rules) return [];
-  const short = { 'Library': 'Lib', 'University': 'Univ', 'Research Lab': 'Lab', 'Marketplace': 'Mkt', 'Bank': 'Bank', 'Stock Exchange': 'SE',
-                  'Factory': 'Fac', 'Manufacturing Plant': 'Mfg', 'Coal Plant': 'Power' };
-  const known = state.result.knownTechs;
-  const all = rules.buildings.map ((b, id) => ({ ...b, id })).filter ((b) => ! b.wonder && ! (b.obsoleteBy >= 0 && known && known.has (b.obsoleteBy)));
-  const commerce = all.filter ((b) => b.science50 || b.gold50 || b.luxury50);
-  const production = all.filter ((b) => b.production > 0 && ! b.powerPlant);
-  const plant = all.filter ((b) => b.production > 0 && b.powerPlant).sort ((x, y) => x.cost - y.cost)[0];
-  // A building with both kinds of bonus (a mod's Manor: gold and shields) gets one column. Labels from the rules: the
-  // first word, cut to 6 letters, plus the next word's initial when two would read the same.
-  const list = [...new Map ([...commerce, ...production, ...(plant ? [plant] : [])].map ((b) => [b.id, b])).values ()];
-  const word = (n) => n.split (/\s+/)[0].slice (0, 6), used = new Set (Object.values (short));
+  const short = { 'Courthouse': 'CH', 'Police Station': 'PS', 'Library': 'Lib', 'University': 'Univ', 'Research Lab': 'Lab', 'Marketplace': 'Mkt',
+                  'Bank': 'Bank', 'Stock Exchange': 'SE', 'Factory': 'Fac', 'Manufacturing Plant': 'Mfg', 'Coal Plant': 'Coal', 'Hydro Plant': 'Hydro',
+                  'Nuclear Plant': 'Nucl', 'Solar Plant': 'Solar' };
+  const known = state.result.knownTechs, order = BUILDING_GROUPS.map ((g) => g[0]);
+  const groupsOf = (b) => [b.reducesCorruption && '@corruption', (b.science50 || b.doublesScience) && '@science', b.gold50 && '@gold',
+                           b.luxury50 && '@luxury', b.production > 0 && '@production'].filter (Boolean);
+  const list = rules.buildings.map ((b, id) => ({ ...b, id, groups: groupsOf (b) }))
+    .filter ((b) => ! b.wonder && b.groups.length && ! (b.obsoleteBy >= 0 && known && known.has (b.obsoleteBy)))
+    .sort ((x, y) => order.indexOf (x.groups[0]) - order.indexOf (y.groups[0]));
+  // Labels from the rules: the first word, cut to 6 letters, plus the next word's initial when two would read the same
+  const word = (n) => n.split (/\s+/)[0].slice (0, 6), used = new Set ([...Object.values (short), ...BASE_COLUMNS.map ((c) => c.label)]);
   return list.map ((b) => {
     let label = short[b.name] || word (b.name);
     if (! short[b.name] && used.has (label)) label += (b.name.split (/\s+/)[1] || '').charAt (0) || String (b.id);
     used.add (label);
-    return { id: b.id, name: b.name, short: label };
+    return { id: b.id, name: b.name, short: label, groups: b.groups };
   });
+}
+// What a building does, in the viewer's model (column titles and the help's "In these rules")
+function effectWords (bd) {
+  const rules = state.result.rules, w = [];
+  if (bd.reducesCorruption) w.push ('less corruption and waste (one more reducer in the game\'s rule)');
+  if (bd.science50) w.push ('+50% science'); if (bd.doublesScience) w.push ('+100% science');
+  if (bd.gold50) w.push ('+50% gold'); if (bd.luxury50) w.push ('+50% luxury');
+  if (bd.production > 0) w.push (`+${bd.production * 25}% shields` + (bd.powerPlant ? ` (power plant${bd.requires >= 0 && rules.buildings[bd.requires] ? ', with a ' + rules.buildings[bd.requires].name : ''}; a city counts only its best one)` : ''));
+  if (bd.coastal) w.push ('coastal cities only'); if (bd.nearRiver) w.push ('next to a river'); if (bd.nearWater) w.push ('next to water');
+  return w.join (', ');
+}
+// Column titles that name buildings: from the loaded rules
+function ruleTitles () {
+  const rules = state.result && state.result.rules, col = (k) => BASE_COLUMNS.find ((c) => c.key === k);
+  const pick = (f) => rules ? BONUS.map ((b) => rules.buildings[b.id]).filter (f) : [];
+  const list = (a) => a.length ? ': ' + a.join (', ') : '';
+  col ('netShields').title = 'Shields after waste, × the production bonuses of the city\'s buildings (a city counts only its best power plant)' +
+    list (pick ((bd) => bd.production > 0).map ((bd) => `${bd.name} +${bd.production * 25}%`));
+  col ('gold').title = 'Gold after the city\'s gold buildings' + list (pick ((bd) => bd.gold50).map ((bd) => bd.name));
+  col ('luxury').title = 'Luxury after the city\'s luxury buildings' + list (pick ((bd) => bd.luxury50).map ((bd) => bd.name));
+  col ('science').title = 'Science after the city\'s science buildings' + list (pick ((bd) => bd.science50 || bd.doublesScience).map ((bd) => bd.name));
+  const caps = state.result && state.result.sizeCaps;
+  col ('grow').title = 'Turns until the city grows, as on the city screen. –: not growing. max: food box full, waiting for a building that allows the next size' +
+    (caps && rules ? ` (${[...caps.size2, ...caps.size3].map ((k) => rules.buildings[k].name).join (', ')})` : '');
 }
 let COLUMNS = BASE_COLUMNS;
 function rebuildColumns () {
-  const extra = [...CHPS_COLUMNS];
-  if (state.result && state.result.econ)
-    for (const b of bonusBuildings ())
-      extra.push (buildingColumn ('b' + b.id, { key: 'bt:' + b.name, label: b.short, econ: true,
-        title: `${b.name}: tick to try it. ${EFFECT_NOTE} (${state.result.rules.buildings[b.id].production ? 'shields' : 'science, gold, luxury'})` }));
+  const extra = [];
+  BONUS = bonusBuildings ();
+  for (const b of BONUS) {
+    const bd = state.result.rules.buildings[b.id];
+    extra.push (buildingColumn ('b' + b.id, { key: 'bt:' + b.name, label: b.short, groups: [...b.groups, '@buildings'],
+      model: b.groups.includes ('@corruption') || undefined, econ: b.groups.some ((g) => g !== '@corruption') || undefined,
+      title: `${b.name}: ${effectWords (bd)}. Tick to try it. ${EFFECT_NOTE}` }));
+  }
+  ruleTitles ();
   const at = BASE_COLUMNS.findIndex ((c) => c.key === 'upkeep');
   COLUMNS = [...BASE_COLUMNS.slice (0, at), ...extra, ...BASE_COLUMNS.slice (at)];
 }
@@ -2149,7 +2185,7 @@ function uncapped (c) {
   return { text: ` (${d}% + ${k}%)`,
     tip: `Capped at ${pc (p.cap)}%. Without the cap: ${d}% for distance to the nearest palace + ${k}% for rank ` +
          `(${c.rank} of your cities are closer to the capital) = ${d + k}%. ` +
-         `The cap is 90%, −10% per Courthouse or Police Station, −70% with a Forbidden Palace; ` +
+         `The cap is 90%, −10% per corruption reducer in the city, −70% with a Forbidden Palace-type wonder; ` +
          `the game rounds the coins lost down to a whole coin, so the shown share can be a little under the cap.` };
 }
 function arrow (now, then, unit = '') { return now === then ? `${now}${unit}` : `${now}${unit} → ${then}${unit}`; }
@@ -2239,21 +2275,14 @@ function computeWarnings (c) {
   const pastCap = (id) => caps && ((caps.size2.includes (id) && c.size > caps.maxTown) || (caps.size3.includes (id) && c.size > caps.maxCity));
   // With map tiles: a coastal building only in coastal cities, a river one by a river, and no Aqueduct-type building
   // for a city with fresh water (it grows past the town limit without one)
-  const placeable = (id) => {
-    if (! res.tiles) return true;
-    const b = rules.buildings[id];
-    if (b.coastal && ! c.coastal) return false;
-    if (b.nearRiver && ! c.river) return false;
-    if (b.nearWater && ! (c.coastal || c.freshWater)) return false;
-    return ! (caps && caps.size2.includes (id) && c.freshWater);
-  };
+  const placeable = (id) => ! placeNote (c, rules.buildings[id]) && ! (res.tiles && caps && caps.size2.includes (id) && c.freshWater);
   for (const [name, sizes] of Object.entries (A.expect)) {
     const from = sizes[t], id = byName[name];
     if (from == null || id === undefined || c.size < from || has (id) || ! canBuild (id) || pastCap (id) || ! placeable (id)) continue;
     // A Courthouse / Police Station is only worth it where it pays back
     let pays = '';
     if (rules.buildings[id].reducesCorruption && res.model && A.reducerPayback) {
-      const key = id === res.model.courthouse ? 'ch' : (id === res.model.police ? 'ps' : null);
+      const key = BONUS.some ((b) => b.id === id) ? 'b' + id : null;
       if (key) { const e = effectOf (c, key); if (! e.payback || e.payback > A.reducerPayback) continue; pays = ` (pays back in ${e.payback})`; }
     }
     if (c.buildType === 1 && c.buildId === id) out.push ({ text: `Building ${name}${c.buildTurns ? ` (${c.buildTurns})` : ''}`, building: true });
@@ -2360,7 +2389,7 @@ function renderAttentionEditor () {
   const num = (value, onset) => { const n = el ('input', { type: 'number', min: 1, max: 999, value, className: 'num' }); n.addEventListener ('change', () => { onset (Math.max (1, Math.round (+n.value) || 1)); changed (); }); return n; };
   const rp = el ('input', { type: 'checkbox', checked: !! A.reducerPayback });
   rp.addEventListener ('change', () => { A.reducerPayback = rp.checked ? (A.lastReducerPayback || 40) : null; changed (); renderAttentionEditor (); });
-  const rpRow = el ('label', { title: 'Without this, a tier that expects a Courthouse warns in every city of that tier' }, [rp, ' Expect a Courthouse / Police Station only where it pays back within ']);
+  const rpRow = el ('label', { title: 'Without this, a tier that expects a corruption reducer warns in every city of that tier' }, [rp, ' Expect a corruption reducer (Courthouse…) only where it pays back within ']);
   if (A.reducerPayback) rpRow.append (num (A.reducerPayback, (v) => { A.reducerPayback = v; A.lastReducerPayback = v; }), ' turns');
   tiers.appendChild (rpRow);
   box.appendChild (tiers);
@@ -2390,6 +2419,8 @@ function renderAttentionEditor () {
     exp.appendChild (el ('div', { className: 'gridwrap' }, [table]));
     exp.appendChild (el ('p', { className: 'note', textContent: 'A number: expected from that city size (1 = every city). Empty: not expected. ' +
       (state.result.knownTechs ? 'Greyed: you don\'t have the tech yet; no warnings until you do.' : 'Greyed: none of your cities has one; no warnings until one does.') }));
+    const missing = Object.entries (A.expect).filter (([n, sz]) => sz.some ((v) => v != null) && ! bs.some ((b) => b.name === n)).map (([n]) => n);
+    if (missing.length) exp.appendChild (el ('p', { className: 'note amber', textContent: `Not in these rules, so never expected: ${missing.join (', ')}. Set the rules' own buildings above.` }));
   }
   box.appendChild (exp);
 }
@@ -3083,9 +3114,17 @@ function firstMetTurn (t) { for (const s of histSnaps) if (targetMet (t, targetV
 function hasDataBy (t, turn) { return histSnaps.some ((s) => s.turn <= turn && targetValue (t, s) !== null); }
 
 // Status of one milestone against the loaded save and the stored history
+// A target that names a building, tech or government: whether the loaded rules have it
+function inRules (t) {
+  const rules = state.result.rules, kind = (msMetric (t.metric) || {}).param;
+  if (! rules) return true;
+  const list = kind === 'building' ? rules.buildings : kind === 'tech' ? rules.techs : kind === 'government' ? rules.governments : null;
+  return ! list || list.some ((x) => x.name === t.param);
+}
 function milestoneStatus (ms) {
   const now = snapshotOf (state.result, ''), turn = state.result.turn, before = turn <= ms.turn;
   const rows = ms.targets.map ((t) => {
+    if (! inRules (t)) return { t, v: null, ok: null, note: 'not in these rules' };
     const v = targetValue (t, now), metNow = targetMet (t, v), first = firstMetTurn (t);
     let ok, note;
     if (before) { ok = metNow; note = metNow ? 'met' : (metNow === null ? 'not in this save' : 'not yet'); }
@@ -3136,7 +3175,11 @@ function milestoneEditor (ms) {
   const res = state.result, rules = res.rules;
   const draft = JSON.parse (JSON.stringify (ms));
   const el = (tag, props = {}, kids = []) => { const e = Object.assign (document.createElement (tag), props); for (const k of kids) e.append (k); return e; };
-  const opts = (sel, pairs, value) => { for (const [v, t] of pairs) sel.append (el ('option', { value: v, textContent: t })); sel.value = value; return sel; };
+  const opts = (sel, pairs, value) => {
+    for (const [v, t] of pairs) sel.append (el ('option', { value: v, textContent: t }));
+    if (value !== undefined && value !== null && ! pairs.some (([v]) => String (v) === String (value))) sel.append (el ('option', { value, textContent: `${value} (not in these rules)` }));
+    sel.value = value; return sel;
+  };
   const paramChoices = (kind) => {
     if (! rules) return [];
     if (kind === 'building') return rules.buildings.filter ((b) => ! b.spaceshipPart && ! b.capitalization).map ((b) => [b.name, b.name]);
@@ -3554,7 +3597,7 @@ function render () {
 function addTick (td, c, key) {
   const id = buildingIdOf (c, key), bd = id !== undefined && state.result.rules ? state.result.rules.buildings[id] : null;
   td.classList.add ('tick');
-  if (! bd || ((key === 'ch' || key === 'ps') && c.isCapital)) return;
+  if (! bd || (onlyReducer (bd) && c.isCapital)) return;
   const box = document.createElement ('input');
   box.type = 'checkbox'; box.checked = ticked (c, key);
   box.setAttribute ('aria-label', `${bd.name} in ${c.name}`);
@@ -3657,7 +3700,7 @@ function renderViewPicker () {
 }
 $('viewsel').addEventListener ('change', () => { state.views.current = +$('viewsel').value; saveViews (); renderViewEditor (); render (); });
 const SECTION_NAMES = { city: 'City', attn: 'Attention', mood: 'Citizens', food: 'Food & growth', shields: 'Shields', corr: 'Courthouse & Police',
-  commerce: 'Commerce & corruption', output: 'Gold, luxury, science', bonus: 'Buildings (tick to try; the gain per turn)',
+  commerce: 'Commerce & corruption', output: 'Gold, luxury, science', bonus: 'Buildings (tick to try; the gain per turn). Groups follow the rules',
   other: 'Other', build: 'Production' };
 function columnAvailable (col) { return (! col.model || modelOn ()) && (! col.econ || econOn ()); }
 function setViewColumns (keys) {
@@ -3681,11 +3724,31 @@ function renderViewEditor () {
   for (const [sec, cols] of Object.entries (groups)) {
     const g = document.createElement ('div'); g.className = 'vegroup';
     g.appendChild (Object.assign (document.createElement ('h3'), { textContent: SECTION_NAMES[sec] || sec }));
+    if (sec === 'bonus') {
+      // Groups take every such building of the loaded rules, so a view keeps working with other rules
+      const gr = document.createElement ('div'); gr.className = 'vegroups';
+      for (const [token, label] of BUILDING_GROUPS) {
+        if (token !== '@buildings' && ! cols.some ((c) => c.groups.includes (token))) continue;
+        const lab = document.createElement ('label'), cb = document.createElement ('input');
+        cb.type = 'checkbox'; cb.checked = chosen.includes (token);
+        lab.title = `Every ${token === '@buildings' ? '' : label.toLowerCase () + ' '}building of the loaded rules`;
+        cb.addEventListener ('change', () => {
+          const keys = (currentView ().columns || COLUMNS.map ((c) => c.key)).filter ((k) => k !== token);
+          if (cb.checked) keys.push (token);
+          setViewColumns (keys); saveViews (); renderViewEditor (); render ();
+        });
+        lab.append (cb, document.createTextNode (label));
+        gr.appendChild (lab);
+      }
+      g.appendChild (gr);
+    }
     for (const col of cols) {
       const avail = columnAvailable (col);
       const lab = document.createElement ('label'), cb = document.createElement ('input');
-      cb.type = 'checkbox'; cb.checked = chosen.includes (col.key);
+      const via = (col.groups || []).find ((t) => chosen.includes (t));
+      cb.type = 'checkbox'; cb.checked = chosen.includes (col.key) || !! via; cb.disabled = !! via;
       if (! avail) { lab.className = 'na'; lab.title = 'Needs the rules file (conquests.biq); kept in the view and shown once it is loaded'; }
+      else if (via) lab.title = `Shown by the group ${BUILDING_GROUPS.find ((x) => x[0] === via)[1]}`;
       else if (col.title) lab.title = col.title;
       cb.addEventListener ('change', () => {
         const keys = (currentView ().columns || COLUMNS.map ((c) => c.key)).filter ((k) => k !== col.key);
@@ -3700,7 +3763,7 @@ function renderViewEditor () {
     box.appendChild (g);
   }
   const note = econOn () ? 'The City column is always shown; columns keep a fixed order. Views are saved in this browser.'
-    : '* needs the rules file (conquests.biq). The building columns (Library, Bank, Factory, …) appear once it is loaded. Views are saved in this browser.';
+    : '* needs the rules file (conquests.biq). The building columns come from the rules and appear once they are loaded. Views are saved in this browser.';
   box.appendChild (Object.assign (document.createElement ('div'), { className: 'note', textContent: note }));
 }
 $('editview').addEventListener ('click', () => openPanel ('columns'));
@@ -3748,7 +3811,7 @@ function setTick (c, key, on) {
       changed = false;
       for (const k of tickKeysFor (c)) {
         const bid = buildingIdOf (c, k), bd = bid !== undefined ? rules.buildings[bid] : null;
-        if (bd && bd.requires >= 0 && ticked (c, k) && ! ticked (c, 'b' + bd.requires) && bonusBuildings ().some ((b) => b.id === bd.requires)) { apply (k, false); changed = true; }
+        if (bd && bd.requires >= 0 && ticked (c, k) && ! ticked (c, 'b' + bd.requires) && BONUS.some ((b) => b.id === bd.requires)) { apply (k, false); changed = true; }
       }
     }
   }
@@ -3783,8 +3846,29 @@ try {
 } catch (e) { /* ignore */ }
 $('problems').addEventListener ('change', render);
 
+// Help: what the loaded rules define, for the effects the viewer models
+function renderHelpRules () {
+  const res = state.result, rules = res && res.rules, dl = $('helprules');
+  if (! rules) return;
+  dl.textContent = '';
+  const row = (dt, dd) => { dl.append (Object.assign (document.createElement ('dt'), { textContent: dt }), Object.assign (document.createElement ('dd'), { textContent: dd || 'none' })); };
+  const by = (f) => BONUS.map ((b) => rules.buildings[b.id]).filter (f);
+  row ('Source', res.rulesFromSave ? 'The save (custom rules)' : 'The loaded conquests.biq');
+  row ('Corruption reducers', by ((bd) => bd.reducesCorruption).map ((bd) => bd.name).join (', '));
+  row ('Science', by ((bd) => bd.science50 || bd.doublesScience).map ((bd) => `${bd.name} +${bd.doublesScience ? 100 : 50}%`).join (', '));
+  row ('Gold', by ((bd) => bd.gold50).map ((bd) => bd.name + ' +50%').join (', '));
+  row ('Luxury', by ((bd) => bd.luxury50).map ((bd) => bd.name + ' +50%').join (', '));
+  row ('Production', by ((bd) => bd.production > 0).map ((bd) => `${bd.name} +${bd.production * 25}%${bd.powerPlant ? ' (power plant)' : ''}`).join (', '));
+  const caps = res.sizeCaps;
+  if (caps) row ('Size limits', `towns up to ${caps.maxTown}, past it with ${caps.size2.map ((k) => rules.buildings[k].name).join (' / ') || '–'}; cities up to ${caps.maxCity}, past it with ${caps.size3.map ((k) => rules.buildings[k].name).join (' / ') || '–'}`);
+  const known = res.knownTechs, modelled = (bd) => bd.reducesCorruption || bd.science50 || bd.gold50 || bd.luxury50 || bd.production > 0;
+  row ('Obsolete (no effect now)', rules.buildings.filter ((bd) => ! bd.wonder && modelled (bd) && bd.obsoleteBy >= 0 && known && known.has (bd.obsoleteBy))
+    .map ((bd) => `${bd.name} (${rules.techs[bd.obsoleteBy].name})`).join (', '));
+  row ('Governments', rules.governments.map ((g) => g.name).join (', '));
+}
 // Help: the column list comes from each column's own tooltip, so it always matches the table
 function renderHelpColumns () {
+  renderHelpRules ();
   const dl = $('helpcols'); dl.textContent = '';
   const seen = new Set ();
   for (const col of COLUMNS) {

@@ -237,6 +237,7 @@ const Civ3Parse = (() => {
 		const scenarioTo = biqEnd;
 
 		let rules = readRules (b, BIQ_START, scenarioTo, []);
+		result.rulesFromSave = !! rules;
 		if (rules) diag.push ('Rules: from the save (custom rules)');
 		else if (loadedRules) { rules = loadedRules; diag.push ('Rules: from the loaded conquests.biq'); }
 		else diag.push ('Rules: not loaded. Load conquests.biq to see building and unit names and the Courthouse what-if');
@@ -575,8 +576,7 @@ const Civ3Parse = (() => {
 				};
 				const m = modelAt (lvl), byLevel = {};
 				const mAt = (g) => { const l = rules.governments[g].corruption; return byLevel[l] || (byLevel[l] = modelAt (l)); };
-				const courthouse = reducing.find ((k) => /courthouse/i.test (rules.buildings[k].name)), police = reducing.find ((k) => /police/i.test (rules.buildings[k].name));
-				for (const c of result.cities) {
+								for (const c of result.cities) {
 					c.isCapital = c === capital;
 					c.palaceWondersHere = fpLike.filter ((k) => has (c, k)).length;
 					c.reducers = reducing.filter ((k) => has (c, k));
@@ -588,7 +588,7 @@ const Civ3Parse = (() => {
 					if (corruptedYield (m, c, ni, c.commerce, false).lost === c.corruption && corruptedYield (m, c, ni, c.shields, true).lost === c.waste) match++;
 					else c.modelOff = true;
 				}
-				result.model = { m, courthouse, police, reducing, match, checked,
+				result.model = { m, reducing, match, checked,
 				                 lostFor: (c, ni, forWaste) => corruptedYield (m, c, ni, forWaste ? c.shields : c.commerce, forWaste).lost,
 				                 // Coins or shields lost from yield Y under government g (an index into the rules' governments)
 				                 lostAt: (c, ni, forWaste, Y, g) => corruptedYield (mAt (g), c, ni, Y, forWaste).lost,
