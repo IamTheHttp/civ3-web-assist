@@ -330,7 +330,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Tiers…</dt><dd>Name corruption tiers and set which buildings each tier should have, from which city size.</dd>
         <dt>Search (above the table)</dt><dd>Matches any text in the table: <code>library</code>, a city name, <code>max</code>, <code>no temple</code>. Several words must all match. Press <b>/</b> to jump there, Esc to clear.</dd>
         <dt>Problems only</dt><dd>Cities in disorder or close to it, starving, or with resisters.</dd>
-        <dt>Needs attention</dt><dd>Cities missing a building their tier expects.</dd>
+        <dt>Needs attention</dt><dd>Cities missing a building their tier expects. The capital never needs a Courthouse or Police Station: it has no corruption to reduce.</dd>
         <dt>Clear filters</dt><dd>Shows when a column is filtered; removes every filter in this view.</dd>
         <dt>Try government</dt><dd>Your cities under another government: the tiles' food, shields and commerce (a government with a trade bonus, such as Republic, adds +1 commerce on tiles with commerce; one with a tile penalty, such as Despotism, takes 1 off a yield above 2), corruption and waste, building upkeep and unit support. War weariness and happiness aren't included. The Governments panel compares them all.</dd>
         <dt>Try slider</dt><dd>Off: gold, science, luxury and the building gains use the slider from your save. On: they use the slider you set, for example 50% science and 50% gold, so a Marketplace isn't judged by a low gold rate. Happy and unhappy citizens aren't recalculated.</dd>
@@ -1098,7 +1098,9 @@ function computeWarnings (c) {
   const pastCap = (id) => caps && ((caps.size2.includes (id) && c.size > caps.maxTown) || (caps.size3.includes (id) && c.size > caps.maxCity));
   // With map tiles: a coastal building only in coastal cities, a river one by a river, and no Aqueduct-type building
   // for a city with fresh water (it grows past the town limit without one)
-  const placeable = (id) => ! placeNote (c, rules.buildings[id]) && ! (res.tiles && caps && caps.size2.includes (id) && c.freshWater);
+  // The capital has no corruption or waste to reduce: a Courthouse-type building does nothing there
+  const placeable = (id) => ! placeNote (c, rules.buildings[id]) && ! (res.tiles && caps && caps.size2.includes (id) && c.freshWater) &&
+    ! (c.isCapital && onlyReducer (rules.buildings[id]));
   for (const [name, sizes] of Object.entries (A.expect)) {
     const from = sizes[t], id = byName[name];
     if (from == null || id === undefined || c.size < from || has (id) || ! canBuild (id) || pastCap (id) || ! placeable (id)) continue;
