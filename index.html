@@ -194,6 +194,7 @@ text.msflag { stroke: none; font-size: 11px; }
 .mstarget.s1 path { fill: var(--s1); } .mstarget.s2 path { fill: var(--s2); } .mstarget.s3 path { fill: var(--s3); }
 .diplowrap { overflow-x: auto; margin-top: 8px; }
 table.diplo th { position: static; cursor: default; }
+table.diplo.sortable th { cursor: pointer; }
 table.diplo th { white-space: normal; vertical-align: bottom; min-width: 4.5em; }
 table.diplo td.wrap { white-space: normal; min-width: 7em; max-width: 14em; }
 table.diplo th:first-child, table.diplo td:first-child { position: static; }
@@ -354,8 +355,8 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
         <dt>Summary cards</dt><dd>Your whole empire. Point at a line to see how it's worked out. With what-ifs (ticks, Try slider, Try government), changed figures show <i>now → then</i>.</dd>
         <dt>Milestones</dt><dd>Targets to reach by a turn, per game: ✓ met, in progress, or ✗ missed. Edit, add or delete them; the defaults are only starting points. In History, ⚑ marks a deadline and ◆ a target.</dd>
         <dt>History</dt><dd>Each save you open stores its turn. Pick a chart and a city; the dashed line is the turn you have loaded. <b>Add saves…</b> adds older saves at once.</dd>
-        <dt>Governments</dt><dd>Your empire's totals under each government, with your slider (or the tried one). Click a row to try it in the table.</dd>
-        <dt>Diplomacy</dt><dd>Civilizations you've met: their attitude toward you (point at it for the reasons, such as your war declarations on them), government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you, the techs and luxuries each side can trade, their treasury and the most gold per turn they pay in a deal. Below: your war weariness points with each enemy and what they do to a city of size 12.</dd>
+        <dt>Governments</dt><dd>Your empire's totals under each government, with your slider (or the tried one). Click a row to try it in the table. Click a column name to sort; click again to reverse.</dd>
+        <dt>Diplomacy</dt><dd>Civilizations you've met: their attitude toward you (point at it for the reasons, such as your war declarations on them), government, cities, culture against yours, war, embassy, right of passage, your allies against them, alliances against you, the techs and luxuries each side can trade, their treasury and the most gold per turn they pay in a deal. Below: your war weariness points with each enemy and what they do to a city of size 12. Click a column name to sort; click again to reverse.</dd>
         <dt>Diagnostics</dt><dd>What the page read from your files. <b>Download debug report</b> if something looks wrong.</dd>
       </dl>
 
@@ -448,7 +449,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <div class="panel" data-panel="diplomacy" hidden>
       <p class="panelnote" hidden>Open a save to see this.</p>
   <section id="diplomacy" hidden>
-    <div class="diplowrap"><table class="diplo"><thead><tr>
+    <div class="diplowrap"><table class="diplo sortable" id="diplotable"><thead><tr>
       <th class="l">Civilization</th>
       <th class="l" title="How they feel about you, by the game's own rule (lower score is better). Point at a value for the reasons">Attitude</th>
       <th class="l">Government</th><th>Cities</th>
@@ -497,7 +498,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
     <div class="panel" data-panel="governments" hidden>
       <p class="panelnote" hidden>Open a save to see this.</p>
   <section id="governments" hidden>
-    <div class="diplowrap"><table class="diplo"><thead><tr id="govhead"></tr></thead><tbody id="govrows"></tbody></table></div>
+    <div class="diplowrap"><table class="diplo sortable" id="govtable"><thead><tr id="govhead"></tr></thead><tbody id="govrows"></tbody></table></div>
     <p class="histnote" id="govnote"></p>
   </section>
     </div>
@@ -3038,22 +3039,30 @@ function renderDiplomacy (res) {
       [p.attitude ? `${p.attitude.word} (${p.attitude.score > 0 ? '+' : ''}${p.attitude.score})` : '?',
        'l ' + (! p.attitude ? '' : { Gracious: 'green', Polite: 'green', Cautious: 'dim', Annoyed: 'amber', Furious: 'red' }[p.attitude.word]),
        p.attitude ? p.attitude.reasons.map (([w, v]) => `${v > 0 ? '+' : ''}${v}  ${w}`).join ('\n') +
-         `\n= ${p.attitude.score}. Gracious below −${p.attitude.band}, Furious above +${p.attitude.band}. Lower is better. Resource deals (−5 each) aren't counted.` : ''],
+         `\n= ${p.attitude.score}. Gracious below −${p.attitude.band}, Furious above +${p.attitude.band}. Lower is better. Resource deals (−5 each) aren't counted.` : '',
+       p.attitude ? p.attitude.score : ''],
       [p.alive ? p.government : '–', 'l'], [p.cities],
       [p.culture ?? '?'],
       [ratio === null ? '?' : ratio.toFixed (2) + '×', ratio > 1 ? 'amber' : ''],
       [! p.alive ? 'Destroyed' : (p.atWar ? 'At war' : 'Peace'), 'l ' + (! p.alive ? 'dim' : (p.atWar ? 'red' : ''))],
       [p.embassy ? 'Yes' : '', 'l'],
       [p.rightOfPassage ? 'Yes' : '', 'l'],
-      [p.yourAllies.filter ((k) => byId[k]).map ((k) => byId[k]).join (', '), 'l wrap ' + (p.yourAllies.some ((k) => byId[k]) ? 'green' : '')],
+      [p.yourAllies.filter ((k) => byId[k]).map ((k) => byId[k]).join (', '), 'l wrap ' + (p.yourAllies.some ((k) => byId[k]) ? 'green' : ''), '',
+       p.yourAllies.filter ((k) => byId[k]).length],
       // Only civilizations you have met are named; others aren't shown at all
-      [p.alliedAgainstYou.filter ((k) => byId[k]).map ((k) => byId[k]).join (', '), 'l wrap ' + (p.alliedAgainstYou.some ((k) => byId[k]) ? 'red' : '')],
+      [p.alliedAgainstYou.filter ((k) => byId[k]).map ((k) => byId[k]).join (', '), 'l wrap ' + (p.alliedAgainstYou.some ((k) => byId[k]) ? 'red' : ''), '',
+       p.alliedAgainstYou.filter ((k) => byId[k]).length],
       ...tradeCells (p)
     ];
-    for (const [text, cls, tip] of cells) tr.appendChild (Object.assign (document.createElement ('td'), { textContent: text, className: cls || '', title: tip || '' }));
+    for (const [text, cls, tip, sort] of cells) {
+      const td = Object.assign (document.createElement ('td'), { textContent: text, className: cls || '', title: tip || '' });
+      if (sort !== undefined) td.dataset.sort = sort;
+      tr.appendChild (td);
+    }
     if (! p.alive) tr.classList.add ('dim');
     body.appendChild (tr);
   }
+  sortTable ($('diplotable'));
 }
 
 // Trade columns: techs and luxuries each side can give, the gold they hold and can pay per turn. At war or destroyed: dimmed
@@ -3061,10 +3070,10 @@ function tradeCells (p) {
   if (! p.alive) return [[''], [''], [''], [''], [''], [''], [''], ['']];
   const noTrade = p.atWar ? 'At war: no trade until peace' : '';
   const list = (xs, tone) => xs === null ? ['?', 'l dim', 'Known techs not read from this save']
-    : [xs.join (', '), 'l wrap ' + (noTrade ? 'dim' : xs.length ? tone : ''), noTrade];
+    : [xs.join (', '), 'l wrap ' + (noTrade ? 'dim' : xs.length ? tone : ''), noTrade, xs.length];
   // Resources: the source count in the hover text (tiles in their borders; the game also needs a road connection)
   const goods = (xs, tone) => [xs.map ((x) => x.name).join (', '), 'l wrap ' + (noTrade ? 'dim' : xs.length ? tone : ''),
-    [...xs.map ((x) => `${x.name}: ${x.sources ?? '?'} sources`), noTrade].filter (Boolean).join ('\n')];
+    [...xs.map ((x) => `${x.name}: ${x.sources ?? '?'} sources`), noTrade].filter (Boolean).join ('\n'), xs.length];
   return [
     list (p.techsTheyGive, 'green'), goods (p.luxBuy, 'green'), goods (p.resBuy, 'green'),
     list (p.techsYouGive, ''), goods (p.luxSell, ''), goods (p.resSell, ''),
@@ -3407,6 +3416,47 @@ function renderGovernments (res) {
     'Not included: war weariness, happiness, hurrying. ' +
     'Communism and Anarchy corruption come from the game\'s code but weren\'t checked against a save; under Anarchy the game wastes every shield and coin. ' +
     'Gold, science and luxury include specialists.';
+  sortTable ($('govtable'));
+}
+
+// Diplomacy and Governments tables: click a column name to sort, again to reverse; kept across saves and reloads.
+// A cell sorts by its data-sort value (lists: their length; attitude: its score), else by its number, else its text.
+// Empty cells go last either way.
+const tableSorts = (() => { try { return JSON.parse (localStorage.getItem ('civ3viewer.tablesorts') || '{}') || {}; } catch (e) { return {}; } }) ();
+function cellSortValue (td) {
+  const raw = td.dataset.sort !== undefined ? td.dataset.sort : td.textContent.trim ();
+  if (raw === '' || raw === '?' || raw === '–' || raw === '—') return null;
+  const t = raw.replace (/−/g, '-');
+  return /^[+-]?\d/.test (t) ? parseFloat (t.replace (/^\+/, '')) : raw.toLowerCase ();
+}
+function sortTable (table) {
+  const s = tableSorts[table.id], ths = table.tHead.rows[0].cells;
+  for (const th of ths) { th.tabIndex = 0; th.setAttribute ('aria-sort', 'none'); }
+  if (! s || ! ths[s.col]) return;
+  ths[s.col].setAttribute ('aria-sort', s.dir > 0 ? 'ascending' : 'descending');
+  const body = table.tBodies[0];
+  const rows = [...body.rows].map ((tr, i) => ({ tr, i, v: tr.cells[s.col] ? cellSortValue (tr.cells[s.col]) : null }));
+  rows.sort ((a, b) => {
+    if (a.v === null || b.v === null) return (a.v === null) - (b.v === null) || a.i - b.i;
+    const d = typeof a.v === 'number' && typeof b.v === 'number' ? a.v - b.v : String (a.v).localeCompare (String (b.v));
+    return d * s.dir || a.i - b.i;
+  });
+  for (const r of rows) body.appendChild (r.tr);
+}
+for (const table of [$('diplotable'), $('govtable')]) {
+  const go = (th) => {
+    const col = th.cellIndex, s = tableSorts[table.id];
+    // First click: numbers largest first, text A to Z
+    const text = [...table.tBodies[0].rows].some ((tr) => tr.cells[col] && typeof cellSortValue (tr.cells[col]) === 'string');
+    tableSorts[table.id] = s && s.col === col ? { col, dir: -s.dir } : { col, dir: text ? 1 : -1 };
+    try { localStorage.setItem ('civ3viewer.tablesorts', JSON.stringify (tableSorts)); } catch (e) { /* ignore */ }
+    sortTable (table);
+  };
+  table.tHead.addEventListener ('click', (e) => { const th = e.target.closest ('th'); if (th) go (th); });
+  table.tHead.addEventListener ('keydown', (e) => {
+    const th = e.target.closest ('th');
+    if (th && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault (); go (th); }
+  });
 }
 
 // Empire summary: every city, the game's own figures; with what-ifs, "now → then"
