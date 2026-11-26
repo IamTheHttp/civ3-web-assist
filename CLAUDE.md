@@ -118,6 +118,11 @@ Read `docs/learnings/README.md` first: workflow, player preferences, reverse-eng
   position) × DIFF +120 (1). Flips if random(D) < P, D = 2000 × dist(k's capital) / dist(owner's capital), 500..8000;
   dist = max − ((dx+dy)/2 − min + 1)/2 on wrapped |dx|, |dy|. Not counted: ×1.4 the turn after the owner lost a city by
   capture (Leader +5576, not in the LEAD record).
+- Worker work per turn (exe 0x5B33C0): GOVT +524 worker rate (default: Anarchy 1, Democracy 3, Fascism 4, others 2)
+  × 1.5 if Industrious × 2 if the player knows any tech with TECH +104 bit 0x40000 (`Leader_has_tech_with_flag` 0x561480:
+  one tech or several, ×2; default rules: Replaceable Parts; EME: Electricity) × ½ for another nationality × PRTO work
+  rate, floored, at least 1. The Workers card applies the tech ×2; the government rate, Industrious and the floor are
+  not in it.
 - Unit ids (UNIT +8): unique within a save (1454/1454 on the WWI save). An upgrade keeps the id (12 Cannon → Artillery
   between the 1140 and 1270 AD saves); the game reuses a dead unit's id (a Spearman's id later on a Cavalry). PRTO +72
   bombard, +120 upgrades to (may be another civ's unique unit: Cannon → Hwach'a; the chain continues from it).

@@ -739,9 +739,11 @@ const Civ3Parse = (() => {
 			// Resources (OpenCiv3 Good.cs): prerequisite tech and the yield they add
 			// +60 class: 0 bonus, 1 luxury, 2 strategic
 			goods: good ? good.map ((e) => ({ name: readAscii (b, e + 4, 24), type: i32 (e + 60), prereq: i32 (e + 76), food: i32 (e + 80), shields: i32 (e + 84), commerce: i32 (e + 88) })) : [],
-			// TECH +72 era, +88..+100 prerequisites (-1: none), +104 flags (0x80000: cannot be traded)
+			// TECH +72 era, +88..+100 prerequisites (-1: none), +104 flags (0x80000: cannot be traded; 0x40000: doubles the
+			// work rate of workers, C3X ATF_Doubles_Work_Rate_Of_Workers; default rules: Replaceable Parts)
 			techs: tech ? tech.map ((e) => ({ name: readAscii (b, e + 4, 32), era: i32 (e + 72),
-				prereqs: [0, 1, 2, 3].map ((j) => i32 (e + 88 + 4 * j)).filter ((x) => x >= 0), noTrade: (i32 (e + 104) & 0x80000) !== 0 })) : [],
+				prereqs: [0, 1, 2, 3].map ((j) => i32 (e + 88 + 4 * j)).filter ((x) => x >= 0), noTrade: (i32 (e + 104) & 0x80000) !== 0,
+				doublesWorkRate: (i32 (e + 104) & 0x40000) !== 0 })) : [],
 			// +208: the unit needs support (C3X UnitType.requires_support)
 			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84), requiresSupport: i32 (e + 208) !== 0,
 				defence: i32 (e + 88), attack: i32 (e + 96), bombard: i32 (e + 72),
@@ -1722,6 +1724,11 @@ const Civ3Parse = (() => {
 					if (i32 (o + 32) === playerRace) { workers.own++; workers.ownRate += rate; } else { workers.captured++; workers.capturedRate += rate; }
 				}
 			}
+			// Work per turn (GOG 0x5B33C0) is x2 when the player knows any tech with the work-rate flag
+			// (Leader_has_tech_with_flag 0x561480): one tech or several, the factor is 2
+			workers.techs = result.knownTechs ? rules.techs.filter ((t, k) => t.doublesWorkRate && result.knownTechs.has (k)).map ((t) => t.name) : [];
+			workers.techFactor = workers.techs.length ? 2 : 1;
+			workers.flagTechs = rules.techs.filter ((t) => t.doublesWorkRate).map ((t) => t.name);
 			result.workers = workers;
 			const leadsAll = findAll (b, 'LEAD', gameOff).filter ((o) => i32 (o + 4) > 4300);
 			const myLead = leadsAll.find ((o) => i32 (o + 8) === player);
@@ -3557,17 +3564,23 @@ function sizeCard (res, row, card) {
     row ('Total', res.cities.length, 'All your cities'));
 }
 
-// Workers per city: own workers count their work rate, captured ones (another nationality) half of it
+// Workers per city: own workers count their work rate, captured ones (another nationality) half of it. A known tech with
+// the work-rate flag doubles the work of every worker (the modded work force); the target compares with that.
 function workersCard (res, row, card) {
   const w = res.workers; if (! w || ! res.cities.length) return '';
-  const target = state.attention.workersPerCity ?? 1.5, force = w.ownRate + w.capturedRate / 2, per = force / res.cities.length;
-  const need = target * res.cities.length - force, r1 = (v) => Math.round (v * 10) / 10;
+  const tf = w.techFactor || 1, techs = w.techs || [], flagTechs = w.flagTechs || [];
+  const target = state.attention.workersPerCity ?? 1.5, force = w.ownRate + w.capturedRate / 2, modded = force * tf, per = modded / res.cities.length;
+  const need = (target * res.cities.length - modded) / tf, r1 = (v) => Math.round (v * 10) / 10;
   const cls = per >= target ? 'green' : per >= target * 0.75 ? 'amber' : 'red';
-  return card ('Workers', `Work force per city, target ${target} (Settings). A captured worker counts ½.`,
+  const techNote = techs.length ? `${techs.join (', ')}: every worker works twice as fast`
+    : flagTechs.length ? `×2 once you know ${flagTechs.join (' or ')}` : 'No tech in these rules doubles the work rate';
+  return card ('Workers', `Work force per city, target ${target} (Settings). A captured worker counts ½; a tech that doubles the work rate counts ×2.`,
     row ('Workers', w.own, 'Your workers of your own nationality') +
     row ('Captured', w.captured, 'Workers of another nationality: each counts ½') +
     row ('Work force', r1 (force), `${w.own} + ${w.captured} × ½${w.ownRate !== w.own || w.capturedRate !== w.captured ? ', by each unit\'s work rate' : ''}`) +
-    row ('Per city', `<span class="${cls}">${per.toFixed (2)}</span>`, `${r1 (force)} ÷ ${res.cities.length} cities; target ${target}` +
+    row ('Tech bonus', `×${tf}`, techNote) +
+    row ('Modded work force', r1 (modded), `${r1 (force)} × ${tf}`) +
+    row ('Per city', `<span class="${cls}">${per.toFixed (2)}</span>`, `${r1 (modded)} ÷ ${res.cities.length} cities; target ${target}` +
       (need > 0 ? `: ${Math.ceil (need)} more workers needed (or ${Math.ceil (need * 2)} captured)` : '')));
 }
 

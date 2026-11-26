@@ -84,9 +84,11 @@ const Civ3Parse = (() => {
 			// Resources (OpenCiv3 Good.cs): prerequisite tech and the yield they add
 			// +60 class: 0 bonus, 1 luxury, 2 strategic
 			goods: good ? good.map ((e) => ({ name: readAscii (b, e + 4, 24), type: i32 (e + 60), prereq: i32 (e + 76), food: i32 (e + 80), shields: i32 (e + 84), commerce: i32 (e + 88) })) : [],
-			// TECH +72 era, +88..+100 prerequisites (-1: none), +104 flags (0x80000: cannot be traded)
+			// TECH +72 era, +88..+100 prerequisites (-1: none), +104 flags (0x80000: cannot be traded; 0x40000: doubles the
+			// work rate of workers, C3X ATF_Doubles_Work_Rate_Of_Workers; default rules: Replaceable Parts)
 			techs: tech ? tech.map ((e) => ({ name: readAscii (b, e + 4, 32), era: i32 (e + 72),
-				prereqs: [0, 1, 2, 3].map ((j) => i32 (e + 88 + 4 * j)).filter ((x) => x >= 0), noTrade: (i32 (e + 104) & 0x80000) !== 0 })) : [],
+				prereqs: [0, 1, 2, 3].map ((j) => i32 (e + 88 + 4 * j)).filter ((x) => x >= 0), noTrade: (i32 (e + 104) & 0x80000) !== 0,
+				doublesWorkRate: (i32 (e + 104) & 0x40000) !== 0 })) : [],
 			// +208: the unit needs support (C3X UnitType.requires_support)
 			units: prto ? prto.map ((e) => ({ name: readAscii (b, e + 8, 32), cost: i32 (e + 84), requiresSupport: i32 (e + 208) !== 0,
 				defence: i32 (e + 88), attack: i32 (e + 96), bombard: i32 (e + 72),
@@ -1067,6 +1069,11 @@ const Civ3Parse = (() => {
 					if (i32 (o + 32) === playerRace) { workers.own++; workers.ownRate += rate; } else { workers.captured++; workers.capturedRate += rate; }
 				}
 			}
+			// Work per turn (GOG 0x5B33C0) is x2 when the player knows any tech with the work-rate flag
+			// (Leader_has_tech_with_flag 0x561480): one tech or several, the factor is 2
+			workers.techs = result.knownTechs ? rules.techs.filter ((t, k) => t.doublesWorkRate && result.knownTechs.has (k)).map ((t) => t.name) : [];
+			workers.techFactor = workers.techs.length ? 2 : 1;
+			workers.flagTechs = rules.techs.filter ((t) => t.doublesWorkRate).map ((t) => t.name);
 			result.workers = workers;
 			const leadsAll = findAll (b, 'LEAD', gameOff).filter ((o) => i32 (o + 4) > 4300);
 			const myLead = leadsAll.find ((o) => i32 (o + 8) === player);

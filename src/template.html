@@ -2320,17 +2320,23 @@ function sizeCard (res, row, card) {
     row ('Total', res.cities.length, 'All your cities'));
 }
 
-// Workers per city: own workers count their work rate, captured ones (another nationality) half of it
+// Workers per city: own workers count their work rate, captured ones (another nationality) half of it. A known tech with
+// the work-rate flag doubles the work of every worker (the modded work force); the target compares with that.
 function workersCard (res, row, card) {
   const w = res.workers; if (! w || ! res.cities.length) return '';
-  const target = state.attention.workersPerCity ?? 1.5, force = w.ownRate + w.capturedRate / 2, per = force / res.cities.length;
-  const need = target * res.cities.length - force, r1 = (v) => Math.round (v * 10) / 10;
+  const tf = w.techFactor || 1, techs = w.techs || [], flagTechs = w.flagTechs || [];
+  const target = state.attention.workersPerCity ?? 1.5, force = w.ownRate + w.capturedRate / 2, modded = force * tf, per = modded / res.cities.length;
+  const need = (target * res.cities.length - modded) / tf, r1 = (v) => Math.round (v * 10) / 10;
   const cls = per >= target ? 'green' : per >= target * 0.75 ? 'amber' : 'red';
-  return card ('Workers', `Work force per city, target ${target} (Settings). A captured worker counts ½.`,
+  const techNote = techs.length ? `${techs.join (', ')}: every worker works twice as fast`
+    : flagTechs.length ? `×2 once you know ${flagTechs.join (' or ')}` : 'No tech in these rules doubles the work rate';
+  return card ('Workers', `Work force per city, target ${target} (Settings). A captured worker counts ½; a tech that doubles the work rate counts ×2.`,
     row ('Workers', w.own, 'Your workers of your own nationality') +
     row ('Captured', w.captured, 'Workers of another nationality: each counts ½') +
     row ('Work force', r1 (force), `${w.own} + ${w.captured} × ½${w.ownRate !== w.own || w.capturedRate !== w.captured ? ', by each unit\'s work rate' : ''}`) +
-    row ('Per city', `<span class="${cls}">${per.toFixed (2)}</span>`, `${r1 (force)} ÷ ${res.cities.length} cities; target ${target}` +
+    row ('Tech bonus', `×${tf}`, techNote) +
+    row ('Modded work force', r1 (modded), `${r1 (force)} × ${tf}`) +
+    row ('Per city', `<span class="${cls}">${per.toFixed (2)}</span>`, `${r1 (modded)} ÷ ${res.cities.length} cities; target ${target}` +
       (need > 0 ? `: ${Math.ceil (need)} more workers needed (or ${Math.ceil (need * 2)} captured)` : '')));
 }
 
