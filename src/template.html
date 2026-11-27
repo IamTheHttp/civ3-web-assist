@@ -116,6 +116,10 @@ th.tick, td.tick { white-space: nowrap; text-align: left; }
 td.tick input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; margin: 0 4px 0 0; vertical-align: middle; }
 td.tick.whatif input { accent-color: var(--amber); }
 td.tick.whatif { background: color-mix(in srgb, var(--amber) 28%, transparent) !important; box-shadow: inset 0 0 0 2px var(--amber); }
+td.tick.inprod { box-shadow: inset 0 0 0 2px var(--accent); }
+td.tick.inprod.whatif { box-shadow: inset 0 0 0 2px var(--amber), inset 0 0 0 4px var(--accent); }
+td.tick .inprod-tag { display: inline-block; margin: 0 4px 0 2px; padding: 0 4px; border-radius: 3px; font-size: 11px; font-weight: 600;
+  line-height: 16px; color: var(--panel); background: var(--accent); vertical-align: middle; }
 td.changed { background: color-mix(in srgb, var(--accent) 16%, transparent) !important; }
 .better { color: var(--green); font-weight: 600; }
 .worse { color: var(--red); font-weight: 600; }
@@ -342,7 +346,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <dl>
         <dt>Sort</dt><dd>Click a column name. Click again to reverse.</dd>
         <dt>▾ Filter</dt><dd>On each column, as in a spreadsheet: sort, a condition (greater than, between, contains…) or tick the values to keep. A blue ▾ marks a filtered column. Filters and sorting use the real numbers, so a what-if tick never hides or moves a city; each view keeps its own filters.</dd>
-        <dt>Building columns</dt><dd>One column per building of your game's rules that reduces corruption or adds science, gold, luxury or shields, with a short name such as <b>CH</b> (Courthouse) or <b>Lib</b> (Library). Ticked: the city has it. Tick a box to try a building (a city counts only its best power plant). In <b>Columns…</b>, a group (Science, Production…) takes every such building. Changed numbers show <i>now → then</i>; an amber outline marks a tick that isn't real. Buildings made obsolete by a tech you know aren't shown.</dd>
+        <dt>Building columns</dt><dd>One column per building of your game's rules that reduces corruption or adds science, gold, luxury or shields, with a short name such as <b>CH</b> (Courthouse) or <b>Lib</b> (Library). Ticked: the city has it. Tick a box to try a building (a city counts only its best power plant). In <b>Columns…</b>, a group (Science, Production…) takes every such building. Changed numbers show <i>now → then</i>; an amber outline marks a tick that isn't real. A blue outline and tag (such as <b>4t</b>) mark the building the city builds now, with the turns left. Buildings made obsolete by a tech you know aren't shown.</dd>
         <dt>The gain next to a tick</dt><dd>What one building would gain the city per turn, after upkeep. The colour is the gain in gold a turn, by the worth of a shield, food, gold, science and luxury set in Settings (default a shield or food = 4 gold): <span class="green">green</span> above 10, <span class="amber">amber</span> 5–10, grey 0–5, <span class="red">red</span> a loss. Point at a cell for the cost and the turns to pay it back. The columns sort largest gain first. A building that needs a tech you don't know shows the tech instead (Settings can show it anyway). Set the limits, the worths and icons or words in Settings.</dd>
         <dt>Tier</dt><dd>Pick a tier to fix it for that city; <i>(auto)</i> follows corruption.</dd>
         <dt>Attention</dt><dd><span class="amber">Amber</span>: missing. <span class="green">Green</span>: being built now.</dd>
@@ -2484,6 +2488,13 @@ function addTick (td, c, key) {
     : (built ? `${bd.name}: built. Untick to see the city without it` : `${bd.name}: not built. Tick to see the effect of building it`);
   if (whatIf) td.classList.add ('whatif');
   box.addEventListener ('change', () => { setTick (c, key, box.checked); render (); });
+  // The city builds this building now: a tag with the turns left, after the tick
+  if (! built && c.buildType === 1 && c.buildId === id) {
+    td.classList.add ('inprod');
+    const turns = c.buildTurns ? `${c.buildTurns}t` : '⚒';
+    td.prepend (Object.assign (document.createElement ('span'), { className: 'inprod-tag', textContent: turns,
+      title: `${c.name} builds ${bd.name} now${c.buildTurns ? `: ${c.buildTurns} turn${c.buildTurns === 1 ? '' : 's'} left` : ''}` }));
+  }
   td.prepend (box);
 }
 
