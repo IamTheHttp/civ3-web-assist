@@ -570,14 +570,27 @@ const Civ3Parse = (() => {
 				const palaceWonders = result.cities.reduce ((n, c) => n + fpLike.filter ((k) => has (c, k)).length, 0);
 				const commercial = civ ? civ.commercial : false;
 				// Leader_get_optimal_city_number for a human player, at a government's corruption level
-				const modelAt = (lvl) => {
-					let nopt = ocn + tdiv (palaceWonders * ocn * 3, lvl === 5 ? 1 : 8);
+				const fpNow = result.cities.filter ((c) => fpLike.some ((k) => has (c, k)));
+				// wonders / fps: the Forbidden Palace-type wonders and their cities (default: the save's)
+				const modelAt = (lvl, wonders = palaceWonders, fps = fpNow) => {
+					let nopt = ocn + tdiv (wonders * ocn * 3, lvl === 5 ? 1 : 8);
 					if (commercial) nopt += tdiv (ocn, 4);
 					nopt += [tdiv (ocn, 8), tdiv (ocn, 8), tdiv (ocn, 16), 0, 0, 2 * ocn][lvl] || 0;
 					nopt = tdiv (nopt * diffRow.optimalPercent, 100);
 					return { maxD: tdiv (world.width + world.height, 4), ocn, nopt, govLevel: lvl, cityCount: result.cities.length,
-					         commercial, palaceWonders, corruptionPct: diffRow.corruptionPercent ?? 100, dist,
-					         fpCities: result.cities.filter ((c) => fpLike.some ((k) => has (c, k))) };
+					         commercial, palaceWonders: wonders, corruptionPct: diffRow.corruptionPercent ?? 100, dist, fpCities: fps };
+				};
+				// Forbidden Palace sites under government g: corruption and waste of all your cities, at their current yields,
+				// with no Forbidden Palace-type wonder and with one in each city other than the capital
+				const fpSites = (g) => {
+					const l = rules.governments[g].corruption;
+					const sum = (mm) => result.cities.reduce ((a, c) => {
+						const ni = c.reducers.length;
+						a.corruption += corruptedYield (mm, c, ni, c.commerce, false).lost; a.waste += corruptedYield (mm, c, ni, c.shields, true).lost;
+						return a;
+					}, { corruption: 0, waste: 0 });
+					return { none: sum (modelAt (l, 0, [])), built: fpNow.slice (),
+					         sites: result.cities.filter ((c) => c !== capital).map ((c) => ({ city: c, ...sum (modelAt (l, 1, [c])) })) };
 				};
 				const m = modelAt (lvl), byLevel = {};
 				const mAt = (g) => { const l = rules.governments[g].corruption; return byLevel[l] || (byLevel[l] = modelAt (l)); };
@@ -593,7 +606,7 @@ const Civ3Parse = (() => {
 					if (corruptedYield (m, c, ni, c.commerce, false).lost === c.corruption && corruptedYield (m, c, ni, c.shields, true).lost === c.waste) match++;
 					else c.modelOff = true;
 				}
-				result.model = { m, reducing, match, checked,
+				result.model = { m, reducing, match, checked, fpSites,
 				                 lostFor: (c, ni, forWaste) => corruptedYield (m, c, ni, forWaste ? c.shields : c.commerce, forWaste).lost,
 				                 // Coins or shields lost from yield Y under government g (an index into the rules' governments)
 				                 lostAt: (c, ni, forWaste, Y, g) => corruptedYield (mAt (g), c, ni, Y, forWaste).lost,

@@ -157,7 +157,7 @@ body.page-open #citiespage { display: none; }
 .drawerhead { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .drawerhead h2 { font-size: 17px; margin: 0; flex: 1; }
 .drawerbody { overflow: auto; padding: 12px 16px 24px; flex: 1; }
-.drawer .summary { margin: 0; }
+.drawer .summary { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); align-items: start; }
 .drawer .card { max-width: none; }
 .panelnote { color: var(--muted); }
 @media (max-width: 760px) {
@@ -357,6 +357,7 @@ try { const t = localStorage.getItem ('civ3viewer.theme'); if (t === 'light' || 
       <h3>Panels</h3>
       <dl>
         <dt>Summary cards</dt><dd>Your whole empire. Point at a line to see how it's worked out. With what-ifs (ticks, Try slider, Try government), changed figures show <i>now → then</i>.</dd>
+        <dt>Forbidden Palace</dt><dd>The five best cities for a Forbidden Palace: coins and shields a turn it saves against none, by the game's corruption rule at your cities' current yields, under your government or the tried one. A built one is marked <i>(yours)</i>.</dd>
         <dt>Milestones</dt><dd>Targets to reach by a turn, per game: ✓ met, in progress, or ✗ missed. Edit, add or delete them; the defaults are only starting points. In History, ⚑ marks a deadline and ◆ a target.</dd>
         <dt>History</dt><dd>Each save you open stores its turn. Pick a chart and a city; the dashed line is the turn you have loaded. <b>Add saves…</b> adds older saves at once.</dd>
         <dt>Governments</dt><dd>Your empire's totals under each government, with your slider (or the tried one). Click a row to try it in the table. Click a column name to sort; click again to reverse.</dd>
@@ -1229,14 +1230,27 @@ const Civ3Parse = (() => {
 				const palaceWonders = result.cities.reduce ((n, c) => n + fpLike.filter ((k) => has (c, k)).length, 0);
 				const commercial = civ ? civ.commercial : false;
 				// Leader_get_optimal_city_number for a human player, at a government's corruption level
-				const modelAt = (lvl) => {
-					let nopt = ocn + tdiv (palaceWonders * ocn * 3, lvl === 5 ? 1 : 8);
+				const fpNow = result.cities.filter ((c) => fpLike.some ((k) => has (c, k)));
+				// wonders / fps: the Forbidden Palace-type wonders and their cities (default: the save's)
+				const modelAt = (lvl, wonders = palaceWonders, fps = fpNow) => {
+					let nopt = ocn + tdiv (wonders * ocn * 3, lvl === 5 ? 1 : 8);
 					if (commercial) nopt += tdiv (ocn, 4);
 					nopt += [tdiv (ocn, 8), tdiv (ocn, 8), tdiv (ocn, 16), 0, 0, 2 * ocn][lvl] || 0;
 					nopt = tdiv (nopt * diffRow.optimalPercent, 100);
 					return { maxD: tdiv (world.width + world.height, 4), ocn, nopt, govLevel: lvl, cityCount: result.cities.length,
-					         commercial, palaceWonders, corruptionPct: diffRow.corruptionPercent ?? 100, dist,
-					         fpCities: result.cities.filter ((c) => fpLike.some ((k) => has (c, k))) };
+					         commercial, palaceWonders: wonders, corruptionPct: diffRow.corruptionPercent ?? 100, dist, fpCities: fps };
+				};
+				// Forbidden Palace sites under government g: corruption and waste of all your cities, at their current yields,
+				// with no Forbidden Palace-type wonder and with one in each city other than the capital
+				const fpSites = (g) => {
+					const l = rules.governments[g].corruption;
+					const sum = (mm) => result.cities.reduce ((a, c) => {
+						const ni = c.reducers.length;
+						a.corruption += corruptedYield (mm, c, ni, c.commerce, false).lost; a.waste += corruptedYield (mm, c, ni, c.shields, true).lost;
+						return a;
+					}, { corruption: 0, waste: 0 });
+					return { none: sum (modelAt (l, 0, [])), built: fpNow.slice (),
+					         sites: result.cities.filter ((c) => c !== capital).map ((c) => ({ city: c, ...sum (modelAt (l, 1, [c])) })) };
 				};
 				const m = modelAt (lvl), byLevel = {};
 				const mAt = (g) => { const l = rules.governments[g].corruption; return byLevel[l] || (byLevel[l] = modelAt (l)); };
@@ -1252,7 +1266,7 @@ const Civ3Parse = (() => {
 					if (corruptedYield (m, c, ni, c.commerce, false).lost === c.corruption && corruptedYield (m, c, ni, c.shields, true).lost === c.waste) match++;
 					else c.modelOff = true;
 				}
-				result.model = { m, reducing, match, checked,
+				result.model = { m, reducing, match, checked, fpSites,
 				                 lostFor: (c, ni, forWaste) => corruptedYield (m, c, ni, forWaste ? c.shields : c.commerce, forWaste).lost,
 				                 // Coins or shields lost from yield Y under government g (an index into the rules' governments)
 				                 lostAt: (c, ni, forWaste, Y, g) => corruptedYield (mAt (g), c, ni, Y, forWaste).lost,
@@ -3552,7 +3566,7 @@ function renderSummary (res) {
       `<span class="k" title="Shields from tiles; usable is after waste">Shields</span><span>${perBoth ('shields')}</span><span>${perBoth ('netShields')}</span>` +
       `<span class="k" title="Commerce from tiles; usable is after corruption">Commerce</span><span>${perBoth ('commerce')}</span><span>${perBoth ('netCommerce')}</span>` +
       `<span class="k" title="Food + shields + commerce">Productivity</span><span>${perBoth ('prodAll')}</span><span>${perBoth ('prodUsable')}</span>` +
-      `<span class="k" title="Usable food + shields after waste + gold, science and luxury after Library, Marketplace etc. Specialists' output not included.">Modified productivity</span><span>–</span><span>${perBoth ('modProd')}</span>`, true);
+      `<span class="k" title="Usable food + shields after waste + gold, science and luxury after Library, Marketplace etc. Specialists' output not included.">Modified productivity</span><span>–</span><span>${perBoth ('modProd')}</span>`, true) + fpCard (res);
   $('summary').hidden = false;
 }
 
@@ -3586,6 +3600,31 @@ function workersCard (res, row, card) {
     row ('Modded work force', r1 (modded), `${r1 (force)} × ${tf}`) +
     row ('Per city', `<span class="${cls}">${per.toFixed (2)}</span>`, `${r1 (modded)} ÷ ${res.cities.length} cities; target ${target}` +
       (need > 0 ? `: ${Math.ceil (need)} more workers needed (or ${Math.ceil (need * 2)} captured)` : '')));
+}
+
+// Forbidden Palace sites: coins and shields a turn that a Forbidden Palace-type wonder in each city saves against none,
+// by the game's corruption rule at the cities' current yields, under your government or the tried one
+const fpCache = new WeakMap ();
+function fpCard (res) {
+  const m = res.model; if (! m || ! m.fpSites || res.cities.length < 2) return '';
+  const g = triedGov () ?? res.government;
+  if (! fpCache.has (res) || ! fpCache.get (res).has (g)) { if (! fpCache.has (res)) fpCache.set (res, new Map ()); fpCache.get (res).set (g, m.fpSites (g)); }
+  const f = fpCache.get (res).get (g);
+  const gain = (s) => ({ coins: f.none.corruption - s.corruption, shields: f.none.waste - s.waste });
+  const sites = f.sites.map ((s) => ({ ...s, ...gain (s) })).sort ((a, b) => (b.coins + b.shields) - (a.coins + a.shields) || b.coins - a.coins);
+  const built = sites.find ((s) => f.built.includes (s.city));
+  const esc = (t) => t.replace (/&/g, '&amp;').replace (/</g, '&lt;');
+  const sg = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs (v);
+  const line = (s, label) => `<span class="k" title="${esc (s.city.name)}: ${s.city.capitalDistance} tiles from the capital, size ${s.city.size}">${label}</span>` +
+    `<span>${sg (s.coins)}</span><span>${sg (s.shields)}</span>`;
+  const top = sites.slice (0, 5);
+  let body = '<span class="h"></span><span class="h">Coins</span><span class="h">Shields</span>';
+  body += top.map ((s, k) => line (s, `${k + 1}. ${esc (s.city.name)}${s === built ? ' (yours)' : ''}`)).join ('');
+  if (built && ! top.includes (built)) body += line (built, `${sites.indexOf (built) + 1}. ${esc (built.city.name)} (yours)`);
+  const gov = triedGov () !== null ? ` under ${govName (g)}` : '';
+  return `<div class="card"><h2 title="Coins and shields a turn that a Forbidden Palace in the city saves against no Forbidden Palace${gov}, by the game's corruption rule at your cities' current yields. Best five of ${sites.length} cities.">Forbidden Palace</h2>` +
+    `<div class="kv three">${body}</div>` +
+    `<div class="dim" style="font-size:12px;margin-top:6px">${built ? `Built in ${esc (built.city.name)}.` : 'Not built.'} Per turn, against none${gov}.</div></div>`;
 }
 
 function render () {
