@@ -116,8 +116,8 @@ th.tick, td.tick { white-space: nowrap; text-align: left; }
 td.tick input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; margin: 0 4px 0 0; vertical-align: middle; }
 td.tick.whatif input { accent-color: var(--amber); }
 td.tick.whatif { background: color-mix(in srgb, var(--amber) 28%, transparent) !important; box-shadow: inset 0 0 0 2px var(--amber); }
-td.tick.inprod { box-shadow: inset 0 0 0 2px var(--accent); }
-td.tick.inprod.whatif { box-shadow: inset 0 0 0 2px var(--amber), inset 0 0 0 4px var(--accent); }
+td.tick.inprod { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
+td.tick.inprod.whatif { box-shadow: inset 0 0 0 2px var(--amber), inset 0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent); }
 td.tick .inprod-tag { display: inline-block; margin: 0 4px 0 2px; padding: 0 4px; border-radius: 3px; font-size: 11px; font-weight: 600;
   line-height: 16px; color: var(--panel); background: var(--accent); vertical-align: middle; }
 td.changed { background: color-mix(in srgb, var(--accent) 16%, transparent) !important; }
